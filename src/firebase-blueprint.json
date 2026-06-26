@@ -1,0 +1,524 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Core user account information",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "hospital", "clinic", "patient"] },
+        "name": { "type": "string" },
+        "city": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "active", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" }
+      },
+      "required": ["role", "name", "status"]
+    },
+    "HospitalDetail": {
+      "title": "Hospital Detail",
+      "description": "Extended information for hospital users",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "tier": { "type": "string" },
+        "schemes": { "type": "string" },
+        "departments": { "type": "string" },
+        "helpline": { "type": "string" },
+        "contact_no": { "type": "string" },
+        "address": { "type": "string" },
+        "email": { "type": "string" },
+        "bedsICU": { "type": "number" },
+        "bedsGeneral": { "type": "number" },
+        "bedsVentilator": { "type": "number" },
+        "ambulanceContact": { "type": "string" },
+        "ambulanceStatus": { "type": "string", "enum": ["available", "busy"] },
+        "emergencyContact": { "type": "string" },
+        "admissionNotes": { "type": "string" },
+        "webinarLink": { "type": "string" },
+        "gallery": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["userId"]
+    },
+    "ClinicDetail": {
+      "title": "Clinic Detail",
+      "description": "Extended information for clinic users",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "doctor_name": { "type": "string" },
+        "qualification": { "type": "string" },
+        "reg_no": { "type": "string" },
+        "contact_no": { "type": "string" },
+        "address": { "type": "string" },
+        "email": { "type": "string" },
+        "rating": { "type": "number" },
+        "tier": { "type": "string" },
+        "degree": { "type": "string" },
+        "visiting_doctors": { "type": "string" },
+        "timing": { "type": "string" },
+        "fees": { "type": "string" },
+        "department": { "type": "string" },
+        "gallery": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["userId"]
+    },
+    "Referral": {
+      "title": "Referral",
+      "description": "Patient referral from clinic to hospital",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "hospitalId": { "type": "string" },
+        "patientName": { "type": "string" },
+        "patientAge": { "type": "number" },
+        "patientPhone": { "type": "string" },
+        "patientGender": { "type": "string" },
+        "patientCondition": { "type": "string" },
+        "department": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "doctorName": { "type": "string" },
+        "diagnosis": { "type": "string" },
+        "note": { "type": "string" },
+        "economicalCondition": { "type": "string" },
+        "applicableScheme": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "completed", "admitted", "discharged", "under_review", "consultation_done", "treatment_plan"] },
+        "admittedAt": { "type": "string", "format": "date-time" },
+        "dischargedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clinicId", "hospitalId", "patientName", "status"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Direct message between users",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isRead": { "type": "boolean" }
+      },
+      "required": ["senderId", "receiverId", "content", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System notification for a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "content", "createdAt"]
+    },
+    "Doctor": {
+      "title": "Doctor",
+      "description": "Doctor associated with a hospital",
+      "type": "object",
+      "properties": {
+        "hospitalId": { "type": "string" },
+        "name": { "type": "string" },
+        "qualification": { "type": "string" },
+        "contact": { "type": "string" }
+      },
+      "required": ["hospitalId", "name", "qualification"]
+    },
+    "OPDQueue": {
+      "title": "OPD Queue",
+      "description": "Daily OPD queue for a clinic",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "clinicName": { "type": "string" },
+        "patientName": { "type": "string" },
+        "patientAge": { "type": "string" },
+        "patientPhone": { "type": "string" },
+        "patientGender": { "type": "string" },
+        "patientArea": { "type": "string", "description": "City or Area of the patient" },
+        "weight": { "type": "string" },
+        "bp": { "type": "string" },
+        "sugar": { "type": "string" },
+        "temp": { "type": "string" },
+        "complaint": { "type": "string" },
+        "diagnosis": { "type": "string" },
+        "paymentAmount": { "type": "string" },
+        "paymentMode": { "type": "string", "enum": ["cash", "phonepe", "credit"] },
+        "status": { "type": "string", "enum": ["requested", "waiting", "consulting", "completed"] },
+        "token": { "type": "number" },
+        "visitCount": { "type": "number" },
+        "date": { "type": "string" },
+        "type": { "type": "string", "enum": ["online", "offline"] },
+        "appointmentId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clinicId", "patientName", "status", "token", "date"]
+    },
+    "CreditRecord": {
+      "title": "Credit Record",
+      "description": "Patient payment and credit information",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "patientName": { "type": "string" },
+        "patientPhone": { "type": "string" },
+        "patientArea": { "type": "string" },
+        "patientAge": { "type": "string" },
+        "patientGender": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "balance": { "type": "number" },
+        "paymentMode": { "type": "string", "enum": ["cash", "phonepe", "credit"] },
+        "diagnosis": { "type": "string" },
+        "bp": { "type": "string" },
+        "sugar": { "type": "string" },
+        "weight": { "type": "string" },
+        "temp": { "type": "string" },
+        "complaint": { "type": "string" },
+        "note": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "paid"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clinicId", "patientName", "totalAmount", "paidAmount", "balance", "status"]
+    },
+    "DigitalCard": {
+      "title": "Digital Card",
+      "description": "Clinic digital marketing card",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clinicId", "imageUrl", "createdAt"]
+    },
+    "HealthTip": {
+      "title": "Health Tip",
+      "description": "Clinic health tip image",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clinicId", "imageUrl", "createdAt"]
+    },
+    "DailySummary": {
+      "title": "Daily Summary",
+      "description": "Daily financial and operational summary for a clinic",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "date": { "type": "string" },
+        "totalOPD": { "type": "number" },
+        "totalCash": { "type": "number" },
+        "totalPhonePe": { "type": "number" },
+        "totalCredit": { "type": "number" },
+        "totalCollection": { "type": "number" },
+        "isClosed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clinicId", "date", "totalOPD", "totalCash", "totalPhonePe", "totalCredit", "totalCollection", "isClosed"]
+    },
+    "CreditPaymentHistory": {
+      "title": "Credit Payment History",
+      "description": "Historical record of credit payments made by patients",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "patientName": { "type": "string" },
+        "patientPhone": { "type": "string" },
+        "paidAmount": { "type": "number" },
+        "paymentMode": { "type": "string" },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clinicId", "patientName", "patientPhone", "paidAmount", "createdAt"]
+    },
+    "MedicineReminder": {
+      "title": "Medicine Reminder",
+      "description": "Patient medicine reminder settings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "medicineName": { "type": "string" },
+        "timings": { "type": "array", "items": { "type": "string" } },
+        "ringtone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "medicineName", "timings"]
+    },
+    "MedicineHistory": {
+      "title": "Medicine History",
+      "description": "Historical record of medicine intake",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "medicineName": { "type": "string" },
+        "date": { "type": "string" },
+        "timing": { "type": "string" },
+        "status": { "type": "string", "enum": ["taken", "missed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "medicineName", "date", "timing", "status"]
+    },
+    "MedicineLog": {
+      "title": "Medicine Log",
+      "description": "Log of medicine intake with additional details",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "medicineName": { "type": "string" },
+        "form": { "type": "string" },
+        "color": { "type": "string" },
+        "dose": { "type": "string" },
+        "timing": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["taken", "missed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "medicineName", "status", "date"]
+    },
+    "HealthLog": {
+      "title": "Health Log",
+      "description": "Patient daily health metrics",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "bp": { "type": "string" },
+        "pulse": { "type": "string" },
+        "sugar": { "type": "string" },
+        "date": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "date", "createdAt"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Patient appointment booking",
+      "type": "object",
+      "properties": {
+        "patientId": { "type": "string" },
+        "patientName": { "type": "string" },
+        "patientAge": { "type": "string" },
+        "patientPhone": { "type": "string" },
+        "patientAddress": { "type": "string" },
+        "clinicId": { "type": "string" },
+        "clinicName": { "type": "string" },
+        "appointmentTime": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "completed", "cancelled"] },
+        "tokenNumber": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "clinicId", "patientName", "status", "createdAt"]
+    },
+    "StaffAgency": {
+      "title": "Staff Agency",
+      "description": "Healthcare staff agency information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "details": { "type": "string" },
+        "contact": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "location"]
+    },
+    "Caretaker": {
+      "title": "Caretaker",
+      "description": "Caretaker service information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "details": { "type": "string" },
+        "contact": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "location"]
+    },
+    "OldAgeHome": {
+      "title": "Old Age Home",
+      "description": "Old age home information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "details": { "type": "string" },
+        "contact": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "location"]
+    },
+    "FamilyMember": {
+      "title": "Family Member",
+      "description": "Family member of a patient",
+      "type": "object",
+      "properties": {
+        "patientId": { "type": "string" },
+        "name": { "type": "string" },
+        "relation": { "type": "string" },
+        "age": { "type": "string" },
+        "gender": { "type": "string" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "name", "relation"]
+    },
+    "MedicalReport": {
+      "title": "Medical Report",
+      "description": "Medical report for a patient",
+      "type": "object",
+      "properties": {
+        "patientId": { "type": "string" },
+        "title": { "type": "string" },
+        "clinicName": { "type": "string" },
+        "date": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "type": { "type": "string", "enum": ["report", "prescription"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "title", "date", "type"]
+    },
+    "EmergencyContact": {
+      "title": "Emergency Contact",
+      "description": "Emergency contact for a patient",
+      "type": "object",
+      "properties": {
+        "patientId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "type": { "type": "string", "enum": ["doctor", "relative"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "name", "phone", "type"]
+    },
+    "SupervisionRequest": {
+      "title": "Supervision Request",
+      "description": "Request from patient to clinic for medicine supervision",
+      "type": "object",
+      "properties": {
+        "patientId": { "type": "string" },
+        "patientName": { "type": "string" },
+        "clinicId": { "type": "string" },
+        "clinicName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "clinicId", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/hospital_details/{detailId}": {
+      "schema": "HospitalDetail",
+      "description": "Hospital specific information"
+    },
+    "/clinic_details/{detailId}": {
+      "schema": "ClinicDetail",
+      "description": "Clinic specific information"
+    },
+    "/referrals/{referralId}": {
+      "schema": "Referral",
+      "description": "Referral records"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Chat messages"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notifications"
+    },
+    "/doctors/{doctorId}": {
+      "schema": "Doctor",
+      "description": "Doctors list"
+    },
+    "/opd_queue/{opdId}": {
+      "schema": "OPDQueue",
+      "description": "Clinic OPD queue"
+    },
+    "/credit_records/{recordId}": {
+      "schema": "CreditRecord",
+      "description": "Patient credit records"
+    },
+    "/digital_cards/{cardId}": {
+      "schema": "DigitalCard",
+      "description": "Clinic digital cards"
+    },
+    "/health_tips/{tipId}": {
+      "schema": "HealthTip",
+      "description": "Clinic health tips"
+    },
+    "/daily_summaries/{summaryId}": {
+      "schema": "DailySummary",
+      "description": "Daily clinic summaries"
+    },
+    "/credit_payment_history/{historyId}": {
+      "schema": "CreditPaymentHistory",
+      "description": "History of credit payments"
+    },
+    "/medicine_reminders/{reminderId}": {
+      "schema": "MedicineReminder",
+      "description": "Patient medicine reminders"
+    },
+    "/medicine_history/{historyId}": {
+      "schema": "MedicineHistory",
+      "description": "Patient medicine intake history"
+    },
+    "/medicine_logs/{logId}": {
+      "schema": "MedicineLog",
+      "description": "Patient detailed medicine logs"
+    },
+    "/health_logs/{logId}": {
+      "schema": "HealthLog",
+      "description": "Patient health logs"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Patient appointments"
+    },
+    "/staff_agencies/{agencyId}": {
+      "schema": "StaffAgency",
+      "description": "Staff agencies"
+    },
+    "/caretakers/{caretakerId}": {
+      "schema": "Caretaker",
+      "description": "Caretakers"
+    },
+    "/old_age_homes/{homeId}": {
+      "schema": "OldAgeHome",
+      "description": "Old age homes"
+    },
+    "/family_members/{memberId}": {
+      "schema": "FamilyMember",
+      "description": "Patient family members"
+    },
+    "/medical_reports/{reportId}": {
+      "schema": "MedicalReport",
+      "description": "Patient medical reports and prescriptions"
+    },
+    "/emergency_contacts/{contactId}": {
+      "schema": "EmergencyContact",
+      "description": "Patient emergency contacts"
+    },
+    "/supervision_requests/{requestId}": {
+      "schema": "SupervisionRequest",
+      "description": "Medicine supervision requests"
+    }
+  }
+}
