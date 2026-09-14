@@ -9,26 +9,20 @@ interface LogoProps {
 export default function Logo({ className = "", size = 32 }: LogoProps) {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <div className="relative flex items-center justify-center">
-        {/* Connection/Bridge Symbol Background */}
-        <div className="absolute inset-0 bg-linear-to-br from-[#005f73] to-[#0a9396] rounded-xl opacity-20 blur-sm" />
-        
-        <div className="relative bg-linear-to-br from-[#005f73] to-[#0a9396] p-2 rounded-xl shadow-lg border border-white/20">
-          <div className="relative">
-            {/* Medical Cross Concept using Network/Bridge dots */}
-            <Network size={size * 0.8} className="text-white" />
-            {/* Overlay a small activity line */}
-            <div className="absolute -bottom-1 -right-1 bg-[#ee9b00] rounded-full p-0.5 border border-white">
-              <Activity size={size * 0.4} className="text-white" />
-            </div>
-          </div>
-        </div>
-      </div>
+      <img 
+        src="/carebridge-logo.png" 
+        alt="CareBridge Logo" 
+        className="object-contain drop-shadow-md hover:scale-105 transition-transform" 
+        style={{ width: Math.max(size * 1.5, 48), height: Math.max(size * 1.5, 48) }} 
+      />
       <div className="flex flex-col">
-        <span className="text-xl font-black tracking-tighter leading-none dark:text-white uppercase font-display">
-          CareBridge<span className="text-[#ee9b00]">+</span>
+        <span 
+          className="text-2xl font-semibold tracking-wide leading-none text-slate-900 dark:text-white" 
+          style={{ fontFamily: "var(--font-brand)" }}
+        >
+          CareBridge<span style={{ color: "var(--color-brand-accent)" }}>+</span>
         </span>
-        <span className="text-[10px] font-black tracking-[0.2em] leading-none text-gray-500 uppercase mt-0.5">
+        <span className="text-[10px] font-bold tracking-[0.2em] leading-none text-slate-500 uppercase mt-1">
           Connecting Care
         </span>
       </div>

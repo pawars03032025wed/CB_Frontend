@@ -1,4 +1,5 @@
 import React from "react";
+import PremiumSubscriptionCard from "../subscription/PremiumSubscriptionCard";
 import { motion } from "framer-motion";
 import {
   Hospital as HospitalIcon,
@@ -17,7 +18,8 @@ import {
   Clock,
   BadgeAlert,
   Shield,
-  Coins
+  Coins,
+  Crown
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 
@@ -84,13 +86,27 @@ export const HospitalWelcomeLanding: React.FC<HospitalWelcomeLandingProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={handleProceed}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-teal-500 to-blue-600 hover:opacity-95 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
-        >
-          Continue to Dashboard
-          <ArrowRight size={14} className="stroke-[2.5]" />
-        </button>
+        {user?.dashboardAccess ? (
+          <button
+            onClick={handleProceed}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-teal-500 to-blue-600 hover:opacity-95 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+          >
+            Continue to Dashboard
+            <ArrowRight size={14} className="stroke-[2.5]" />
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              localStorage.removeItem("cb_user");
+              sessionStorage.removeItem("cb_user");
+              window.location.href = '/login';
+            }}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-rose-600 hover:opacity-95 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+          >
+            Logout
+            <ArrowRight size={14} className="stroke-[2.5]" />
+          </button>
+        )}
       </header>
 
       {/* MAIN CONTAINER */}
@@ -158,6 +174,16 @@ export const HospitalWelcomeLanding: React.FC<HospitalWelcomeLandingProps> = ({
             </div>
           </div>
         </div>
+
+        <PremiumSubscriptionCard 
+          user={user} 
+          accountType="hospital" 
+          darkMode={darkMode} 
+          onContinueToDashboard={() => {
+            setShowWelcomeScreen(false);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
 
         {/* PRIMARY ONBOARDING PANEL GRID */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -420,13 +446,27 @@ export const HospitalWelcomeLanding: React.FC<HospitalWelcomeLandingProps> = ({
 
         {/* BOTTOM GLOBAL ACTION INITIATOR */}
         <div className="mt-14 pt-8 border-t border-dashed border-slate-200 dark:border-slate-800 text-center">
-          <button
-            onClick={handleProceed}
-            className="inline-flex items-center gap-2.5 px-10 py-4 bg-gradient-to-r from-teal-500 to-blue-600 text-white font-black uppercase text-xs tracking-wider rounded-xl shadow-xl hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer mx-auto"
-          >
-            Continue to Hospital Dashboard
-            <ArrowRight size={16} className="stroke-[2.5]" />
-          </button>
+          {user?.dashboardAccess ? (
+            <button
+              onClick={handleProceed}
+              className="inline-flex items-center gap-2.5 px-10 py-4 bg-gradient-to-r from-teal-500 to-blue-600 text-white font-black uppercase text-xs tracking-wider rounded-xl shadow-xl hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer mx-auto"
+            >
+              Continue to Hospital Dashboard
+              <ArrowRight size={16} className="stroke-[2.5]" />
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                localStorage.removeItem("cb_user");
+                sessionStorage.removeItem("cb_user");
+                window.location.href = '/login';
+              }}
+              className="inline-flex items-center gap-2.5 px-10 py-4 bg-gradient-to-r from-red-500 to-rose-600 text-white font-black uppercase text-xs tracking-wider rounded-xl shadow-xl hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer mx-auto"
+            >
+              Logout
+              <ArrowRight size={16} className="stroke-[2.5]" />
+            </button>
+          )}
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-4">
             CareBridgePlus Clinical Enterprise Control Systems • Central Active Server Node
           </p>

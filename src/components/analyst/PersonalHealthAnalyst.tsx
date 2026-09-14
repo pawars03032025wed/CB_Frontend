@@ -46,7 +46,8 @@ import {
   addDoc,
   updateDoc,
   doc,
-  serverTimestamp
+  serverTimestamp,
+  getDocs
 } from "firebase/firestore";
 import { db } from "../../firebase";
 import { firebaseService } from "../../services/firebaseService";
@@ -63,7 +64,34 @@ export default function PersonalHealthAnalyst({
   showNotification
 }: PersonalHealthAnalystProps) {
   // Navigation active tab index
-  const [activeTab, setActiveTab] = useState<"dashboard" | "checkin" | "symptoms" | "vitals" | "assistant" | "sharing">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "checkin" | "symptoms" | "vitals" | "assistant" | "sharing" | "monthly">("dashboard");
+  const [drRequestSending, setDrRequestSending] = useState(false);
+  const [drRequestSent, setDrRequestSent] = useState(false);
+
+  // Clinic searching and selection states for doctor analysis requests
+  const [clinics, setClinics] = useState<any[]>([]);
+  const [clinicSearchQuery, setClinicSearchQuery] = useState("");
+  const [selectedClinicForRequest, setSelectedClinicForRequest] = useState<any>(null);
+  const [showClinicSearchModal, setShowClinicSearchModal] = useState(false);
+
+  // Load clinics list on mount
+  useEffect(() => {
+    const fetchClinics = async () => {
+      try {
+        const q = query(
+          collection(db, "users"),
+          where("role", "==", "clinic"),
+          where("status", "==", "active")
+        );
+        const snap = await getDocs(q);
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setClinics(data);
+      } catch (err) {
+        console.error("Error loading clinics:", err);
+      }
+    };
+    fetchClinics();
+  }, []);
 
   // Real-time Firestore state
   const [healthLogs, setHealthLogs] = useState<any[]>([]);
@@ -572,6 +600,48 @@ export default function PersonalHealthAnalyst({
     }
   };
 
+  // Send Doctor Analysis Request
+  const sendDrAnalysisRequest = async () => {
+    if (!selectedClinicForRequest) {
+      showNotification("Please select a clinic first.", "error");
+      return;
+    }
+    if (drRequestSent || drRequestSending) return;
+    setDrRequestSending(true);
+    try {
+      const last30Days = healthLogs.slice(0, 30);
+      const medSummary = medicineReminders.map((r: any) => r.medicineName).join(", ") || "None";
+      const requestPayload = {
+        userId: user.id,
+        patientName: user.name || "Patient",
+        requestType: "monthly_analysis",
+        summary: `Patient requests doctor analysis for last 30-day health record. Medicines: ${medSummary}. Health Score: ${processedMetrics.score}/100.`,
+        healthLogsCount: last30Days.length,
+        medicineReminders: medicineReminders.map((r: any) => ({
+          id: r.id || "",
+          medicineName: r.medicineName || "",
+          dosage: r.dosage || "",
+          repeatSchedule: r.repeatSchedule || "Daily",
+          mealTime: r.mealTime || "after",
+          status: r.status || "active",
+          timings: Array.isArray(r.timings) ? r.timings : []
+        })),
+        requestedAt: serverTimestamp(),
+        status: "pending",
+        clinicId: selectedClinicForRequest.id,
+        clinicName: selectedClinicForRequest.name || selectedClinicForRequest.doctor_name || "Partner Clinic"
+      };
+      await addDoc(collection(db, "doctor_analysis_requests"), requestPayload);
+      setDrRequestSent(true);
+      showNotification("Doctor analysis request sent successfully! The doctor will review your 30-day report.", "success");
+      setShowClinicSearchModal(false);
+    } catch (err) {
+      showNotification("Failed to send request. Please try again.", "error");
+    } finally {
+      setDrRequestSending(false);
+    }
+  };
+
   const AI_COACH_PRESETS = [
     { label: "My health this week?", text: "How is my aggregate health score looking this week and what needs attention?" },
     { label: "Sleep patterns?", text: "Can you analyze my recent sleep hours and suggest routine guidelines?" },
@@ -588,6 +658,7 @@ export default function PersonalHealthAnalyst({
           { id: "checkin", label: "Daily Check-In", icon: Plus },
           { id: "symptoms", label: "Symptom Log", icon: ShieldAlert },
           { id: "vitals", label: "Vitals & Trends", icon: TrendingUp },
+          { id: "monthly", label: "Monthly Record", icon: Calendar },
           { id: "assistant", label: "AI Health Coach", icon: Brain },
           { id: "sharing", label: "Doctor Sharing", icon: Share2 }
         ].map((tab) => {
@@ -1577,6 +1648,357 @@ export default function PersonalHealthAnalyst({
           </div>
         </motion.div>
       )}
+      {/* ---------------------------------------------------------
+          SUBTAB: MONTHLY RECORD TABLE
+          --------------------------------------------------------- */}
+      {activeTab === "monthly" && (() => {
+        // Build last 30 calendar days
+        const today = new Date();
+        const days: string[] = [];
+        for (let i = 0; i < 30; i++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i);
+          days.push(d.toISOString().split("T")[0]);
+        }
+
+        return (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            {/* Header */}
+            <div className={`p-6 rounded-[2rem] border flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+              darkMode ? "bg-slate-900/40 border-white/5" : "bg-white border-slate-200"
+            }`}>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Calendar size={18} className="text-emerald-500" />
+                  <span className="text-xs font-black uppercase tracking-widest text-emerald-500">Last 30 Days</span>
+                </div>
+                <h3 className="text-2xl font-black dark:text-white">Monthly Patient Health Record</h3>
+                <p className="text-sm text-slate-400 font-semibold mt-1">Day-wise vitals, medicine compliance & health conditions.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedClinicForRequest(null);
+                  setClinicSearchQuery("");
+                  setShowClinicSearchModal(true);
+                }}
+                disabled={drRequestSent || drRequestSending}
+                className={`flex items-center gap-2 px-5 py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-lg cursor-pointer ${
+                  drRequestSent
+                    ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 cursor-default"
+                    : drRequestSending
+                    ? "bg-blue-600/20 text-blue-400 border border-blue-500/30 animate-pulse cursor-wait"
+                    : "bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-50 hover:to-blue-500 shadow-indigo-500/30"
+                }`}
+              >
+                <Stethoscope size={14} />
+                {drRequestSent ? "✓ Request Sent to Doctor" : drRequestSending ? "Sending..." : "Request Doctor Analysis"}
+              </button>
+            </div>
+
+            {/* Table */}
+            <div className={`rounded-[2rem] border overflow-hidden ${
+              darkMode ? "bg-slate-900/40 border-white/5" : "bg-white border-slate-200"
+            }`}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-xs">
+                  <thead>
+                    <tr className={`${darkMode ? "bg-slate-800/60" : "bg-slate-50"}`}>
+                      <th className="text-left px-5 py-4 font-black uppercase tracking-widest text-slate-400 w-28 border-b border-slate-500/10">Date</th>
+                      <th className="text-left px-4 py-4 font-black uppercase tracking-widest text-purple-400 border-b border-slate-500/10">
+                        <div className="flex items-center gap-1.5"><Heart size={11} /> Vitals</div>
+                      </th>
+                      <th className="text-left px-4 py-4 font-black uppercase tracking-widest text-emerald-400 border-b border-slate-500/10">
+                        <div className="flex items-center gap-1.5"><CheckSquare size={11} /> Medicine</div>
+                      </th>
+                      <th className="text-left px-4 py-4 font-black uppercase tracking-widest text-rose-400 border-b border-slate-500/10">
+                        <div className="flex items-center gap-1.5"><ShieldAlert size={11} /> Health Condition</div>
+                      </th>
+                      <th className="text-left px-4 py-4 font-black uppercase tracking-widest text-amber-400 border-b border-slate-500/10">
+                        <div className="flex items-center gap-1.5"><Activity size={11} /> Score</div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {days.map((dateStr, idx) => {
+                      const log = healthLogs.find((l: any) => l.date === dateStr);
+                      const medsForDay = medicineLogs.filter((l: any) => l.date === dateStr);
+                      const takenMeds = medsForDay.filter((l: any) => l.status === "taken");
+                      const missedMeds = medsForDay.filter((l: any) => l.status === "missed");
+                      const symptoms = log?.symptoms || [];
+                      const isToday = idx === 0;
+                      const hasLog = !!log;
+
+                      // Score for this day
+                      let dayScore = 0;
+                      if (hasLog) {
+                        const sl = log.sleepHours ? (log.sleepHours >= 7 ? 100 : log.sleepHours >= 6 ? 80 : 55) : 0;
+                        const wl = log.waterLogMl ? Math.min(100, Math.round((log.waterLogMl / 2500) * 100)) : 0;
+                        const al = log.steps ? Math.min(100, Math.round((log.steps / 10000) * 100)) : 0;
+                        const ml = medsForDay.length > 0 ? Math.round((takenMeds.length / medsForDay.length) * 100) : 100;
+                        dayScore = Math.round((sl * 0.25) + (wl * 0.20) + (al * 0.25) + (ml * 0.30));
+                      }
+
+                      const formattedDate = new Date(dateStr + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", weekday: "short" });
+
+                      return (
+                        <tr
+                          key={dateStr}
+                          className={`border-b border-slate-500/10 transition-colors ${
+                            isToday
+                              ? (darkMode ? "bg-emerald-900/20" : "bg-emerald-50")
+                              : idx % 2 === 0
+                              ? (darkMode ? "bg-slate-900/10" : "bg-white")
+                              : (darkMode ? "bg-slate-800/10" : "bg-slate-50/50")
+                          } hover:bg-blue-500/5`}
+                        >
+                          {/* Date */}
+                          <td className="px-5 py-4">
+                            <div className="font-black text-[11px] dark:text-white text-slate-700">{formattedDate}</div>
+                            {isToday && <span className="text-[9px] font-black text-emerald-500 uppercase">Today</span>}
+                          </td>
+
+                          {/* Vitals */}
+                          <td className="px-4 py-4">
+                            {hasLog ? (
+                              <div className="space-y-1">
+                                {log.sleepHours && <div className="flex items-center gap-1 text-purple-400"><Moon size={9} /> <span className="text-slate-500 dark:text-slate-300">{log.sleepHours}h sleep</span></div>}
+                                {log.waterLogMl && <div className="flex items-center gap-1 text-blue-400"><Droplet size={9} /> <span className="text-slate-500 dark:text-slate-300">{log.waterLogMl}ml water</span></div>}
+                                {log.steps && <div className="flex items-center gap-1 text-amber-400"><Activity size={9} /> <span className="text-slate-500 dark:text-slate-300">{Number(log.steps).toLocaleString()} steps</span></div>}
+                                {log.bp && <div className="flex items-center gap-1 text-rose-400"><Heart size={9} /> <span className="text-slate-500 dark:text-slate-300">BP: {log.bp}</span></div>}
+                                {log.avgHeartRate && <div className="flex items-center gap-1 text-rose-400"><Heart size={9} /> <span className="text-slate-500 dark:text-slate-300">{log.avgHeartRate} bpm</span></div>}
+                                {!log.sleepHours && !log.waterLogMl && !log.steps && <span className="text-slate-400 italic">Partial data</span>}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400/50 italic">—</span>
+                            )}
+                          </td>
+
+                          {/* Medicine */}
+                          <td className="px-4 py-4">
+                            {medsForDay.length > 0 ? (
+                              <div className="space-y-1">
+                                {takenMeds.slice(0, 3).map((m: any, i: number) => (
+                                  <div key={i} className="flex items-center gap-1">
+                                    <Check size={9} className="text-emerald-500 shrink-0" />
+                                    <span className="text-slate-500 dark:text-slate-300 truncate max-w-[120px]">{m.medicineName}</span>
+                                  </div>
+                                ))}
+                                {missedMeds.slice(0, 2).map((m: any, i: number) => (
+                                  <div key={i} className="flex items-center gap-1">
+                                    <X size={9} className="text-rose-500 shrink-0" />
+                                    <span className="text-rose-400 truncate max-w-[120px]">{m.medicineName}</span>
+                                  </div>
+                                ))}
+                                {(takenMeds.length > 3 || missedMeds.length > 2) && (
+                                  <span className="text-slate-400/70 text-[9px]">+more</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400/50 italic">—</span>
+                            )}
+                          </td>
+
+                          {/* Health Condition / Symptoms */}
+                          <td className="px-4 py-4">
+                            <div className="space-y-1">
+                              {hasLog && log.wellbeing && (
+                                <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                                  log.wellbeing === "Excellent" ? "bg-emerald-500/15 text-emerald-400" :
+                                  log.wellbeing === "Good" ? "bg-blue-500/15 text-blue-400" :
+                                  log.wellbeing === "Average" ? "bg-amber-500/15 text-amber-400" :
+                                  "bg-rose-500/15 text-rose-400"
+                                }`}>{log.wellbeing}</div>
+                              )}
+                              {symptoms.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {symptoms.slice(0, 2).map((sym: any, i: number) => (
+                                    <span key={i} className="text-[9px] px-1.5 py-0.5 bg-rose-500/10 text-rose-400 rounded-full font-bold">
+                                      {typeof sym === "string" ? sym : sym.name}
+                                    </span>
+                                  ))}
+                                  {symptoms.length > 2 && <span className="text-[9px] text-slate-400">+{symptoms.length - 2}</span>}
+                                </div>
+                              ) : hasLog ? (
+                                <span className="text-emerald-500/70 text-[9px] font-bold">No symptoms</span>
+                              ) : (
+                                <span className="text-slate-400/50 italic">—</span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Daily Score */}
+                          <td className="px-4 py-4">
+                            {hasLog ? (
+                              <div className="flex items-center gap-2">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-[10px] ${
+                                  dayScore >= 80 ? "bg-emerald-500/20 text-emerald-400" :
+                                  dayScore >= 60 ? "bg-blue-500/20 text-blue-400" :
+                                  dayScore >= 40 ? "bg-amber-500/20 text-amber-400" :
+                                  "bg-rose-500/20 text-rose-400"
+                                }`}>{dayScore}</div>
+                                <div className="w-12 h-1.5 rounded-full bg-slate-500/20 overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${
+                                      dayScore >= 80 ? "bg-emerald-500" : dayScore >= 60 ? "bg-blue-500" : dayScore >= 40 ? "bg-amber-500" : "bg-rose-500"
+                                    }`}
+                                    style={{ width: `${dayScore}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400/50 italic">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Table Footer */}
+              <div className={`px-6 py-4 border-t border-slate-500/10 flex flex-wrap items-center gap-4 text-[10px] font-bold ${
+                darkMode ? "bg-slate-800/30" : "bg-slate-50"
+              }`}>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Score ≥ 80: Excellent</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Score 60–79: Good</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Score 40–59: Fair</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Score &lt; 40: Needs Attention</div>
+                <div className="ml-auto text-slate-400">Showing last 30 days • {healthLogs.filter((l: any) => days.includes(l.date)).length} days with records</div>
+              </div>
+            </div>
+
+            {/* Clinic Search Modal */}
+            <AnimatePresence>
+              {showClinicSearchModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className={`w-full max-w-lg rounded-[2rem] border p-6 overflow-hidden shadow-2xl relative ${
+                      darkMode ? "bg-slate-900 border-white/10 text-white" : "bg-white border-slate-200 text-slate-800"
+                    }`}
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-500/10">
+                      <div className="flex items-center gap-2">
+                        <Stethoscope className="text-emerald-500" size={20} />
+                        <h4 className="text-base font-black tracking-tight uppercase">Select Clinic for Supervision</h4>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowClinicSearchModal(false);
+                          setSelectedClinicForRequest(null);
+                        }}
+                        className="p-1.5 rounded-full hover:bg-slate-500/10 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    {/* Search Input */}
+                    <div className="mt-4 relative">
+                      <Search className="absolute left-3.5 top-3.5 text-slate-400" size={16} />
+                      <input
+                        type="text"
+                        placeholder="Search clinic name or location..."
+                        value={clinicSearchQuery}
+                        onChange={(e) => setClinicSearchQuery(e.target.value)}
+                        className={`w-full pl-10 pr-4 py-3 rounded-xl border text-xs font-bold outline-hidden transition-all ${
+                          darkMode
+                            ? "bg-white/5 border-white/10 text-white focus:border-emerald-500"
+                            : "bg-slate-50 border-slate-200 text-slate-800 focus:border-emerald-500"
+                        }`}
+                      />
+                    </div>
+
+                    {/* Clinics List */}
+                    <div className="mt-4 max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                      {clinics.filter(c => {
+                        const name = (c.name || c.doctor_name || "").toLowerCase();
+                        const address = (c.address || "").toLowerCase();
+                        const query = clinicSearchQuery.toLowerCase();
+                        return name.includes(query) || address.includes(query);
+                      }).length === 0 ? (
+                        <div className="text-center py-8 text-xs text-slate-400 font-bold italic">
+                          No active partner clinics found matching query.
+                        </div>
+                      ) : (
+                        clinics.filter(c => {
+                          const name = (c.name || c.doctor_name || "").toLowerCase();
+                          const address = (c.address || "").toLowerCase();
+                          const query = clinicSearchQuery.toLowerCase();
+                          return name.includes(query) || address.includes(query);
+                        }).map((clinic) => {
+                          const isSelected = selectedClinicForRequest?.id === clinic.id;
+                          return (
+                            <button
+                              key={clinic.id}
+                              onClick={() => setSelectedClinicForRequest(clinic)}
+                              className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${
+                                isSelected
+                                  ? "bg-emerald-500/15 border-emerald-500/40"
+                                  : darkMode
+                                  ? "bg-white/5 border-white/5 hover:bg-white/10"
+                                  : "bg-slate-50 border-slate-100 hover:bg-slate-100"
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <p className="font-black text-xs truncate dark:text-white text-slate-800">
+                                  {clinic.name || clinic.doctor_name || "Partner Clinic"}
+                                </p>
+                                <p className="text-[10px] text-slate-400 font-bold truncate mt-0.5">
+                                  📍 {clinic.address || "Location on file"}
+                                </p>
+                              </div>
+                              <div
+                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                                  isSelected ? "border-emerald-500 bg-emerald-500" : "border-slate-300"
+                                }`}
+                              >
+                                {isSelected && <Check size={10} className="text-white font-black" />}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="mt-6 pt-4 border-t border-slate-500/10 flex gap-3">
+                      <button
+                        onClick={() => {
+                          setShowClinicSearchModal(false);
+                          setSelectedClinicForRequest(null);
+                        }}
+                        className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                          darkMode ? "bg-white/5 text-slate-300 hover:bg-white/10" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={sendDrAnalysisRequest}
+                        disabled={!selectedClinicForRequest || drRequestSending}
+                        className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all text-white shadow-lg cursor-pointer ${
+                          !selectedClinicForRequest
+                            ? "bg-slate-550 opacity-45 cursor-not-allowed shadow-none"
+                            : drRequestSending
+                            ? "bg-blue-600 animate-pulse cursor-wait"
+                            : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-500/20"
+                        }`}
+                      >
+                        {drRequestSending ? "Sending..." : "Send Request"}
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        );
+      })()}
     </div>
   );
 }

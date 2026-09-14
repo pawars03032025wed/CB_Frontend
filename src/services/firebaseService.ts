@@ -29,6 +29,75 @@ import { db, auth } from '../firebase';
 import { User, HospitalDetail, ClinicDetail, Referral, Message, Doctor } from '../types';
 import { handleFirestoreError, OperationType, safeStringify } from '../utils/firestoreErrorHandler';
 
+// Telemetry monitor for Firebase optimization profiling
+export const telemetry = {
+  reads: 0,
+  writes: 0,
+  slowQueries: [] as { query: string; duration: number; timestamp: string }[],
+  
+  trackRead(collectionName: string, count: number) {
+    this.reads += count;
+    console.log(`[Telemetry] Read ${count} documents from '${collectionName}'. Cumulative reads: ${this.reads}`);
+  },
+  
+  trackWrite(collectionName: string) {
+    this.writes += 1;
+    console.log(`[Telemetry] Write operation on '${collectionName}'. Cumulative writes: ${this.writes}`);
+  },
+  
+  trackQueryDuration(queryString: string, duration: number) {
+    if (duration > 500) {
+      const logEntry = { query: queryString, duration, timestamp: new Date().toISOString() };
+      this.slowQueries.push(logEntry);
+      console.warn(`[Telemetry] SLOW QUERY DETECTED: "${queryString}" took ${duration}ms`);
+    }
+  }
+};
+
+if (typeof window !== "undefined") {
+  (window as any).__firebaseTelemetry = telemetry;
+}
+
+// Intelligent LocalStorage persistent cache manager
+const persistentCache = {
+  get(key: string) {
+    try {
+      const dataStr = localStorage.getItem(`cb_cache:${key}`);
+      if (!dataStr) return null;
+      const parsed = JSON.parse(dataStr);
+      if (parsed.expiry > Date.now()) {
+        return parsed.data;
+      }
+      localStorage.removeItem(`cb_cache:${key}`);
+    } catch (e) {
+      // ignore silently
+    }
+    return null;
+  },
+  set(key: string, data: any[], ttlMs: number) {
+    try {
+      localStorage.setItem(`cb_cache:${key}`, JSON.stringify({
+        data,
+        expiry: Date.now() + ttlMs
+      }));
+    } catch (e) {
+      // ignore silently
+    }
+  },
+  invalidate(collectionName: string) {
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(`cb_cache:${collectionName}:`)) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {
+      // ignore silently
+    }
+  }
+};
+
 // Shared subscription cache to prevent duplicate listeners and keep read consumption minimum
 const activeSharedListeners = new Map<string, {
   unsubscribe: () => void;
@@ -40,6 +109,7 @@ const activeSharedListeners = new Map<string, {
 // Read query cache for getCollection
 const queryCache = new Map<string, { data: any[]; expiry: number }>();
 const CACHE_TTL_MS = 10000; // 10 seconds memory cache for high-frequency gets
+const STATIC_CACHE_TTL_MS = 300000; // 5 minutes cache for static directories
 
 export const firebaseService = {
   async trackLoginActivity(userId: string, usernameOrEmail: string, status: 'success' | 'failed', role: string) {
@@ -233,6 +303,13 @@ export const firebaseService = {
       
       await this.trackLoginActivity(fbUser.uid, normalizedEmail, "success", role);
       
+      // Fire-and-forget the welcome email via backend
+      fetch('/api/email/welcome', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, accountType: role, name: name || 'User' })
+      }).catch(err => console.error("Failed to trigger welcome email", err));
+      
       return { 
         success: true, 
         message: "Registration successful! A verification email has been sent to your inbox.",
@@ -308,6 +385,16 @@ export const firebaseService = {
         });
         
         await this.trackLoginActivity(user.uid, user.email || "Google User", "success", "patient");
+        
+        // Fire-and-forget the welcome email via backend
+        if (user.email) {
+          fetch('/api/email/welcome', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email, accountType: 'patient', name: user.displayName || 'Patient' })
+          }).catch(err => console.error("Failed to trigger welcome email", err));
+        }
+
         return { success: true, user: { id: user.uid, ...newUserData } as User };
       }
     } catch (error) {
@@ -479,6 +566,16 @@ export const firebaseService = {
     callback: (data: any[]) => void, 
     filters?: { field: string, operator: any, value: any }[]
   ) {
+    const isRealTime = [
+      'opd_queue', 'notifications', 'referrals', 'messages',
+      'billings', 'credit_records', 'credit_accounts',
+      'daily_finance', 'transactions',
+      'credit_payment_history', 'patient_payment_history',
+      'medical_reports', 'medicine_reminders', 'appointments',
+      'health_logs', 'medicine_logs', 'habit_logs',
+      'patient_details', 'emergency_contacts'
+    ].includes(collectionName);
+    
     // Generate a standardized key representation of the collection name + filters
     const sortedFilters = filters 
       ? [...filters].sort((a, b) => a.field.localeCompare(b.field))
@@ -505,13 +602,6 @@ export const firebaseService = {
       };
     }
 
-    let q = query(collection(db, collectionName));
-    if (filters) {
-      filters.forEach(f => {
-        q = query(q, where(f.field, f.operator, f.value));
-      });
-    }
-
     const listenerId = `${collectionName}_${Math.random().toString(36).substring(2, 11)}`;
     const queryDetails = filters ? JSON.stringify(filters) : undefined;
     
@@ -529,26 +619,74 @@ export const firebaseService = {
 
     activeSharedListeners.set(cacheKey, sharedEntry);
 
-    const unsubscribeLive = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      sharedEntry.lastData = data;
-      
-      // Clear memory cache of this collection to remain consistent with new snapshot updates
-      firebaseService.invalidateCache(collectionName);
+    if (isRealTime) {
+      let q = query(collection(db, collectionName));
+      if (filters) {
+        filters.forEach(f => {
+          q = query(q, where(f.field, f.operator, f.value));
+        });
+      }
 
-      // Invoke all shared subscriber callbacks safely
-      sharedEntry.subscribers.forEach(cb => {
-        try {
-          cb([...data]);
-        } catch (err) {
-          console.error(`[Firebase] Shared callback invocation error for ${collectionName}:`, err);
+      // Default limits to prevent reading massive histories
+      const defaultLimits: Record<string, number> = {
+        'messages': 100,
+        'referrals': 150,
+        'notifications': 100,
+        'opd_queue': 150,
+        'billings': 200,
+        'credit_records': 200,
+        'credit_accounts': 200,
+        'daily_finance': 100,
+        'transactions': 200,
+        'credit_payment_history': 200,
+        'patient_payment_history': 200
+      };
+      const limitSize = defaultLimits[collectionName];
+      if (limitSize) {
+        q = query(q, limit(limitSize));
+      }
+
+      const unsubscribeLive = onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        sharedEntry.lastData = data;
+        
+        // Track telemetry
+        telemetry.trackRead(collectionName, data.length || 1);
+        
+        // Clear memory cache of this collection to remain consistent with new snapshot updates
+        firebaseService.invalidateCache(collectionName);
+        persistentCache.invalidate(collectionName);
+
+        // Invoke all shared subscriber callbacks safely
+        sharedEntry.subscribers.forEach(cb => {
+          try {
+            cb([...data]);
+          } catch (err) {
+            console.error(`[Firebase] Shared callback invocation error for ${collectionName}:`, err);
+          }
+        });
+      }, (error) => {
+        console.warn(`[Firebase] shared onSnapshot listener warning for ${collectionName}:`, safeStringify(error));
+      });
+
+      sharedEntry.unsubscribe = unsubscribeLive;
+    } else {
+      // For non-realtime, load cached/fetch once and notify subscribers in-memory
+      firebaseService.getCollection(collectionName, filters).then(data => {
+        if (data) {
+          sharedEntry.lastData = data;
+          sharedEntry.subscribers.forEach(cb => {
+            try {
+              cb([...data]);
+            } catch (err) {
+              console.error(`[Firebase] Shared callback error for non-realtime ${collectionName}:`, err);
+            }
+          });
         }
       });
-    }, (error) => {
-      console.warn(`[Firebase] shared onSnapshot listener warning for ${collectionName}:`, safeStringify(error));
-    });
 
-    sharedEntry.unsubscribe = unsubscribeLive;
+      sharedEntry.unsubscribe = () => {};
+    }
 
     return () => {
       const liveListener = activeSharedListeners.get(cacheKey);
@@ -563,19 +701,106 @@ export const firebaseService = {
     };
   },
 
+  notifySubscribers(collectionName: string) {
+    try {
+      console.log(`[In-Memory Sync] Notifying active subscribers of '${collectionName}' local updates...`);
+      for (const [cacheKey, sharedEntry] of activeSharedListeners.entries()) {
+        if (cacheKey.startsWith(`${collectionName}:`)) {
+          const filterStr = cacheKey.substring(collectionName.length + 1);
+          let filters: any[] | undefined = undefined;
+          try {
+            const parsed = JSON.parse(filterStr);
+            filters = parsed.map((item: any) => ({
+              field: item.f,
+              operator: item.o,
+              value: item.q === 'true' ? true : (item.q === 'false' ? false : (isNaN(Number(item.q)) ? item.q : Number(item.q)))
+            }));
+          } catch (e) {
+            // ignore silently
+          }
+
+          // Clear live cache so getCollection fetches fresh data from Firestore
+          sharedEntry.lastData = null;
+          
+          this.getCollection(collectionName, filters).then(data => {
+            if (data) {
+              sharedEntry.lastData = data;
+              sharedEntry.subscribers.forEach(cb => {
+                try {
+                  cb([...data]);
+                } catch (cbErr) {
+                  // ignore silently
+                }
+              });
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[In-Memory Sync] Error triggering notifications:", err);
+    }
+  },
+
   invalidateCache(collectionName: string) {
     for (const key of queryCache.keys()) {
       if (key.startsWith(`${collectionName}:`)) {
         queryCache.delete(key);
       }
     }
+    persistentCache.invalidate(collectionName);
   },
 
   async updateDocument(collectionName: string, docId: string, data: any) {
     try {
       const docRef = doc(db, collectionName, docId);
-      await setDoc(docRef, { ...data, updatedAt: serverTimestamp() }, { merge: true });
+      
+      // Diffing Write Optimization to prevent duplicate uploads of unchanged logos/banners
+      let existingDoc = queryCache.get(`${collectionName}:id==${docId}`)?.data?.[0];
+      if (!existingDoc) {
+        try {
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            existingDoc = snap.data();
+          }
+        } catch (e) {
+          // ignore silently
+        }
+      }
+
+      let dataToUpdate = { ...data };
+      if (existingDoc) {
+        const keys = Object.keys(dataToUpdate);
+        const cleanedData: any = {};
+        let hasChanges = false;
+        
+        for (const key of keys) {
+          const newVal = dataToUpdate[key];
+          const oldVal = existingDoc[key];
+          
+          if (JSON.stringify(newVal) !== JSON.stringify(oldVal)) {
+            cleanedData[key] = newVal;
+            hasChanges = true;
+          }
+        }
+        
+        if (!hasChanges) {
+          console.log(`[FirebaseService] updateDocument skipped for ${collectionName}/${docId} - no changes detected.`);
+          return;
+        }
+        dataToUpdate = cleanedData;
+      }
+
+      await setDoc(docRef, { ...dataToUpdate, updatedAt: serverTimestamp() }, { merge: true });
+      
+      // Invalidate caches
       this.invalidateCache(collectionName);
+      persistentCache.invalidate(collectionName);
+      
+      // Track write telemetry
+      telemetry.trackWrite(collectionName);
+      
+      // Notify active memory subscribers
+      this.notifySubscribers(collectionName);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `${collectionName}/${docId}`);
     }
@@ -584,7 +809,16 @@ export const firebaseService = {
   async deleteDocument(collectionName: string, docId: string) {
     try {
       await deleteDoc(doc(db, collectionName, docId));
+      
+      // Invalidate caches
       this.invalidateCache(collectionName);
+      persistentCache.invalidate(collectionName);
+      
+      // Track write telemetry
+      telemetry.trackWrite(collectionName);
+      
+      // Notify active memory subscribers
+      this.notifySubscribers(collectionName);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `${collectionName}/${docId}`);
     }
@@ -600,11 +834,23 @@ export const firebaseService = {
           docData.participants = [String(senderId), String(receiverId)];
         }
       }
+      
       const docRef = await addDoc(collection(db, collectionName), { ...docData, createdAt: serverTimestamp() });
+      
+      // Invalidate caches
       this.invalidateCache(collectionName);
+      persistentCache.invalidate(collectionName);
+      
+      // Track write telemetry
+      telemetry.trackWrite(collectionName);
+      
+      // Notify active memory subscribers
+      this.notifySubscribers(collectionName);
+      
       return docRef;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, collectionName);
+      throw error;
     }
   },
 
@@ -616,7 +862,7 @@ export const firebaseService = {
       const filterKey = JSON.stringify(sortedFilters.map(f => ({ f: f.field, o: f.operator, q: String(f.value) })));
       const cacheKey = `${collectionName}:${filterKey}`;
 
-      // 1. If an active subscription exists for this identical query, use its live cache (removes extra reading completely)
+      // 1. If an active subscription exists for this identical query, use its live cache
       if (activeSharedListeners.has(cacheKey)) {
         const liveData = activeSharedListeners.get(cacheKey)!.lastData;
         if (liveData) {
@@ -630,23 +876,66 @@ export const firebaseService = {
         return [...cached.data];
       }
 
+      // 3. Fallback to persistent local storage cache
+      const stored = persistentCache.get(cacheKey);
+      if (stored) {
+        queryCache.set(cacheKey, {
+          data: stored,
+          expiry: Date.now() + CACHE_TTL_MS
+        });
+        return [...stored];
+      }
+
       let q = query(collection(db, collectionName));
       if (filters) {
         filters.forEach(f => {
           q = query(q, where(f.field, f.operator, f.value));
         });
       }
+
+      // Default limits to prevent reading massive histories
+      const defaultLimits: Record<string, number> = {
+        'login_activity': 50,
+        'messages': 100,
+        'referrals': 150,
+        'billings': 100,
+        'transactions': 100,
+        'patient_payment_history': 100,
+        'medicine_logs': 100,
+        'health_logs': 100,
+        'medical_reports': 50,
+        'daily_finance': 100
+      };
+
+      const limitSize = defaultLimits[collectionName];
+      if (limitSize) {
+        q = query(q, limit(limitSize));
+      }
+
+      const startTime = Date.now();
       const snap = await getDocs(q);
+      const duration = Date.now() - startTime;
+      
       const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
+      // Track telemetry
+      telemetry.trackRead(collectionName, docs.length || 1);
+      telemetry.trackQueryDuration(`${collectionName}: ${filterKey}`, duration);
+
+      const isStatic = ['users', 'hospital_details', 'clinic_details'].includes(collectionName);
+      const ttl = isStatic ? STATIC_CACHE_TTL_MS : CACHE_TTL_MS;
+
+      // Update caches
       queryCache.set(cacheKey, {
         data: docs,
-        expiry: Date.now() + CACHE_TTL_MS
+        expiry: Date.now() + ttl
       });
+      persistentCache.set(cacheKey, docs, ttl);
 
       return docs;
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, collectionName);
+      return [];
     }
   },
 

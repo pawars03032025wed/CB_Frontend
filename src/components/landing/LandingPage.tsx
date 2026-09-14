@@ -104,8 +104,8 @@ export default function LandingPage({ user, darkMode, setDarkMode }: LandingPage
           <div className="flex items-center justify-between h-20">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-primary flex items-center justify-center text-white shadow-lg shadow-brand-primary/20">
-                <Stethoscope size={22} className="stroke-[2.5]" />
+              <div className="w-14 h-14 shrink-0 flex items-center justify-center">
+                <img src="/carebridge-logo.png" alt="CareBridge Logo" className="w-full h-full object-contain drop-shadow-md hover:scale-105 transition-transform" />
               </div>
               <div className="flex flex-col">
                 <span className="font-black text-lg tracking-tight bg-gradient-to-r from-brand-primary to-teal-500 bg-clip-text text-transparent">

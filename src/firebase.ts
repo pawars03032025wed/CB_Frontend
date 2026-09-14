@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore, doc, getDocFromServer, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
+import { initializeFirestore, doc, getDoc, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -25,12 +25,12 @@ try {
 
 export const auth = getAuth(app);
 
-// Validate connection to Firestore with a slight delay to allow network layer initialization
+// Validate connection to Firestore with a cache-friendly approach
 async function testConnection() {
   try {
     console.log("[Firebase] Testing connection to database:", firebaseConfig.firestoreDatabaseId);
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log("[Firebase] Connection successful!");
+    await getDoc(doc(db, 'test', 'connection'));
+    console.log("[Firebase] Connection check successful!");
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error("Please check your Firebase configuration. The client is offline.");

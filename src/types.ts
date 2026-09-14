@@ -1,7 +1,32 @@
 export type UserRole = 'admin' | 'hospital' | 'clinic' | 'patient';
 export type UserStatus = 'pending' | 'active' | 'rejected';
+export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled' | 'payment_failed' | 'paused' | 'suspended' | 'payment_pending';
+export type PlanType = 'CLINIC' | 'HOSPITAL';
 
-export interface User {
+export interface SubscriptionData {
+  subscriptionStatus?: SubscriptionStatus;
+  planType?: PlanType;
+  subscriptionType?: 'monthly' | 'yearly' | 'free_trial';
+  subscriptionPlan?: string;
+  trialStartAt?: any;
+  trialEndAt?: any;
+  trialStartedAt?: any;
+  trialExpiresAt?: any;
+  hasUsedTrial?: boolean;
+  subscriptionId?: string;
+  razorpayCustomerId?: string;
+  subscriptionStartAt?: any;
+  subscriptionExpiresAt?: any;
+  subscriptionNextBillingAt?: any;
+  paymentStatus?: 'not_required' | 'pending' | 'paid' | 'failed';
+  lastPaymentAt?: any;
+  lastPaymentAmount?: number;
+  transactionId?: string;
+  cancelAtPeriodEnd?: boolean;
+  dashboardAccess?: boolean;
+}
+
+export interface User extends SubscriptionData {
   id: string;
   username?: string;
   password?: string;

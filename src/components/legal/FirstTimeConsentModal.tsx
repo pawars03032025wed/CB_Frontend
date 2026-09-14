@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { 
   Shield, Check, Bell, MessageSquare, AlertTriangle, 
   HelpCircle, ChevronRight, FileText, Scale, Sparkles, Eye, X
@@ -17,7 +17,8 @@ export default function FirstTimeConsentModal({ userId, onConsentAccepted, darkM
   const [whatsappConsent, setWhatsappConsent] = useState(true);
   const [notificationsConsent, setNotificationsConsent] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [agreedAll, setAgreedAll] = useState(true);
+  const [agreedAll, setAgreedAll] = useState(false);
+  const [hasReadPolicies, setHasReadPolicies] = useState(false);
   const [activeTab, setActiveTab] = useState<"privacy" | "terms" | "ai" | "notif">("privacy");
 
   const handleAccept = async () => {

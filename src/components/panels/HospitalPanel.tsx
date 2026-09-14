@@ -70,6 +70,14 @@ import {
   Radio,
   Megaphone,
   GraduationCap,
+  Search,
+  Hospital,
+  Share2,
+  User,
+  ChevronDown,
+  Smartphone,
+  FileText,
+  Sparkles,
 } from "lucide-react";
 import React from "react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
@@ -77,10 +85,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { HospitalWelcomeLanding } from "../landing/HospitalWelcomeLanding";
 import ConfirmationModal from "../common/ConfirmationModal";
 import PatientAvatar from "../common/PatientAvatar";
-import { formatISTDate, formatISTTime, useLiveClock } from "../../utils/dateUtils";
+import { formatISTDate, formatISTTime, useLiveClock, getISTDateString } from "../../utils/dateUtils";
 import { firebaseService } from "../../services/firebaseService";
 import { safeStringify } from "../../utils/firestoreErrorHandler";
 import LegalFooter from "../common/LegalFooter";
+import SubscriptionRequired from "../subscription/SubscriptionRequired";
 
 const compressImage = (
   file: File,
@@ -151,10 +160,130 @@ export default function HospitalPanel({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [filterLocation, setFilterLocation] = useState("all");
+  const [filterDept, setFilterDept] = useState("all");
+  const [filterHospitalName, setFilterHospitalName] = useState("");
+  const [selectedHospital, setSelectedHospital] = useState<any>(null);
+  const [selectedHospitalDoctors, setSelectedHospitalDoctors] = useState<any[]>(
+    [],
+  );
+  const [showReferralModal, setShowReferralModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [referralPatientSearch, setReferralPatientSearch] = useState("");
+  const [lastReferralData, setLastReferralData] = useState<any>(null);
+  const [showReferralSuccessModal, setShowReferralSuccessModal] = useState(false);
+  const [isReferralSubmitting, setIsReferralSubmitting] = useState(false);
+  const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
+  const [cardView, setCardView] = useState<"gallery" | "create">("gallery");
+  const [tipView, setTipView] = useState<"gallery" | "create">("gallery");
+  const [isBulkSending, setIsBulkSending] = useState(false);
+  const [bulkSendProgress, setBulkSendProgress] = useState({ current: 0, total: 0 });
+  const [showHealthTipModal, setShowHealthTipModal] = useState(false);
+  const [showDigitalCardModal, setShowDigitalCardModal] = useState(false);
+  const [showGeoCampaignModal, setShowGeoCampaignModal] = useState(false);
+  const [clinicDetails, setClinicDetails] = useState<any>(null);
+  const [cardEditor, setCardEditor] = useState({
+    clinicName: "",
+    drName: "",
+    visitingDr: "",
+    date: "",
+    time: "",
+    address: "",
+    facilities: "",
+    offer: "",
+    contactNo: "",
+    bgColor1: "#005f73",
+    bgColor2: "#0a9396",
+  });
+  const [tipEditor, setTipEditor] = useState({
+    title: "Health Tip",
+    content: "Stay hydrated and exercise regularly.",
+    bgColor1: "#9b2226",
+    bgColor2: "#ae2012",
+  });
+  const [referralForm, setReferralForm] = useState({
+    patientName: "",
+    patientAge: "",
+    patientPhone: "",
+    patientGender: "M",
+    patientAddress: "",
+    patientCondition: "Stable",
+    department: "",
+    doctorId: "",
+    doctorName: "",
+    diagnosis: "",
+    note: "",
+    economicalCondition: "",
+    applicableScheme: "",
+    expectedCost: "",
+  });
+  const [opdForm, setOpdForm] = useState({
+    patientName: "",
+    patientAge: "",
+    patientPhone: "",
+    patientGender: "M",
+    weight: "",
+    bp: "",
+    sugar: "",
+    temp: "",
+    complaint: "",
+    patientArea: "",
+    diagnosis: "",
+  });
+  const [opdDoctorSearch, setOpdDoctorSearch] = useState("");
+  const [showOpdDoctorDropdown, setShowOpdDoctorDropdown] = useState(false);
+  const [opdReferralForm, setOpdReferralForm] = useState({
+    patientName: "",
+    patientAge: "",
+    patientPhone: "",
+    patientGender: "M",
+    patientAddress: "",
+    department: "",
+    doctorId: "",
+    doctorName: "",
+    diagnosis: "",
+    note: "",
+  });
+  const [opdReferralPatientSearch, setOpdReferralPatientSearch] = useState("");
+  const [showReferralTypeModal, setShowReferralTypeModal] = useState(false);
+  const [showOPDReferralModal, setShowOPDReferralModal] = useState(false);
+  const [hospitals, setHospitals] = useState<any[]>([]);
+  const [hospitalDetails, setHospitalDetails] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const fetchHospitals = async () => {
+      try {
+        const [hosp, hospDet] = await Promise.all([
+          firebaseService.getCollection("users", [
+            { field: "role", operator: "==", value: "hospital" },
+            { field: "status", operator: "==", value: "active" }
+          ]),
+          firebaseService.getCollection("hospital_details")
+        ]);
+        if (hosp) setHospitals(hosp);
+        if (hospDet) setHospitalDetails(hospDet);
+      } catch (err) {
+        console.error("Error fetching hospitals for find tab:", err);
+      }
+    };
+    fetchHospitals();
+  }, [user?.id]);
   const [referrals, setReferrals] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [clinics, setClinics] = useState<any[]>([]);
   const [doctors, setDoctors] = useState<any[]>([]);
+  const [allOpdRecords, setAllOpdRecords] = useState<any[]>([]);
+  const [allCreditRecords, setAllCreditRecords] = useState<any[]>([]);
+  const [patientSearchQuery, setPatientSearchQuery] = useState("");
+  const [marketingSearch, setMarketingSearch] = useState("");
+  const [marketingAreaSearch, setMarketingAreaSearch] = useState("");
+  const [marketingFilter, setMarketingFilter] = useState("all");
+  const [marketingTarget, setMarketingTarget] = useState({
+    useBp: false,
+    useSugar: false,
+    targetArea: "",
+  });
 
   // Growth Platform States & Lazy Loading
   const [partnerClinicsLoaded, setPartnerClinicsLoaded] = useState(false);
@@ -326,11 +455,16 @@ export default function HospitalPanel({
 
   // History Filter State
   const [historySearch, setHistorySearch] = useState("");
-  const [referralView, setReferralView] = useState("history"); // "history" or "discharged"
+  const [referralView, setReferralView] = useState("ipd"); // "ipd" or "opd"
   const [historyDateFrom, setHistoryDateFrom] = useState("");
   const [historyDateTo, setHistoryDateTo] = useState("");
 
   // Alarm State
+  const [alarmLanguage, setAlarmLanguage] = useState(() => localStorage.getItem("hospital_alarm_lang") || "en");
+
+  useEffect(() => {
+    localStorage.setItem("hospital_alarm_lang", alarmLanguage);
+  }, [alarmLanguage]);
   const [alarmEnabled, setAlarmEnabled] = useState(() => {
     const saved = localStorage.getItem("hospital_alarm_enabled");
     return saved !== null ? JSON.parse(saved) : true;
@@ -341,8 +475,8 @@ export default function HospitalPanel({
     setIsRinging(val);
     isRingingRef.current = val;
   };
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
-  const audioUnlockedRef = useRef(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(true);
+  const audioUnlockedRef = useRef(true);
   const setAudioUnlockedWithRef = (val: boolean) => {
     setAudioUnlocked(val);
     audioUnlockedRef.current = val;
@@ -356,6 +490,7 @@ export default function HospitalPanel({
     name: string;
     referralType?: string;
   } | null>(null);
+  const [profileSaveToast, setProfileSaveToast] = useState(false);
 
   // Helper to add WAV header to raw PCM data from Gemini TTS
   const addWavHeader = (base64Pcm: string, sampleRate: number = 24000) => {
@@ -526,9 +661,13 @@ export default function HospitalPanel({
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      (window as any).speechSynthesis.cancel();
+    }
     stopSynthBeep();
     setIsRingingWithRef(false);
     setNewReferralToast(null);
+    alert("Voice note alarm stopped.");
   };
 
   useEffect(() => {
@@ -658,7 +797,7 @@ export default function HospitalPanel({
     }
   };
 
-  const playAlarm = async (
+    const playAlarm = async (
     patientName?: string,
     forceUnlock: boolean = false,
   ) => {
@@ -671,12 +810,112 @@ export default function HospitalPanel({
 
     setIsRingingWithRef(true);
 
-    if (!audioUnlockedRef.current && !forceUnlock) {
-      console.warn(
-        "[Alarm] Audio not unlocked. Alarm will stay in 'ringing' state but silent until user interaction.",
-      );
+    // Use speechSynthesis for localized announcements
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      (window as any).speechSynthesis.cancel();
+      const speech = new SpeechSynthesisUtterance();
+      
+      let text = patientName 
+        ? `Attention: New patient referral for ${patientName}`
+        : "Attention: New patient referral received";
+      let voiceLang = "en-IN";
+      
+      if (alarmLanguage === "hi") {
+        text = patientName 
+          ? `ध्यान दें: ${patientName} के लिए नया रोगी रेफरल`
+          : "ध्यान दें: नया रोगी रेफरल प्राप्त हुआ";
+        voiceLang = "hi-IN";
+      } else if (alarmLanguage === "mr") {
+        text = patientName
+          ? `लक्ष द्या: ${patientName} साठी नवीन रुग्ण संदर्भ आला आहे`
+          : "लक्ष द्या: नवीन रुग्ण संदर्भ प्राप्त झाला आहे";
+        voiceLang = "mr-IN";
+      }
+
+      speech.text = text;
+      speech.volume = 1;
+      speech.rate = 0.85;
+      speech.pitch = 1.2; // Higher pitch helps sound more female even without a female voice
+
+      // Helper to pick the best female voice for the given language
+      const pickFemaleVoice = (voices: SpeechSynthesisVoice[]) => {
+        const femaleKeywords = ["female", "zira", "samantha", "victoria", "karen", "swara", "neerja", "lekha", "raveena", "heera", "sunali", "veena", "moira", "tessa", "fiona", "ava", "allison", "susan", "joanna", "kendra", "kimberly", "salli", "ivy"];
+
+        // 1. Try exact language + female keyword
+        let voice = voices.find(v =>
+          v.lang.toLowerCase().startsWith(voiceLang.toLowerCase().slice(0, 2)) &&
+          femaleKeywords.some(k => v.name.toLowerCase().includes(k))
+        );
+
+        // 2. Try any voice with the language (browsers label female voices without "male" in name)
+        if (!voice) {
+          const langVoices = voices.filter(v => v.lang.toLowerCase().startsWith(voiceLang.toLowerCase().slice(0, 2)));
+          // Prefer voices that do NOT have "male" in name (more likely female)
+          voice = langVoices.find(v => !v.name.toLowerCase().includes("male")) || langVoices[0];
+        }
+
+        // 3. Fallback: English female
+        if (!voice) {
+          voice = voices.find(v =>
+            (v.lang.includes("en-IN") || v.lang.includes("en-US") || v.lang.includes("en-GB")) &&
+            femaleKeywords.some(k => v.name.toLowerCase().includes(k))
+          );
+        }
+
+        // 4. Any English voice that's not explicitly male
+        if (!voice) {
+          const enVoices = voices.filter(v => v.lang.startsWith("en"));
+          voice = enVoices.find(v => !v.name.toLowerCase().includes("male")) || enVoices[0];
+        }
+
+        return voice || voices[0];
+      };
+
+      const speakWithVoice = () => {
+        const voices = (window as any).speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          const chosenVoice = pickFemaleVoice(voices);
+          if (chosenVoice) {
+            speech.voice = chosenVoice;
+            console.log("[Alarm] Using voice:", chosenVoice.name, chosenVoice.lang);
+          }
+        }
+
+        speech.onend = () => {
+          if (isRingingRef.current) {
+            setTimeout(() => {
+              if (isRingingRef.current) {
+                (window as any).speechSynthesis.speak(speech);
+              }
+            }, 1000);
+          }
+        };
+
+        (window as any).speechSynthesis.speak(speech);
+      };
+
+      // If voices are already loaded, speak immediately; otherwise wait for them
+      const availableVoices = (window as any).speechSynthesis.getVoices();
+      if (availableVoices && availableVoices.length > 0) {
+        speakWithVoice();
+      } else {
+        (window as any).speechSynthesis.onvoiceschanged = () => {
+          (window as any).speechSynthesis.onvoiceschanged = null;
+          speakWithVoice();
+        };
+        // Safety fallback: speak after 500ms even if event never fires
+        setTimeout(() => {
+          if (isRingingRef.current && !(window as any).speechSynthesis.speaking) {
+            speakWithVoice();
+          }
+        }, 500);
+      }
+
       return;
     }
+
+
+
 
     try {
       if (!audioRef.current) {
@@ -739,13 +978,13 @@ export default function HospitalPanel({
             try {
               audio.pause(); // Pause continuous alarm beep during TTS speech
               
-              window.speechSynthesis.cancel();
+              (window as any).speechSynthesis.cancel();
               const utterance = new SpeechSynthesisUtterance(textToSpeak);
               utterance.rate = 1.0;
               utterance.pitch = 1.0;
               
               // Set English style or generic premium voice
-              const voices = window.speechSynthesis.getVoices();
+              const voices = (window as any).speechSynthesis.getVoices();
               const preferredVoice = voices.find(v => v.lang.startsWith("en")) || voices[0];
               if (preferredVoice) {
                 utterance.voice = preferredVoice;
@@ -769,7 +1008,7 @@ export default function HospitalPanel({
                 }
               };
 
-              window.speechSynthesis.speak(utterance);
+              (window as any).speechSynthesis.speak(utterance);
             } catch (synthErr) {
               console.warn("[Alarm] Browser SpeechSynthesis failed:", synthErr);
               const playedFallback = await playWithFallback(audio, reliableSounds);
@@ -1245,466 +1484,683 @@ export default function HospitalPanel({
     }
   };
 
-  const filteredReferrals = useMemo(() => {
-    return referrals.filter((ref) => {
-      const searchMatch =
-        !historySearch ||
-        String(ref.patientName || "")
-          .toLowerCase()
-          .includes(String(historySearch || "").toLowerCase()) ||
-        String(ref.clinicName || "")
-          .toLowerCase()
-          .includes(String(historySearch || "").toLowerCase()) ||
-        String(ref.status || "")
-          .toLowerCase()
-          .includes(String(historySearch || "").toLowerCase());
-
-      const createdAt = ref.createdAt?.toDate
-        ? ref.createdAt.toDate()
-        : new Date(ref.createdAt || 0);
-      const dischargedAt = ref.dischargedAt?.toDate
-        ? ref.dischargedAt.toDate()
-        : ref.dischargedAt
-          ? new Date(ref.dischargedAt)
-          : null;
-
-      const fromMatch =
-        !historyDateFrom ||
-        createdAt >= new Date(historyDateFrom) ||
-        (dischargedAt && dischargedAt >= new Date(historyDateFrom));
-      const toMatch =
-        !historyDateTo ||
-        createdAt <= new Date(historyDateTo + "T23:59:59") ||
-        (dischargedAt && dischargedAt <= new Date(historyDateTo + "T23:59:59"));
-
-      return searchMatch && fromMatch && toMatch;
-    });
-  }, [referrals, historySearch, historyDateFrom, historyDateTo]);
-
-  const handleHospitalImageUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    type: "logo" | "banner",
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handleReferralSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      const compressedBase64 = await compressImage(file, 1200, 1200, 0.7);
-      setProfileForm((prev) => ({ ...prev, [type]: compressedBase64 }));
-    } catch (err) {
-      console.error(
-        "Profile image compression failed, fallback to original:",
-        err,
-      );
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfileForm((prev) => ({
-          ...prev,
-          [type]: reader.result as string,
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleProfileSave = async () => {
-    try {
-      const detailsData = {
-        helpline: profileForm.helpline,
-        contact_no: profileForm.contact_no,
-        address: profileForm.address,
-        email: profileForm.email,
-        website: profileForm.website,
-        category: profileForm.category,
-        departments: profileForm.departments,
-        schemes: profileForm.schemes,
-        bedsICU: Number(profileForm.bedsICU),
-        bedsGeneral: Number(profileForm.bedsGeneral),
-        bedsVentilator: Number(profileForm.bedsVentilator),
-        ambulanceContact: profileForm.ambulanceContact,
-        ambulanceStatus: profileForm.ambulanceStatus,
-        emergencyContact: profileForm.emergencyContact,
-        admissionNotes: profileForm.admissionNotes,
-        webinarLink: profileForm.webinarLink,
-        specialists: profileForm.specialists,
-        hours: profileForm.hours,
-        gallery: profileForm.gallery,
-        logo: profileForm.logo,
-        banner: profileForm.banner,
-        userId: String(user.id),
+      const referralData = {
+        ...referralForm,
+        clinicId: String(user.id),
+        clinicName: user.name, // The sending hospital acts as the clinic
+        clinicContact: user.contact_no || "",
+        hospitalId: String(selectedHospital?.id || ""),
+        hospitalName: selectedHospital?.name || "",
+        hospitalCity: selectedHospital?.city || "",
+        hospitalAddress: selectedHospital?.address || "",
+        hospitalHelpline: selectedHospital?.helpline || "",
+        status: "pending",
       };
 
-      if (hospDetails?.id) {
-        await firebaseService.updateDocument(
-          "hospital_details",
-          hospDetails.id,
-          detailsData,
-        );
-      } else {
-        await firebaseService.addDocument("hospital_details", detailsData);
-      }
+      await firebaseService.addDocument("referrals", referralData);
 
-      // Also update user name and city if changed
-      await firebaseService.updateDocument("users", String(user.id), {
-        name: profileForm.name,
-        city: profileForm.city,
-      });
+      setLastReferralData(referralData);
+      setShowReferralModal(false);
+      setShowReferralSuccessModal(true);
 
-      // Update local storage to keep session in sync
-      const updatedUser = {
-        ...user,
-        name: profileForm.name,
-        city: profileForm.city,
-      };
-      localStorage.setItem("user", safeStringify(updatedUser));
-
-      alert("Profile updated successfully!");
-    } catch (err) {
-      console.error("Error saving profile:", safeStringify(err));
-      alert("Error saving profile");
-    }
-  };
-
-  const handleGalleryUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const newImages: string[] = [];
-    const fileCount = files.length;
-    let processedCount = 0;
-
-    for (let i = 0; i < fileCount; i++) {
-      try {
-        const compressedBase64 = await compressImage(files[i], 1200, 1200, 0.7);
-        newImages.push(compressedBase64);
-      } catch (err) {
-        console.error(
-          "Gallery image compression failed, fallback to original:",
-          err,
-        );
-        const originalBase64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(files[i]);
-        });
-        newImages.push(originalBase64);
-      }
-      processedCount++;
-      if (processedCount === fileCount) {
-        setProfileForm((prev) => ({
-          ...prev,
-          gallery: [...prev.gallery, ...newImages],
-        }));
-      }
-    }
-  };
-
-  const handleAddDepartment = () => {
-    if (newDept && !profileForm.departments.includes(newDept)) {
-      setProfileForm({
-        ...profileForm,
-        departments: [...profileForm.departments, newDept],
-      });
-      setNewDept("");
-    }
-  };
-
-  const handleRemoveDepartment = (dept: string) => {
-    setProfileForm({
-      ...profileForm,
-      departments: profileForm.departments.filter((d) => d !== dept),
-    });
-  };
-
-  const handleAddDoctor = async () => {
-    if (!newDoctor.name || !newDoctor.qualification) return;
-    try {
-      await firebaseService.addDocument("doctors", {
-        hospitalId: user.id,
-        ...newDoctor,
-        createdAt: new Date().toISOString(),
-      });
-      // Also add to specialists for backward compatibility / unified view
-      setProfileForm((prev) => ({
-        ...prev,
-        specialists: [...prev.specialists, { ...newDoctor }],
-      }));
-      setNewDoctor({
-        name: "",
-        qualification: "",
+      setReferralForm({
+        patientName: "",
+        patientAge: "",
+        patientGender: "",
+        patientPhone: "",
+        patientAddress: "",
+        patientCondition: "",
         department: "",
-        timing: "",
-        contact: "",
+        doctorId: "",
+        doctorName: "",
+        diagnosis: "",
+        note: "",
+        economicalCondition: "",
+        applicableScheme: "",
+        expectedCost: "",
       });
     } catch (err) {
-      console.error("Error adding doctor:", err);
-      alert("Error adding doctor");
+      console.error("Error submitting referral:", safeStringify(err));
     }
   };
 
-  const handleDeleteDoctor = async (id: string) => {
+  const getReferralDoctors = () => {
+    const list: any[] = [];
+    const seen = new Set<string>();
+
+    const activeHospDetail = hospitalDetails.find(
+      (d) => String(d.userId) === String(selectedHospital?.id) || String(d.id) === String(selectedHospital?.hospitalDetailId)
+    );
+
+    const specialists = activeHospDetail?.specialists || selectedHospital?.specialists;
+
+    if (specialists && Array.isArray(specialists)) {
+      specialists.forEach((doc: any, idx: number) => {
+        const uniqueKey = `${(doc.name || "").toLowerCase()}-${(doc.qualification || "").toLowerCase()}`;
+        if (!seen.has(uniqueKey)) {
+          seen.add(uniqueKey);
+          list.push({
+            id: doc.id || `specialist-${idx}`,
+            name: doc.name,
+            qualification: doc.qualification || "",
+            specialization: doc.specialization || doc.department || "General",
+          });
+        }
+      });
+    }
+
+    if (selectedHospitalDoctors && Array.isArray(selectedHospitalDoctors)) {
+      selectedHospitalDoctors.forEach((doc: any) => {
+        const uniqueKey = `${(doc.name || "").toLowerCase()}-${(doc.qualification || "").toLowerCase()}`;
+        if (!seen.has(uniqueKey)) {
+          seen.add(uniqueKey);
+          list.push({
+            id: doc.id,
+            name: doc.name,
+            qualification: doc.qualification || "",
+            specialization: doc.specialization || doc.department || "General",
+          });
+        }
+      });
+    }
+
+    if (referralForm.department && referralForm.department !== "All Departments") {
+      const selectedDeptLower = referralForm.department.toLowerCase().trim();
+      const filtered = list.filter((doc) => {
+        const docDeptLower = (doc.specialization || "").toLowerCase().trim();
+        return docDeptLower.includes(selectedDeptLower) || selectedDeptLower.includes(docDeptLower);
+      });
+      if (filtered.length > 0) return filtered;
+    }
+
+    return list;
+  };
+
+  const getOPDReferralDoctors = () => {
+    const list: any[] = [];
+    const seen = new Set<string>();
+
+    const activeHospDetail = hospitalDetails.find(
+      (d) => String(d.userId) === String(selectedHospital?.id) || String(d.id) === String(selectedHospital?.hospitalDetailId)
+    );
+
+    const specialists = activeHospDetail?.specialists || selectedHospital?.specialists;
+
+    if (specialists && Array.isArray(specialists)) {
+      specialists.forEach((doc: any, idx: number) => {
+        const uniqueKey = `${(doc.name || "").toLowerCase()}-${(doc.qualification || "").toLowerCase()}`;
+        if (!seen.has(uniqueKey)) {
+          seen.add(uniqueKey);
+          list.push({
+            id: doc.id || `specialist-${idx}`,
+            name: doc.name,
+            qualification: doc.qualification || "",
+            specialization: doc.specialization || doc.department || "General",
+          });
+        }
+      });
+    }
+
+    if (selectedHospitalDoctors && Array.isArray(selectedHospitalDoctors)) {
+      selectedHospitalDoctors.forEach((doc: any) => {
+        const uniqueKey = `${(doc.name || "").toLowerCase()}-${(doc.qualification || "").toLowerCase()}`;
+        if (!seen.has(uniqueKey)) {
+          seen.add(uniqueKey);
+          list.push({
+            id: doc.id,
+            name: doc.name,
+            qualification: doc.qualification || "",
+            specialization: doc.specialization || doc.department || "General",
+          });
+        }
+      });
+    }
+
+    if (opdReferralForm.department && opdReferralForm.department !== "All Departments") {
+      const selectedDeptLower = opdReferralForm.department.toLowerCase().trim();
+      const filtered = list.filter((doc) => {
+        const docDeptLower = (doc.specialization || "").toLowerCase().trim();
+        return docDeptLower.includes(selectedDeptLower) || selectedDeptLower.includes(docDeptLower);
+      });
+      if (filtered.length > 0) return filtered;
+    }
+
+    return list;
+  };
+
+  const handleOPDReferralSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!opdReferralForm.doctorId) {
+      alert("Please select a target consultant doctor or choose 'Any Available Consultant'.");
+      return;
+    }
     try {
-      await firebaseService.deleteDocument("doctors", id);
+      setIsReferralSubmitting(true);
+      const referralData = {
+        ...opdReferralForm,
+        referralType: "opd",
+        clinicId: String(user.id),
+        clinicName: user.name, // The sending hospital acts as the clinic
+        clinicContact: user.contact_no || "",
+        hospitalId: String(selectedHospital?.id || ""),
+        hospitalName: selectedHospital?.name || "",
+        hospitalCity: selectedHospital?.city || "",
+        hospitalAddress: selectedHospital?.address || "",
+        hospitalHelpline: selectedHospital?.helpline || "",
+        status: "pending",
+        patientCondition: "Stable",
+      };
+
+      await firebaseService.addDocument("referrals", referralData);
+
+      setLastReferralData(referralData);
+      setShowOPDReferralModal(false);
+      setShowReferralSuccessModal(true);
+
+      setOpdReferralForm({
+        patientName: "",
+        patientAge: "",
+        patientGender: "",
+        patientPhone: "",
+        patientAddress: "",
+        department: "",
+        doctorId: "",
+        doctorName: "",
+        diagnosis: "",
+        note: "",
+      });
     } catch (err) {
-      alert("Error deleting doctor");
+      console.error("Error submitting OPD referral:", safeStringify(err));
+    } finally {
+      setIsReferralSubmitting(false);
     }
   };
+
+  const filteredHospitals = useMemo(() => {
+    return hospitals
+      .map((h) => {
+        const details = hospitalDetails.find(
+          (d) => String(d.userId) === String(h.id),
+        );
+        if (details) {
+          const { id, ...rest } = details;
+          return { ...h, ...rest, hospitalDetailId: id };
+        }
+        return h;
+      })
+      .filter((h) => {
+        const city = String(h.city || "")
+          .toLowerCase()
+          .trim();
+        const district = String((h as any).district || "")
+          .toLowerCase()
+          .trim();
+        const address = String(h.address || "")
+          .toLowerCase()
+          .trim();
+        const locFilter = String(filterLocation || "")
+          .toLowerCase()
+          .trim();
+
+        const matchLoc =
+          filterLocation === "all" ||
+          city.includes(locFilter) ||
+          district.includes(locFilter) ||
+          address.includes(locFilter);
+
+        const deptData = h.departments || [];
+        const deptStr = Array.isArray(deptData)
+          ? deptData.join(", ")
+          : String(deptData);
+        const matchDept =
+          filterDept === "all" ||
+          deptStr.toLowerCase().includes(
+            String(filterDept || "")
+              .toLowerCase()
+              .trim(),
+          );
+
+        
+        const nameMatch =
+          !filterHospitalName ||
+          String(h.name || "")
+            .toLowerCase()
+            .includes(filterHospitalName.toLowerCase().trim());
+
+        return matchLoc && matchDept && nameMatch;
+      })
+      .sort((a, b) => {
+        const weights: Record<string, number> = {
+          premium: 3,
+          priority: 2,
+          standard: 1,
+        };
+        return (weights[b.tier] || 0) - (weights[a.tier] || 0);
+      });
+  }, [hospitals, hospitalDetails, filterLocation, filterDept, filterHospitalName]);
+
+  const availableLocations = useMemo(() => {
+    const locations = new Set<string>();
+    hospitals.forEach((h) => {
+      const details = hospitalDetails.find(
+        (d) => String(d.userId) === String(h.id),
+      );
+      const city = details?.city || h.city;
+      const district = details?.district || (h as any).district;
+
+      if (city && typeof city === "string") {
+        const trimmed = city.trim();
+        if (trimmed) {
+          const capitalized =
+            trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+          locations.add(capitalized);
+        }
+      }
+      if (district && typeof district === "string") {
+        const trimmed = district.trim();
+        if (trimmed) {
+          const capitalized =
+            trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+          locations.add(capitalized);
+        }
+      }
+    });
+    return Array.from(locations).sort();
+  }, [hospitals, hospitalDetails]);
+  const allPatients = useMemo(() => {
+    try {
+      const patientsMap = new Map();
+
+      // Process OPD records first (primary source of visits)
+      allOpdRecords.forEach((p) => {
+        if (!p.patientPhone) return;
+
+        const existing = patientsMap.get(p.patientPhone);
+        const visitDate = p.date || "";
+
+        if (!existing) {
+          patientsMap.set(p.patientPhone, {
+            name: p.patientName,
+            phone: p.patientPhone,
+            area: p.patientArea || "",
+            age: p.patientAge || "",
+            gender: p.patientGender || "",
+            bp: p.bp || "",
+            sugar: p.sugar || "",
+            weight: p.weight || "",
+            temp: p.temp || "",
+            complaint: p.complaint || "",
+            lastVisit: visitDate,
+            visitCount: 1,
+          });
+        } else {
+          // Update with latest info if this record is newer
+          const isNewer =
+            !existing.lastVisit || visitDate >= existing.lastVisit;
+          patientsMap.set(p.patientPhone, {
+            ...existing,
+            ...(isNewer
+              ? {
+                  name: p.patientName,
+                  area: p.patientArea || existing.area,
+                  age: p.patientAge || existing.age,
+                  gender: p.patientGender || existing.gender,
+                  bp: p.bp || existing.bp,
+                  sugar: p.sugar || existing.sugar,
+                  weight: p.weight || existing.weight,
+                  temp: p.temp || existing.temp,
+                  complaint: p.complaint || existing.complaint,
+                  lastVisit: visitDate,
+                }
+              : {}),
+            visitCount: existing.visitCount + 1,
+          });
+        }
+      });
+
+      // Process Credit records (to catch patients not in OPD queue or newer visits for payments)
+      allCreditRecords.forEach((r) => {
+        if (!r.patientPhone) return;
+
+        let visitDate = "";
+        if (r.createdAt) {
+          if (r.createdAt instanceof Date) {
+            visitDate = getISTDateString(r.createdAt);
+          } else if (r.createdAt.seconds) {
+            visitDate = getISTDateString(new Date(r.createdAt.seconds * 1000));
+          } else {
+            visitDate = getISTDateString(new Date(r.createdAt));
+          }
+        }
+
+        const existing = patientsMap.get(r.patientPhone);
+        if (!existing) {
+          patientsMap.set(r.patientPhone, {
+            name: r.patientName,
+            phone: r.patientPhone,
+            area: r.patientArea || "",
+            age: r.patientAge || "",
+            gender: r.patientGender || "",
+            bp: r.bp || "",
+            sugar: r.sugar || "",
+            weight: r.weight || "",
+            temp: r.temp || "",
+            complaint: r.complaint || "",
+            lastVisit: visitDate,
+            visitCount: 1,
+          });
+        } else {
+          const isNewer = !existing.lastVisit || visitDate > existing.lastVisit;
+          if (isNewer) {
+            patientsMap.set(r.patientPhone, {
+              ...existing,
+              name: r.patientName,
+              area: r.patientArea || existing.area,
+              age: r.patientAge || existing.age,
+              gender: r.patientGender || existing.gender,
+              bp: r.bp || existing.bp,
+              sugar: r.sugar || existing.sugar,
+              weight: r.weight || existing.weight,
+              temp: r.temp || existing.temp,
+              complaint: r.complaint || existing.complaint,
+              lastVisit: visitDate,
+            });
+          }
+        }
+      });
+
+      return Array.from(patientsMap.values());
+    } catch (err) {
+      console.error("Error in allPatients memo:", err);
+      return [];
+    }
+  }, [allOpdRecords, allCreditRecords]);
+
+  const targetedPatients = useMemo(() => {
+    try {
+      return allPatients.filter((p) => {
+        let matches = true;
+
+        if (marketingTarget.useBp) {
+          const systolic = parseInt((p.bp || "").split("/")[0]);
+          if (isNaN(systolic) || systolic < 140) matches = false;
+        }
+
+        if (marketingTarget.useSugar && matches) {
+          const sugarVal = parseInt(p.sugar || "");
+          if (isNaN(sugarVal) || sugarVal < 140) matches = false;
+        }
+
+        if (marketingTarget.targetArea && matches) {
+          if (
+            !(p.area || "")
+              .toLowerCase()
+              .includes(marketingTarget.targetArea.toLowerCase())
+          ) {
+            matches = false;
+          }
+        }
+
+        return matches;
+      });
+    } catch (err) {
+      console.error("Error in targetedPatients memo:", err);
+      return [];
+    }
+  }, [allPatients, marketingTarget]);
+
+  const referralPatientSuggestions = useMemo(() => {
+    if (!referralPatientSearch.trim() || referralPatientSearch.length < 2)
+      return [];
+    const query = referralPatientSearch.toLowerCase();
+    return allPatients
+      .filter(
+        (p) =>
+          (p.name || "").toLowerCase().includes(query) ||
+          (p.phone || "").includes(query),
+      )
+      .slice(0, 5);
+  }, [allPatients, referralPatientSearch]);
+
+  const opdReferralPatientSuggestions = useMemo(() => {
+    if (!opdReferralPatientSearch.trim() || opdReferralPatientSearch.length < 2)
+      return [];
+    const query = opdReferralPatientSearch.toLowerCase();
+    return allPatients
+      .filter(
+        (p) =>
+          (p.name || "").toLowerCase().includes(query) ||
+          (p.phone || "").includes(query),
+      )
+      .slice(0, 5);
+  }, [allPatients, opdReferralPatientSearch]);
+
+  const patientSuggestions = useMemo(() => {
+    if (!patientSearchQuery.trim()) return [];
+    const query = patientSearchQuery.toLowerCase();
+    return allPatients
+      .filter(
+        (p) =>
+          (p.name && p.name.toLowerCase().includes(query)) ||
+          (p.phone && p.phone.includes(query)),
+      )
+      .slice(0, 5);
+  }, [allPatients, patientSearchQuery]);
+
+  const filteredMarketingPatients = useMemo(() => {
+    try {
+      return allPatients.filter((p) => {
+        const matchesSearch =
+          (p.name || "")
+            .toLowerCase()
+            .includes(marketingSearch.toLowerCase()) ||
+          (p.phone || "").includes(marketingSearch);
+
+        let matchesFilter = true;
+        if (marketingFilter === "bp") {
+          const systolic = parseInt((p.bp || "").split("/")[0]);
+          matchesFilter = !isNaN(systolic) && systolic >= 140;
+        } else if (marketingFilter === "bp_area") {
+          const systolic = parseInt((p.bp || "").split("/")[0]);
+          const bpMatch = !isNaN(systolic) && systolic >= 140;
+          const areaMatch = (p.area || "")
+            .toLowerCase()
+            .includes(marketingAreaSearch.toLowerCase());
+          matchesFilter = bpMatch && areaMatch;
+        } else if (marketingFilter === "sugar") {
+          const sugarVal = parseInt(p.sugar || "");
+          matchesFilter = !isNaN(sugarVal) && sugarVal >= 140;
+        } else if (marketingFilter === "regular") {
+          matchesFilter = (p.visitCount || 0) >= 2;
+        }
+
+        const matchesArea =
+          !marketingAreaSearch ||
+          (p.area || "")
+            .toLowerCase()
+            .includes(marketingAreaSearch.toLowerCase());
+
+        return matchesSearch && matchesFilter && matchesArea;
+      });
+    } catch (err) {
+      console.error("Error in filteredMarketingPatients memo:", err);
+      return [];
+    }
+  }, [allPatients, marketingSearch, marketingFilter, marketingAreaSearch]);
+
+  const updatingRefs = useRef<Set<string>>(new Set());
 
   const handleStatusUpdate = async (id: string, status: string) => {
-    const statusLabels: Record<string, string> = {
-      admitted: "Admit Patient",
-      not_willing: "Mark as Not Willing",
-      not_reachable: "Mark as Not Reachable",
-      under_review: "Under Review",
-      consultation_done: "Consultation Done",
-      treatment_plan: "Start Treatment Plan",
-      discharged: "Discharge Patient",
-    };
-
-    setConfirmModal({
-      isOpen: true,
-      title: `${statusLabels[status] || "Update Status"}?`,
-      message: `Are you sure you want to update this patient's status to ${status.replace("_", " ")}? This action will be recorded in the history.`,
-      type: status === "admitted" ? "info" : "warning",
-      onConfirm: async () => {
-        try {
-          console.log(`[Hospital] Updating referral ${id} status to ${status}`);
-          const updateData: any = { status };
-          if (status === "admitted") {
-            updateData.admittedAt = new Date();
-          }
-          if (status === "discharged") {
-            updateData.dischargedAt = new Date();
-          }
-          if (status === "consultation_done") {
-            updateData.consultationCompletedAt = new Date();
-          }
-          await firebaseService.updateDocument("referrals", id, updateData);
-          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        } catch (err) {
-          console.error("Error updating status:", safeStringify(err));
-          alert("Error updating status");
-        }
-      },
-    });
+    if (!id || updatingRefs.current.has(id)) return;
+    updatingRefs.current.add(id);
+    try {
+      await firebaseService.updateDocument("referrals", id, { status });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      updatingRefs.current.delete(id);
+    }
   };
-
-  const handleAdmitClick = (referral: any) => {
-    setSelectedReferral(referral);
-    setAdmitForm({
-      condition: referral.patientCondition || "Stable",
-      vitals: {
-        temp: referral.vitals?.temp || "",
-        bp: referral.vitals?.bp || "",
-        pulse: referral.vitals?.pulse || "",
-        spo2: referral.vitals?.spo2 || "",
-      },
-      ward: referral.suggestedWard || "",
-      diagnosis: referral.diagnosis || "",
-      scheme: referral.applicableScheme || "",
-    });
+  const handleDischarge = async (ref: any) => {
+    try {
+      await firebaseService.updateDocument("referrals", ref.id, { status: "discharged", dischargedAt: new Date().toISOString() });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  const handleAdmitClick = (ref: any) => {
+    setSelectedReferral(ref);
+    setShowDetailModal(false);
     setShowAdmitModal(true);
   };
-
   const submitAdmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedReferral) return;
-
+    if (!selectedReferral || !user?.id) return;
     try {
-      const admissionDetails = {
-        ...admitForm,
-        admittedBy: user.name || "Carebridge Partner Hospital",
-        hospitalId: user.id,
-        timestamp: new Date(),
-        hospitalCity: user.city || "",
-      };
-
       await firebaseService.updateDocument("referrals", selectedReferral.id, {
         status: "admitted",
-        admittedAt: new Date(),
-        admissionDetails,
+        ward: admitForm.ward,
+        admittedAt: new Date().toISOString(),
+        admissionDetails: admitForm
       });
-
+      const clinicId = selectedReferral.senderId;
+      if (clinicId) {
+        const hospitalName = hospDetails?.name || user.name || "Hospital";
+        const doctorName = selectedReferral.doctorName && selectedReferral.doctorName !== "any" ? selectedReferral.doctorName : "Duty Doctor";
+        const content = `Patient ${selectedReferral.patientName} admitted to ${hospitalName} under Dr. ${doctorName} in ${admitForm.ward} ward.`;
+        await firebaseService.addDocument("messages", {
+          senderId: user.id,
+          senderRole: "hospital",
+          receiverId: clinicId,
+          receiverRole: "clinic",
+          content,
+          timestamp: new Date().toISOString(),
+          isRead: false
+        });
+      }
       setShowAdmitModal(false);
+      alert("Patient admitted successfully!");
+    } catch (err) {
+      console.error("Error admitting patient:", err);
+      alert("Failed to admit patient.");
+    }
+  };
+  const getRecipientInfo = (msg: any) => {
+    return { name: msg.recipient_id || "Unknown", avatar: "", role: "User", initials: "U" };
+  };
+  const handleDeleteSelectedMessages = async () => {};
+  const handleDeleteAllMessages = async () => {};
+  const handleMessageSubmit = async (e: React.FormEvent) => { e.preventDefault(); };
+  const handleProfileSave = async () => {
+    try {
+      if (user?.id) {
+        await firebaseService.updateDocument("users", user.id, {
+          name: profileForm.name || "",
+          city: profileForm.city || "",
+          address: profileForm.address || "",
+          contact_no: profileForm.contact_no || "",
+          email: profileForm.email || "",
+          logo: profileForm.logo || "",
+          banner: profileForm.banner || "",
+        });
+      }
+      if (hospDetails?.id) {
+        await firebaseService.updateDocument("hospital_details", hospDetails.id, {
+          helpline: profileForm.helpline || "",
+          website: profileForm.website || "",
+          category: profileForm.category || "Multi-Specialty Hospital",
+          departments: profileForm.departments || [],
+          schemes: Array.isArray(profileForm.schemes) ? profileForm.schemes.join(", ") : profileForm.schemes || "",
+          bedsICU: profileForm.bedsICU || 0,
+          bedsGeneral: profileForm.bedsGeneral || 0,
+          bedsVentilator: profileForm.bedsVentilator || 0,
+          ambulanceContact: profileForm.ambulanceContact || "",
+          ambulanceStatus: profileForm.ambulanceStatus || "available",
+          emergencyContact: profileForm.emergencyContact || "",
+          admissionNotes: profileForm.admissionNotes || "",
+          webinarLink: profileForm.webinarLink || "",
+          specialists: profileForm.specialists || [],
+          hours: profileForm.hours || {},
+          gallery: profileForm.gallery || [],
+        });
+      }
+      setIsEditingProfile(false);
+      setProfileSaveToast(true);
+      setTimeout(() => setProfileSaveToast(false), 3000);
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      alert("Failed to save profile");
+    }
+  };
+  const handleHospitalImageUpload = async (e: any, arg2?: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const type = arg2 as "logo" | "banner";
+      const maxDim = type === "logo" ? 512 : 1200;
+      const compressedImage = await compressImage(file, maxDim, maxDim, 0.8);
+      setProfileForm((prev) => ({
+        ...prev,
+        [type]: compressedImage,
+      }));
+    } catch (err) {
+      console.error("Error uploading image:", err);
+    }
+  };
+  const handleAddDepartment = () => {};
+  const handleRemoveDepartment = (idx: string | number) => {};
+  const handleAddDoctor = () => {};
+  const handleGalleryUpload = async (e: any) => {};
+  const filteredReferrals = referrals;
+
+  const handleGeoCampaignSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      !marketingTarget.targetArea &&
+      !marketingTarget.useBp &&
+      !marketingTarget.useSugar
+    ) {
       setConfirmModal({
         isOpen: true,
-        title: "Patient Admitted",
-        message: `${selectedReferral.patientName} has been successfully admitted. Clinic will be notified in real-time.`,
-        onConfirm: () =>
-          setConfirmModal((prev) => ({ ...prev, isOpen: false })),
-        type: "info",
+        title: "No Target Defined",
+        message:
+          "Please select at least one targeting criteria (BP, Sugar, or Area) to launch a campaign.",
+        type: "warning",
+        onConfirm: () => setConfirmModal((p) => ({ ...p, isOpen: false })),
       });
-    } catch (err) {
-      console.error("Error admitting patient:", safeStringify(err));
-      alert("Error admitting patient. Please try again.");
+      return;
     }
-  };
 
-  const handleDischarge = async (referral: any) => {
-    setConfirmModal({
-      isOpen: true,
-      title: "Discharge Patient?",
-      message: `Are you sure you want to discharge ${referral.patientName}? This will notify the referring clinic.`,
-      type: "info",
-      onConfirm: async () => {
-        try {
-          const dischargeDate = new Date();
-          const admissionDate = referral.admittedAt?.toDate
-            ? referral.admittedAt.toDate()
-            : referral.admittedAt
-              ? new Date(referral.admittedAt)
-              : new Date();
+    if (!campaignForm.message) {
+      alert("Please enter a campaign message.");
+      return;
+    }
 
-          await firebaseService.updateDocument("referrals", referral.id, {
-            status: "discharged",
-            dischargedAt: dischargeDate,
-          });
-
-          // Send notification to clinic
-          const content = `Patient Discharged: ${referral.patientName}\nAdmission Date: ${formatISTDate(admissionDate)}\nDischarge Date: ${formatISTDate(dischargeDate)}`;
-
-          await firebaseService.addDocument("messages", {
-            senderId: user.id,
-            senderName: user.name,
-            senderRole: user.role,
-            receiverId: referral.clinicId,
-            receiverName: referral.clinicName || "Clinic Partner",
-            receiverRole: "clinic",
-            content: content,
-            isRead: false,
-            createdAt: new Date(),
-          });
-
-          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        } catch (err) {
-          console.error("Error discharging patient:", safeStringify(err));
-          alert("Error discharging patient");
-        }
-      },
-    });
-  };
-
-  const handleMessageSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!messageForm.content) return;
-    try {
-      let recipientName = "Unknown";
-      let recipientRole = "clinic";
-
-      if (messageForm.recipient_id === "admin") {
-        recipientName = "Carebridge+ Admin";
-        recipientRole = "admin";
-      } else if (messageForm.recipient_id === "all_clinics") {
-        recipientName = "All Clinics (Broadcast)";
-        recipientRole = "clinic_broadcast";
-      } else {
-        const clinic = clinics.find(
-          (c) => String(c.id) === messageForm.recipient_id,
-        );
-        if (clinic) {
-          recipientName = clinic.name;
-          recipientRole = "clinic";
-        } else {
-          // Check if it's a patient (from referrals or supervision)
-          const patientMsg = messages.find(
-            (m) =>
-              (m.senderId === messageForm.recipient_id ||
-                m.receiverId === messageForm.recipient_id) &&
-              (m.senderRole === "patient" || m.receiverRole === "patient"),
-          );
-          if (patientMsg) {
-            recipientName =
-              patientMsg.senderId === messageForm.recipient_id
-                ? patientMsg.senderName
-                : patientMsg.receiverName;
-            recipientRole = "patient";
-          }
-        }
-      }
-
-      await firebaseService.addDocument("messages", {
-        senderId: user.id,
-        senderName: user.name,
-        senderRole: user.role,
-        receiverId: messageForm.recipient_id,
-        receiverName: recipientName,
-        receiverRole: recipientRole,
-        content: messageForm.content,
-        text: messageForm.content, // Consistency with PatientPanel
-        isRead: false,
-        participants: [user.id, messageForm.recipient_id],
-        createdAt: new Date(),
-        timestamp: new Date(), // Consistency with PatientPanel
+    if (targetedPatients.length === 0) {
+      setConfirmModal({
+        isOpen: true,
+        title: "No Patients Found",
+        message: `We couldn't find any patients matching your selected criteria. Please adjust your targeting filters.`,
+        type: "warning",
+        onConfirm: () => setConfirmModal((p) => ({ ...p, isOpen: false })),
       });
-      setMessageForm({ ...messageForm, content: "" });
-    } catch (err) {
-      alert("Error sending message");
+      return;
     }
-  };
 
-  const handleDeleteSelectedMessages = async () => {
-    if (selectedMessageIds.length === 0) return;
-    setConfirmModal({
-      isOpen: true,
-      title: "Delete Selected Messages",
-      message: `Are you sure you want to delete the ${selectedMessageIds.length} marked messages? This action cannot be undone.`,
-      type: "danger",
-      onConfirm: async () => {
-        try {
-          await Promise.all(
-            selectedMessageIds.map((id) =>
-              firebaseService.deleteDocument("messages", id),
-            ),
-          );
-          setSelectedMessageIds([]);
-          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        } catch (err) {
-          console.error("Error deleting selected messages:", err);
-          alert("Error deleting some messages.");
-        }
-      },
-    });
-  };
-
-  const handleDeleteAllMessages = async () => {
-    const activeMessages = messages.filter((m) => {
-      if (messageForm.recipient_id === "all_clinics") {
-        return m.receiverId === "all_clinics";
-      }
-      return (
-        (m.senderId === messageForm.recipient_id && m.receiverId === user.id) ||
-        (m.senderId === user.id && m.receiverId === messageForm.recipient_id)
-      );
-    });
-    if (activeMessages.length === 0) return;
-    setConfirmModal({
-      isOpen: true,
-      title: "Delete All Messages",
-      message: `Are you sure you want to delete all ${activeMessages.length} messages in this conversation? This action cannot be undone.`,
-      type: "danger",
-      onConfirm: async () => {
-        try {
-          await Promise.all(
-            activeMessages.map((m) =>
-              firebaseService.deleteDocument("messages", m.id),
-            ),
-          );
-          setSelectedMessageIds([]);
-          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        } catch (err) {
-          console.error("Error deleting all messages:", err);
-          alert("Error clearing conversation.");
-        }
-      },
-    });
+    // Set selected patients to targeted patients before bulk sending
+    setSelectedPatients(
+      targetedPatients.filter((p) => p.phone).map((p) => p.phone),
+    );
+    handleBulkSendWhatsApp(campaignForm.message, "campaign");
   };
 
   const handleReply = (msg: any) => {
     setMessageForm({
-      recipient_id: msg.senderId,
-      recipient_role: msg.senderRole || "clinic",
+      recipient_id: String(msg.senderId || ""),
+      recipient_role: msg.senderRole || "hospital",
       content: "",
     });
     const formElement = document.getElementById("message-form");
@@ -1712,509 +2168,398 @@ export default function HospitalPanel({
   };
 
   const handleDeleteMessage = async (msgId: string) => {
+    try {
+      await firebaseService.deleteDocument("messages", msgId);
+      setConfirmModal({
+        isOpen: true,
+        title: "Success",
+        message: "Message deleted successfully!",
+        type: "info",
+        onConfirm: () => setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+    } catch (err) {
+      console.error("Error deleting message:", err);
+    }
+  };
+
+  const handleAddDigitalCard = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const compressedBase64 = await compressImage(file, 1200, 1200, 0.7);
+      await firebaseService.addDocument("digital_cards", {
+        clinicId: String(user.id),
+        imageUrl: compressedBase64,
+        createdAt: new Date(),
+      });
+      setConfirmModal({
+        isOpen: true,
+        title: "Success",
+        message: "Digital Card added to gallery!",
+        type: "info",
+        onConfirm: () =>
+          setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+    } catch (err) {
+      console.error("Error adding card:", err);
+      setConfirmModal({
+        isOpen: true,
+        title: "Error",
+        message:
+          "Error adding card. The image might be too large for the database.",
+        type: "danger",
+        onConfirm: () =>
+          setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+    }
+  };
+
+  const handleAddHealthTip = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const compressedBase64 = await compressImage(file, 1200, 1200, 0.7);
+      await firebaseService.addDocument("health_tips", {
+        clinicId: String(user.id),
+        imageUrl: compressedBase64,
+        createdAt: new Date(),
+      });
+      setConfirmModal({
+        isOpen: true,
+        title: "Success",
+        message: "Health Tip added to gallery!",
+        type: "info",
+        onConfirm: () =>
+          setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+    } catch (err) {
+      console.error("Error adding tip:", err);
+      setConfirmModal({
+        isOpen: true,
+        title: "Error",
+        message:
+          "Error adding tip. The image might be too large for the database.",
+        type: "danger",
+        onConfirm: () =>
+          setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+    }
+  };
+
+  const handleCreateDigitalCard = async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1000;
+    canvas.height = 1400; // Vertical card for more details
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Background
+    const gradient = ctx.createLinearGradient(0, 0, 1000, 1400);
+    gradient.addColorStop(0, cardEditor.bgColor1);
+    gradient.addColorStop(1, cardEditor.bgColor2);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1000, 1400);
+
+    // Header
+    ctx.fillStyle = "white";
+    ctx.textAlign = "center";
+
+    // Clinic Name
+    ctx.font = "bold 80px Inter, sans-serif";
+    ctx.fillText(cardEditor.clinicName || user.name || "Clinic Name", 500, 150);
+
+    // Dr Name
+    ctx.font = "bold 50px Inter, sans-serif";
+    ctx.fillText(cardEditor.drName ? `Dr. ${cardEditor.drName}` : "", 500, 250);
+
+    // Visiting Dr
+    if (cardEditor.visitingDr) {
+      ctx.font = "40px Inter, sans-serif";
+      ctx.fillText(`Visiting: ${cardEditor.visitingDr}`, 500, 320);
+    }
+
+    // Divider
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(100, 380);
+    ctx.lineTo(900, 380);
+    ctx.stroke();
+
+    // Details Section
+    ctx.textAlign = "left";
+    let y = 450;
+
+    const drawDetail = (label: string, value: string) => {
+      if (!value) return;
+      ctx.font = "bold 30px Inter, sans-serif";
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.fillText(label.toUpperCase(), 150, y);
+      y += 45;
+      ctx.font = "40px Inter, sans-serif";
+      ctx.fillStyle = "white";
+      ctx.fillText(value, 150, y);
+      y += 80;
+    };
+
+    drawDetail("Date & Time", `${cardEditor.date} ${cardEditor.time}`);
+    drawDetail("Address", cardEditor.address);
+    drawDetail("Facilities", cardEditor.facilities);
+    drawDetail("Special Offer", cardEditor.offer);
+    drawDetail("Contact", cardEditor.contactNo);
+
+    // Footer
+    ctx.textAlign = "center";
+    ctx.font = "italic 30px Inter, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.fillText("Generated by CareBridge+", 500, 1350);
+
+    const imageUrl = canvas.toDataURL("image/jpeg", 0.8);
+    try {
+      await firebaseService.addDocument("digital_cards", {
+        clinicId: String(user.id),
+        imageUrl,
+        createdAt: new Date(),
+      });
+      setConfirmModal({
+        isOpen: true,
+        title: "Success",
+        message: "Digital Card created and added to gallery!",
+        type: "info",
+        onConfirm: () =>
+          setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+      setCardView("gallery");
+    } catch (err) {
+      console.error("Error creating card:", err);
+      setConfirmModal({
+        isOpen: true,
+        title: "Error",
+        message: "Error creating card. Please try again.",
+        type: "danger",
+        onConfirm: () =>
+          setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+    }
+  };
+
+  const handleCreateHealthTip = async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1000;
+    canvas.height = 1000;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Background
+    const gradient = ctx.createLinearGradient(0, 0, 1000, 1000);
+    gradient.addColorStop(0, tipEditor.bgColor1);
+    gradient.addColorStop(1, tipEditor.bgColor2);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1000, 1000);
+
+    // Content
+    ctx.fillStyle = "white";
+    ctx.textAlign = "center";
+
+    // Title
+    ctx.font = "bold 80px Inter, sans-serif";
+    ctx.fillText(tipEditor.title, 500, 200);
+
+    // Divider
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(200, 250);
+    ctx.lineTo(800, 250);
+    ctx.stroke();
+
+    // Body
+    ctx.font = "45px Inter, sans-serif";
+    const words = tipEditor.content.split(" ");
+    let line = "";
+    let y = 400;
+    for (let n = 0; n < words.length; n++) {
+      let testLine = line + words[n] + " ";
+      let metrics = ctx.measureText(testLine);
+      let testWidth = metrics.width;
+      if (testWidth > 800 && n > 0) {
+        ctx.fillText(line, 500, y);
+        line = words[n] + " ";
+        y += 70;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, 500, y);
+
+    // Clinic Info
+    ctx.font = "bold 35px Inter, sans-serif";
+    ctx.fillText(user.name || "", 500, 850);
+    ctx.font = "30px Inter, sans-serif";
+    ctx.fillText(clinicDetails?.contact_no || user.phone || "", 500, 900);
+
+    const imageUrl = canvas.toDataURL("image/jpeg", 0.8);
+    try {
+      await firebaseService.addDocument("health_tips", {
+        clinicId: String(user.id),
+        imageUrl,
+        createdAt: new Date(),
+      });
+      setConfirmModal({
+        isOpen: true,
+        title: "Success",
+        message: "Health Tip created and added to gallery!",
+        type: "info",
+        onConfirm: () =>
+          setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+      setTipView("gallery");
+    } catch (err) {
+      console.error("Error creating tip:", err);
+      setConfirmModal({
+        isOpen: true,
+        title: "Error",
+        message: "Error creating tip. Please try again.",
+        type: "danger",
+        onConfirm: () =>
+          setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+    }
+  };
+
+  const handleBulkSendWhatsApp = async (
+    content: string,
+    type: "card" | "tip" | "campaign",
+  ) => {
+    if (selectedPatients.length === 0) {
+      setConfirmModal({
+        isOpen: true,
+        title: "No Patients Selected",
+        message:
+          "Please select patients first from the Patient Database below.",
+        type: "warning",
+        onConfirm: () => {},
+      });
+      return;
+    }
+
+    setIsBulkSending(true);
+    setBulkSendProgress({ current: 0, total: selectedPatients.length });
+
+    // Open sequentially to avoid aggressive blocking
+    for (let i = 0; i < selectedPatients.length; i++) {
+      setBulkSendProgress({ current: i + 1, total: selectedPatients.length });
+
+      // Only open truly for first 10 patients in preview to avoid overwhelming the browser
+      // In real app, this would be an API call
+      const skipTab = i >= 10;
+
+      if (!skipTab) {
+        await sendMarketingContent(content, selectedPatients[i], type, i > 0);
+        // Delay between opening tabs
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      } else {
+        // Just simulate the rest
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+
+    setIsBulkSending(false);
     setConfirmModal({
       isOpen: true,
-      title: "Delete Message",
-      message:
-        "Are you sure you want to delete this message? This action cannot be undone.",
-      type: "danger",
-      onConfirm: async () => {
-        try {
-          await firebaseService.deleteDocument("messages", msgId);
-          setConfirmModal({ ...confirmModal, isOpen: false });
-        } catch (error) {
-          console.error("Error deleting message:", safeStringify(error));
-          alert("Failed to delete message. Please try again.");
-        }
+      title: "Campaign Completed",
+      message: `WhatsApp campaign initiated for ${selectedPatients.length} patients successfully!`,
+      type: "info",
+      onConfirm: () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        setShowHealthTipModal(false);
+        setShowDigitalCardModal(false);
+        setShowGeoCampaignModal(false);
+        setSelectedPatients([]);
       },
     });
   };
 
-  const getRecipientInfo = (id: string) => {
-    if (!id) return { name: "Select Conversation", role: "", initials: "?" };
-    if (id === "admin") return { name: "Carebridge+ Admin", role: "Admin Liaison", initials: "A" };
-    if (id === "all_clinics") return { name: "All Clinics (Broadcast)", role: "Internal Broadcast", initials: "📢" };
-    
-    // Look up clinic from clinics list
-    const cl = clinics.find((c) => String(c.id) === String(id));
-    if (cl) return { name: cl.name, role: "Partner Clinic", initials: cl.name[0].toUpperCase() };
-    
-    // Fallback: search in messages list
-    const lastMsg = messages.find((m) => m.senderId === id || m.receiverId === id);
-    if (lastMsg) {
-      const name = lastMsg.senderId === id ? lastMsg.senderName : lastMsg.receiverName;
-      const role = lastMsg.senderId === id ? lastMsg.senderRole : lastMsg.receiverRole;
-      return { 
-        name: name || "User", 
-        role: role === "clinic" ? "Partner Clinic" : role === "patient" ? "Patient" : role || "Liaison", 
-        initials: (name || "?")[0].toUpperCase() 
-      };
+  const sendMarketingContent = async (
+    content: string,
+    patientPhone: string = "",
+    type: string,
+    skipDownload: boolean = false,
+  ) => {
+    const isImage = type === "card" || type === "tip";
+    const msg = isImage
+      ? `नमस्कार,\n\nआमच्या क्लिनिककडून तुमच्यासाठी एक खास ${type === "card" ? "डिजिटल कार्ड" : "आरोग्य टीप"} पाठवत आहोत.\n\n- ${user.name}`
+      : `नमस्कार,\n\n${content}\n\n- ${user.name}`;
+
+    try {
+      // 1. Try Web Share API (Best for Mobile) - Only for single share if supported
+      if (!patientPhone && navigator.share && navigator.canShare && isImage) {
+        const response = await fetch(content);
+        const blob = await response.blob();
+        const file = new File([blob], `${type}.jpg`, { type: "image/jpeg" });
+        if (navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: type === "card" ? "Digital Card" : "Health Tip",
+              text: msg,
+            });
+            return;
+          } catch (err) {
+            if ((err as Error).name === "AbortError") return;
+            console.error("Share API failed:", err);
+          }
+        }
+      }
+
+      // 2. Fallback for Desktop/Bulk
+      if (isImage && !skipDownload) {
+        const link = document.createElement("a");
+        link.href = content;
+        link.download = `${type}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      const encoded = encodeURIComponent(
+        msg +
+          (isImage && !skipDownload
+            ? "\n\n(टीप: कृपया डाऊनलोड केलेली इमेज सोबत जोडा)"
+            : ""),
+      );
+      const phone = patientPhone
+        ? patientPhone.length === 10
+          ? `91${patientPhone}`
+          : patientPhone
+        : "";
+      window.open(`https://wa.me/${phone}?text=${encoded}`, "_blank");
+    } catch (err) {
+      console.error("Error in sendMarketingContent:", err);
+      const encoded = encodeURIComponent(msg);
+      const phone = patientPhone
+        ? patientPhone.length === 10
+          ? `91${patientPhone}`
+          : patientPhone
+        : "";
+      window.open(`https://wa.me/${phone}?text=${encoded}`, "_blank");
     }
-    
-    return { name: "Active Chat", role: "Participant", initials: "?" };
   };
 
   if (showWelcomeScreen) {
     return (
       <HospitalWelcomeLanding
-        hospDetails={hospDetails}
-        user={user}
+        hospDetails={hospitalDetails}
+        user={{ ...user, dashboardAccess: user?.dashboardAccess !== false }}
         darkMode={darkMode}
         setShowWelcomeScreen={setShowWelcomeScreen}
         referrals={referrals}
         clinics={clinics}
       />
-    );
-  }
-
-  if (false && showWelcomeScreen) {
-    return (
-      <div
-        className={`min-h-screen transition-colors duration-300 ${darkMode ? "bg-[#001219]" : "bg-[#F2F4F7]"} flex flex-col relative overflow-hidden`}
-      >
-        <motion.div
-          key="hospital-welcome"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 0.98, y: -20 }}
-          transition={{ duration: 0.5 }}
-          className="w-full h-screen overflow-y-auto"
-        >
-          {/* Top Decorative Background Gradients */}
-          <div
-            className={`relative overflow-hidden py-16 px-6 md:px-12 text-center border-b ${darkMode ? "border-violet-500/10 bg-gradient-to-b from-indigo-950/40 via-violet-950/20 to-transparent" : "border-violet-100 bg-gradient-to-b from-violet-500/5 via-indigo-500/5 to-transparent"}`}
-          >
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-violet-600/10 rounded-full blur-[120px] -z-10" />
-
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 shadow-sm border border-violet-200/50 dark:border-violet-800/50 mb-6">
-              <Crown size={12} className="animate-pulse" /> CareBridge Plus
-              Emergency Network
-            </div>
-
-            <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-none text-gray-900 dark:text-white uppercase max-w-5xl mx-auto">
-              Welcome to{" "}
-              <span className="text-[#4f46e5] dark:text-violet-400 bg-clip-text">
-                CareBridge Plus
-              </span>{" "}
-              Hospital Wing
-            </h1>
-
-            <div className="mt-6 flex flex-col items-center justify-center max-w-2xl mx-auto p-6 bg-white dark:bg-gray-900/50 border border-violet-100 dark:border-violet-850 rounded-[2.5rem] shadow-xl md:shadow-2xl">
-              <p className="text-xs font-black uppercase tracking-widest text-[#4f46e5] dark:text-violet-400">
-                Command Control Center
-              </p>
-              <p className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white mt-1 uppercase max-w-md text-center">
-                {hospDetails?.name || user.name || "Apex SuperSpecialty"}
-              </p>
-
-              <div className="mt-4 flex flex-wrap justify-center items-center gap-y-2 gap-x-6 text-[10px] sm:text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-white/5 pt-4 w-full">
-                <span className="flex items-center gap-1.5">
-                  <HospitalIcon size={14} className="text-[#4f46e5]" />{" "}
-                  {hospDetails?.category || "Multi-Specialty Facility"}
-                </span>
-                {(hospDetails?.contact_no || hospDetails?.helpline) && (
-                  <span className="flex items-center gap-1.5">
-                    <Phone size={14} className="text-[#4f46e5]" />{" "}
-                    {hospDetails.helpline || hospDetails.contact_no}
-                  </span>
-                )}
-                {hospDetails?.address && (
-                  <span className="flex items-center gap-1.5">
-                    <MapPin size={14} className="text-[#4f46e5]" />{" "}
-                    {hospDetails.address}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <h2 className="text-lg sm:text-xl md:text-2xl font-black uppercase tracking-tight text-[#4f46e5] dark:text-violet-300 max-w-4xl mx-auto mt-10 bg-violet-500/5 dark:bg-violet-500/10 border border-violet-500/10 rounded-2xl py-4 px-6 shadow-sm">
-              "Smarter Admission. Faster Bed-Allocation. Integrated Referral
-              Network."
-            </h2>
-          </div>
-
-          {/* Dynamic Stats Overview Layout (Mocked/Real Numbers) */}
-          <div className="max-w-7xl mx-auto px-6 pt-12 space-y-2">
-            <h3 className="text-xs font-black uppercase tracking-wider text-violet-600 dark:text-violet-400 text-center">
-              Live Facility Statistics
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mt-4 font-mono">
-              {/* Stat 1 */}
-              <div
-                className={`p-6 rounded-[2rem] border ${darkMode ? "border-white/5 bg-gray-900/40" : "border-gray-100 bg-white"} text-center shadow-sm hover:translate-y-[-2px] transition-transform`}
-              >
-                <div className="text-2xl md:text-4xl font-extrabold text-violet-600 dark:text-violet-400">
-                  {referrals.length || 0}
-                </div>
-                <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 mt-1">
-                  Cases Under Triage
-                </div>
-              </div>
-              {/* Stat 2 */}
-              <div
-                className={`p-6 rounded-[2rem] border ${darkMode ? "border-white/5 bg-gray-900/40" : "border-gray-100 bg-white"} text-center shadow-sm hover:translate-y-[-2px] transition-transform`}
-              >
-                <div className="text-2xl md:text-4xl font-extrabold text-blue-500">
-                  {clinics.length || "12+"}
-                </div>
-                <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 mt-1">
-                  Affiliated Clinics
-                </div>
-              </div>
-              {/* Stat 3 */}
-              <div
-                className={`p-6 rounded-[2rem] border ${darkMode ? "border-white/5 bg-gray-900/40" : "border-gray-100 bg-white"} text-center shadow-sm hover:translate-y-[-2px] transition-transform`}
-              >
-                <div className="text-2xl md:text-4xl font-extrabold text-[#00afb9]">
-                  {(hospDetails?.bedsICU || 0) +
-                    (hospDetails?.bedsGeneral || 0) +
-                    (hospDetails?.bedsVentilator || 0) || "250"}
-                </div>
-                <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 mt-1">
-                  Total Bed Slots
-                </div>
-              </div>
-              {/* Stat 4 */}
-              <div
-                className={`p-6 rounded-[2rem] border ${darkMode ? "border-white/5 bg-gray-900/40" : "border-gray-100 bg-white"} text-center shadow-sm hover:translate-y-[-2px] transition-transform`}
-              >
-                <div className="text-2xl md:text-4xl font-extrabold text-teal-500">
-                  100%
-                </div>
-                <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 mt-1">
-                  Siren Channel Active
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Main Info Blocks */}
-          <div className="max-w-7xl mx-auto px-6 py-16 space-y-20">
-            {/* How CareBridge Plus helps hospitals */}
-            <div className="space-y-8">
-              <div className="text-center space-y-2">
-                <span className="text-[10px] font-black uppercase tracking-wider px-3.5 py-2 bg-gradient-to-r from-violet-100 to-indigo-100 dark:from-violet-950 dark:to-indigo-950 text-violet-600 dark:text-violet-300 rounded-full">
-                  Fast Admission
-                </span>
-                <h3 className="text-2xl md:text-4xl font-black uppercase tracking-tight text-gray-900 dark:text-white">
-                  Apex Care Command Features
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Feature 1 */}
-                <div
-                  className={`p-8 rounded-[2.5rem] border transition-all duration-300 hover:shadow-xl hover:border-violet-500/20 group flex flex-col justify-between ${darkMode ? "border-white/5 bg-gray-900/40 hover:bg-gray-950/40" : "border-gray-150 bg-white"}`}
-                >
-                  <div>
-                    <div className="w-12 h-12 bg-red-100 dark:bg-red-950/50 text-red-600 dark:text-red-400 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                      <Bell size={22} className="animate-pulse" />
-                    </div>
-                    <h4 className="text-lg font-black uppercase text-gray-900 dark:text-white tracking-tight">
-                      Instant Referral Alarms
-                    </h4>
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-2.5 leading-relaxed">
-                      Audible emergency bells and siren flash banners trigger
-                      live whenever companion family clinics refer severe cases.
-                      Skip critical triage wait times.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Feature 2 */}
-                <div
-                  className={`p-8 rounded-[2.5rem] border transition-all duration-300 hover:shadow-xl hover:border-violet-500/20 group flex flex-col justify-between ${darkMode ? "border-white/5 bg-gray-900/40 hover:bg-gray-950/40" : "border-gray-150 bg-white"}`}
-                >
-                  <div>
-                    <div className="w-12 h-12 bg-violet-100 dark:bg-violet-950/50 text-[#4f46e5] dark:text-violet-300 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                      <UserMd size={22} />
-                    </div>
-                    <h4 className="text-lg font-black uppercase text-gray-900 dark:text-white tracking-tight">
-                      Seamless Triage Routing
-                    </h4>
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-2.5 leading-relaxed">
-                      Process digital patient profiles containing live vitals
-                      (Pulse, Temp, SpO2, and BP) instantly sent by GPs, saving
-                      extra checkout work inside primary emergency bays.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Feature 3 */}
-                <div
-                  className={`p-8 rounded-[2.5rem] border transition-all duration-300 hover:shadow-xl hover:border-violet-500/20 group flex flex-col justify-between ${darkMode ? "border-white/5 bg-gray-900/40 hover:bg-gray-950/40" : "border-gray-150 bg-white"}`}
-                >
-                  <div>
-                    <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                      <Layers size={22} />
-                    </div>
-                    <h4 className="text-lg font-black uppercase text-gray-900 dark:text-white tracking-tight">
-                      Live Transparent Bed Slots
-                    </h4>
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-2.5 leading-relaxed">
-                      Sync ICU, Ventilator, and General Bed statistics live
-                      dynamically. Affiliated clinics view your real-time bed
-                      inventory to refer cases only of guaranteed availability.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Feature 4 */}
-                <div
-                  className={`p-8 rounded-[2.5rem] border transition-all duration-300 hover:shadow-xl hover:border-violet-500/20 group flex flex-col justify-between ${darkMode ? "border-white/5 bg-gray-900/40 hover:bg-gray-950/40" : "border-gray-150 bg-white"}`}
-                >
-                  <div>
-                    <div className="w-12 h-12 bg-teal-100 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                      <MessageSquare size={22} />
-                    </div>
-                    <h4 className="text-lg font-black uppercase text-gray-900 dark:text-white tracking-tight">
-                      Direct Feedback Messaging
-                    </h4>
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-2.5 leading-relaxed">
-                      Reply to companion clinics regarding patient recovery
-                      state or admission logs. Keeps peripheral doctors
-                      integrated and loyal to your facility.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Feature 5 */}
-                <div
-                  className={`p-8 rounded-[2.5rem] border transition-all duration-300 hover:shadow-xl hover:border-violet-500/20 group flex flex-col justify-between ${darkMode ? "border-white/5 bg-gray-900/40 hover:bg-gray-950/40" : "border-gray-150 bg-white"}`}
-                >
-                  <div>
-                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-950/50 text-[#4f46e5]/80 dark:text-blue-400 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                      <TrendingUp size={22} />
-                    </div>
-                    <h4 className="text-lg font-black uppercase text-gray-900 dark:text-white tracking-tight">
-                      Strategic Clinic Analytics
-                    </h4>
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-2.5 leading-relaxed">
-                      Analyze referral densities, clinic contributions, and
-                      historical admission graphs. Optimize your patient
-                      acquisition channels programmatically.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Feature 6 */}
-                <div
-                  className={`p-8 rounded-[2.5rem] border transition-all duration-300 hover:shadow-xl hover:border-violet-500/20 group flex flex-col justify-between ${darkMode ? "border-white/5 bg-gray-900/40 hover:bg-gray-950/40" : "border-gray-150 bg-white"}`}
-                >
-                  <div>
-                    <div className="w-12 h-12 bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                      <Activity size={22} />
-                    </div>
-                    <h4 className="text-lg font-black uppercase text-gray-900 dark:text-white tracking-tight">
-                      Voice & AI Diagnostic Logs
-                    </h4>
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-2.5 leading-relaxed">
-                      Hear pre-recorded clinic voice notes outlining patient
-                      backgrounds. Use AI templates to automatically structure
-                      admission logs, prescription schemas, and clinical
-                      reports.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Growth Slogans and Operational Benefits split layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Slogans & Sincere Slogans */}
-              <div
-                className={`p-8 sm:p-12 rounded-[2.5rem] border flex flex-col justify-between ${darkMode ? "border-violet-500/10 bg-gradient-to-b from-indigo-950/30 to-slate-900/50" : "border-violet-100 bg-gradient-to-br from-violet-500/5 to-white shadow-sm"}`}
-              >
-                <div>
-                  <h4 className="text-xl md:text-2xl font-black uppercase text-gray-900 dark:text-white tracking-tight">
-                    Smarter Hospital Admissions
-                  </h4>
-                  <p className="text-xs font-bold text-indigo-500 dark:text-violet-400 mt-1 uppercase tracking-wider">
-                    Better Bed Visibility • Faster ER Response
-                  </p>
-
-                  <div className="space-y-6 mt-8">
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
-                      By connecting companion General Practitioners directly
-                      with your emergency dispatch desk, CareBridge Plus
-                      establishes an unbreakable chain of collaborative
-                      healthcare.
-                    </p>
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
-                      GPs do not need to guess if ICU slots are available
-                      anymore. They instantly review your digital profile
-                      dashboard to secure beds before patient ambulances reach
-                      your triage gates.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-8 bg-violet-500/5 dark:bg-violet-500/10 p-5 rounded-2xl border border-violet-500/10">
-                  <p className="text-xs font-black italic text-[#4f46e5] dark:text-violet-300">
-                    "Streamlined bed tracking reduces triage allocation delays
-                    up to 75% • Saving lives in gold minutes."
-                  </p>
-                </div>
-              </div>
-
-              {/* Connected Benefits */}
-              <div
-                className={`p-8 sm:p-12 rounded-[2.5rem] border ${darkMode ? "border-emerald-500/10 bg-gradient-to-b from-emerald-950/20 to-slate-900/50" : "border-emerald-100 bg-gradient-to-br from-emerald-50/20 to-white shadow-sm"}`}
-              >
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/50 mb-4">
-                  <ShieldCheck size={12} /> Strategic Advantages
-                </div>
-                <h4 className="text-xl md:text-2xl font-black uppercase text-gray-900 dark:text-white tracking-tight">
-                  Key Operational Gains
-                </h4>
-
-                <div className="space-y-6 mt-8">
-                  <div className="flex gap-4">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-black shrink-0">
-                      ✓
-                    </div>
-                    <div>
-                      <h5 className="text-sm font-black text-gray-900 dark:text-white uppercase leading-none">
-                        Min ER Wait Times
-                      </h5>
-                      <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                        All clinical vitals, initial prescriptions, and
-                        pre-injections log in advance.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-black shrink-0">
-                      ✓
-                    </div>
-                    <div>
-                      <h5 className="text-sm font-black text-gray-900 dark:text-white uppercase leading-none">
-                        Real-time Bed Tracking
-                      </h5>
-                      <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                        Prevents allocation mistakes and double-logging,
-                        ensuring 100% bed utilization accuracy.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-black shrink-0">
-                      ✓
-                    </div>
-                    <div>
-                      <h5 className="text-sm font-black text-gray-900 dark:text-white uppercase leading-none">
-                        Boost GP & Clinic Loyalty
-                      </h5>
-                      <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                        Transparent digital reports keep referring partner
-                        clinics happy and trusting.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-black shrink-0">
-                      ✓
-                    </div>
-                    <div>
-                      <h5 className="text-sm font-black text-gray-900 dark:text-white uppercase leading-none">
-                        Emergency Siren Fastpath
-                      </h5>
-                      <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                        Prioritizes emergency cases immediately in your
-                        admissions workflow.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Stepper Guide */}
-            <div className="space-y-10 py-10">
-              <div className="text-center space-y-2">
-                <span className="text-[10px] font-black uppercase tracking-wider px-3.5 py-2 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 rounded-full">
-                  Process flow
-                </span>
-                <h3 className="text-2xl md:text-4xl font-black uppercase tracking-tight text-gray-900 dark:text-white">
-                  Active Referral Triage Steps
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Step 1 */}
-                <div className="p-8 rounded-[2rem] bg-white dark:bg-gray-900 border border-gray-100 dark:border-white/5 space-y-4 shadow-sm hover:shadow-md transition-all">
-                  <div className="w-10 h-10 rounded-full bg-[#4f46e5] text-white flex items-center justify-center font-black text-lg shadow-md shadow-indigo-500/20">
-                    1
-                  </div>
-                  <h4 className="text-base font-black uppercase text-gray-900 dark:text-white">
-                    Monitor Referral Inbox
-                  </h4>
-                  <p className="text-xs font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
-                    Check the live **Active Referrals** dashboard. Severe logs
-                    trigger dynamic ambulance audio warnings containing full
-                    vitals.
-                  </p>
-                </div>
-
-                {/* Step 2 */}
-                <div className="p-8 rounded-[2rem] bg-white dark:bg-gray-950 border border-gray-100 dark:border-white/5 space-y-4 shadow-sm hover:shadow-md transition-all">
-                  <div className="w-10 h-10 rounded-full bg-[#4f46e5] text-white flex items-center justify-center font-black text-lg shadow-md shadow-indigo-500/20">
-                    2
-                  </div>
-                  <h4 className="text-base font-black uppercase text-gray-900 dark:text-white">
-                    Admit & Allocate Beds
-                  </h4>
-                  <p className="text-xs font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
-                    Tap **Admit Patient**, choose general, ICU, or ventilator
-                    slots, specify admission notes, and save bed logs
-                    transparently.
-                  </p>
-                </div>
-
-                {/* Step 3 */}
-                <div className="p-8 rounded-[2rem] bg-white dark:bg-gray-950 border border-gray-100 dark:border-white/5 space-y-4 shadow-sm hover:shadow-md transition-all">
-                  <div className="w-10 h-10 rounded-full bg-[#4f46e5] text-white flex items-center justify-center font-black text-lg shadow-md shadow-indigo-500/20">
-                    3
-                  </div>
-                  <h4 className="text-base font-black uppercase text-gray-900 dark:text-white">
-                    Send GP Feedback
-                  </h4>
-                  <p className="text-xs font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
-                    Log instant updates or state summaries. CareBridge Plus
-                    routes feedback directly back to partner general clinics to
-                    complete the care chain.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Slogan line */}
-            <div className="text-center py-8 border-y border-dashed border-violet-500/20 max-w-4xl mx-auto">
-              <p className="text-base sm:text-xl font-black font-mono tracking-tight text-[#4f46e5] dark:text-violet-400 uppercase animate-pulse">
-                🏥 Connected Emergency Services • Minimizing Triage Tensions •
-                Saving Gold Minutes 🏥
-              </p>
-            </div>
-
-            {/* Launch CTA */}
-            <div className="flex justify-center pt-8 pb-16">
-              <button
-                onClick={() => {
-                  setShowWelcomeScreen(false);
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                className="px-10 py-5 bg-gradient-to-r from-violet-700 to-[#4f46e5] text-white font-black uppercase text-sm tracking-wider rounded-[2rem] shadow-xl hover:shadow-[#4f46e5]/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2.5 group"
-              >
-                Continue to Hospital Dashboard
-                <ArrowRight
-                  size={18}
-                  className="group-hover:translate-x-1.5 transition-transform duration-300"
-                />
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </div>
     );
   }
 
@@ -2254,7 +2599,7 @@ export default function HospitalPanel({
                     setShowDetailModal(true);
                   }
                 }}
-                className="bg-white/10 text-white border border-white/20 font-black px-6 py-3 rounded-2xl hover:bg-white/20 transition-colors hidden md:block"
+                className="bg-white/10 text-white border border-white/20 font-black px-6 py-3 rounded-2xl hover:bg-white/20 transition-colors"
               >
                 VIEW DETAILS
               </button>
@@ -2317,11 +2662,7 @@ export default function HospitalPanel({
                 <p className="text-gray-600 dark:text-gray-300 font-bold text-sm">
                   Patient: {newReferralToast.name}
                 </p>
-                {!audioUnlocked && isRinging && (
-                  <p className="text-red-500 text-[10px] font-bold mt-1 animate-bounce">
-                    Tap anywhere to enable sound
-                  </p>
-                )}
+
               </div>
               {newReferralToast.referralType === "opd" ? (
                 <button
@@ -2342,6 +2683,40 @@ export default function HospitalPanel({
           )}
         </AnimatePresence>
 
+        {/* Profile Save Success Toast */}
+        <AnimatePresence>
+          {profileSaveToast && (
+            <motion.div
+              key="profile-save-toast"
+              initial={{ opacity: 0, y: -100, x: "-50%" }}
+              animate={{ opacity: 1, y: 20, x: "-50%" }}
+              exit={{ opacity: 0, y: -100, x: "-50%" }}
+              className={`fixed top-0 left-1/2 z-[100] w-[90%] max-w-md rounded-2xl shadow-2xl border-2 p-4 flex items-center gap-4 ${
+                darkMode
+                  ? "bg-gray-800 border-green-500 shadow-green-900/30"
+                  : "bg-white border-green-500 shadow-green-100"
+              }`}
+            >
+              <div className={`p-3 rounded-full ${darkMode ? "bg-green-500/10 text-green-400" : "bg-green-100 text-green-600"}`}>
+                <CheckCircle size={24} />
+              </div>
+              <div className="flex-1">
+                <h3 className={`font-black text-lg ${darkMode ? "text-green-400" : "text-green-600"}`}>
+                  Profile Saved!
+                </h3>
+                <p className={`font-bold text-sm ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                  Hospital profile saved successfully.
+                </p>
+              </div>
+              <button
+                onClick={() => setProfileSaveToast(false)}
+                className={`p-1.5 rounded-full transition-colors ${darkMode ? "hover:bg-white/10 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}
+              >
+                <X size={18} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {/* Sidebar Overlay */}
         <AnimatePresence>
           {isSidebarOpen && (
@@ -2358,29 +2733,36 @@ export default function HospitalPanel({
         {/* Sidebar Navigation */}
         <aside
           style={{ height: "100dvh", display: "flex", flexDirection: "column" }}
-          className={`fixed inset-y-0 left-0 lg:relative lg:translate-x-0 z-50 w-64 transition-transform duration-300 overflow-hidden ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} ${darkMode ? "bg-[#001219] border-r border-white/10" : "bg-white border-r border-gray-100"}`}
+          className={`fixed inset-y-0 left-0 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 z-50 w-72 transition-transform duration-300 overflow-hidden ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} ${darkMode ? "bg-slate-950 border-r border-slate-800/80" : "bg-white border-r border-slate-200/80"}`}
         >
-          <div className="p-6 flex-1 flex flex-col min-h-0">
-            <div className="flex flex-col items-center mb-8 shrink-0">
-              <div className="w-24 h-24 rounded-full bg-[#00796b] flex items-center justify-center mb-3 shadow-lg border-4 border-white overflow-hidden">
-                <HospitalIcon size={48} className="text-white" />
+          <div className="p-5 pb-24 lg:pb-5 flex-1 flex flex-col min-h-0">
+            {/* Facility Branding Header */}
+            <div className="flex flex-col items-center mb-6 shrink-0 px-2 pt-2">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-gradient-to-br from-[#00b4d8] via-[#0077b6] to-[#2563eb] text-white shadow-lg shadow-cyan-600/25 ring-4 ring-cyan-500/15 mb-3 shrink-0">
+                <HospitalIcon size={28} className="text-white drop-shadow-sm" />
               </div>
-              <h2 className="text-white font-bold text-center text-sm bg-[#00796b] px-3 py-1 rounded-full shadow-sm max-w-full truncate">
+
+              <h1 className={`text-base lg:text-lg font-black tracking-tight uppercase truncate max-w-full text-center leading-tight ${darkMode ? "text-white" : "text-slate-900"}`}>
                 {user.name}
-              </h2>
-              <p
-                className={`text-[10px] font-bold uppercase tracking-widest mt-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}
-              >
-                Hospital Panel
-              </p>
+              </h1>
+
+              <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full border mt-1.5 inline-flex items-center gap-1.5 shadow-xs ${darkMode ? "bg-cyan-950/40 text-[#38bdf8] border-cyan-800/40" : "bg-[#e0f7fa] text-[#0077b6] border-[#b2ebf2]"}`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00b4d8] animate-pulse"></span>
+                HOSPITAL PARTNER
+              </span>
+
+              <div className={`mt-2 text-xs font-black tracking-wider uppercase px-3.5 py-1.5 rounded-xl border truncate max-w-full text-center ${darkMode ? "text-[#38bdf8] bg-slate-900 border-slate-800" : "text-[#0077b6] bg-slate-100 border-slate-200"}`}>
+                {user.city ? `${user.city} • MULTI-SPECIALTY` : "MULTI-SPECIALTY FACILITY"}
+              </div>
             </div>
 
             <nav
               style={{ overflowY: "auto", WebkitOverflowScrolling: "touch" }}
-              className="space-y-1 flex-1 no-scrollbar pr-1 py-1"
+              className="space-y-1 flex-1 no-scrollbar pr-1 pb-4"
             >
               {[
                 { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
+                { id: "find", icon: Search, label: "Search Hospital" },
                 {
                   id: "referrals",
                   icon: PlusCircle,
@@ -2391,25 +2773,49 @@ export default function HospitalPanel({
                 { id: "discharge", icon: LogOut, label: "Discharge Panel" },
                 { id: "profile", icon: Building, label: "Hospital Profile" },
                 { id: "inbox", icon: MessageSquare, label: "Messaging Inbox" },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setIsSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
-                    activeTab === item.id
-                      ? "bg-linear-to-r from-[#005f73] to-[#0a9396] text-white shadow-md"
-                      : `${darkMode ? "text-gray-400 hover:bg-white/5" : "text-gray-500 hover:bg-gray-50"}`
-                  }`}
-                >
-                  <item.icon size={18} />
-                  {item.label}
-                </button>
-              ))}
+              ].map((item) => {
+                const active = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full group flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                      active
+                        ? "bg-gradient-to-r from-[#00b4d8] to-[#2563eb] text-white shadow-md shadow-cyan-500/25 font-bold text-xs tracking-wide"
+                        : (darkMode ? "text-slate-200 hover:text-[#38bdf8] hover:bg-slate-800/80 font-bold text-xs tracking-wide" : "text-slate-600 hover:text-[#0077b6] hover:bg-cyan-50/70 font-bold text-xs tracking-wide")
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                          active
+                            ? "bg-white/20 text-white"
+                            : (darkMode ? "bg-slate-800/80 text-slate-300 group-hover:bg-cyan-950/60 group-hover:text-[#38bdf8]" : "bg-slate-100 text-slate-500 group-hover:bg-[#e0f7fa]/80 group-hover:text-[#0077b6]")
+                        }`}
+                      >
+                        <item.icon size={16} />
+                      </span>
+                      <span
+                        className={`truncate text-xs font-black uppercase tracking-wider ${
+                          active
+                            ? "text-white"
+                            : (darkMode ? "text-slate-300 group-hover:text-white" : "text-slate-700 group-hover:text-slate-900")
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                    </div>
+                    {active && (
+                      <span className="w-2 h-2 rounded-full bg-white shadow-xs ml-auto" />
+                    )}
+                  </button>
+                );
+              })}
 
-              <div className="pt-4 pb-1.5 px-4 font-black text-[10px] uppercase tracking-wider text-gray-550 dark:text-gray-450 border-t border-gray-100 dark:border-white/5 mt-4">
+              <div className={`pt-3 pb-1.5 px-3 font-black text-[10px] uppercase tracking-[0.2em] mt-3 border-t ${darkMode ? 'text-slate-400 border-slate-700/80' : 'text-slate-400 border-slate-200/80'}`}>
                 Growth & Network
               </div>
               {[
@@ -2417,60 +2823,74 @@ export default function HospitalPanel({
                 { id: "medical-academy", icon: GraduationCap, label: "Medical Academy" },
                 { id: "marketing-center", icon: Megaphone, label: "Marketing Center" },
                 { id: "network-analytics", icon: BarChart3, label: "Network Analytics" },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setIsSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
-                    activeTab === item.id
-                      ? "bg-linear-to-r from-[#005f73] to-[#0a9396] text-white shadow-gradient"
-                      : `${darkMode ? "text-gray-400 hover:bg-white/5" : "text-gray-500 hover:bg-gray-50"}`
-                  }`}
-                >
-                  <item.icon size={18} />
-                  {item.label}
-                </button>
-              ))}
+              ].map((item) => {
+                const active = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full group flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                      active
+                        ? "bg-gradient-to-r from-[#00b4d8] to-[#2563eb] text-white shadow-md shadow-cyan-500/25 font-bold text-xs tracking-wide"
+                        : (darkMode ? "text-slate-200 hover:text-[#38bdf8] hover:bg-slate-800/80 font-bold text-xs tracking-wide" : "text-slate-600 hover:text-[#0077b6] hover:bg-cyan-50/70 font-bold text-xs tracking-wide")
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                          active
+                            ? "bg-white/20 text-white"
+                            : (darkMode ? "bg-slate-800/80 text-slate-300 group-hover:bg-cyan-950/60 group-hover:text-[#38bdf8]" : "bg-slate-100 text-slate-500 group-hover:bg-[#e0f7fa]/80 group-hover:text-[#0077b6]")
+                        }`}
+                      >
+                        <item.icon size={16} />
+                      </span>
+                      <span
+                        className={`truncate text-xs font-black uppercase tracking-wider ${
+                          active
+                            ? "text-white"
+                            : (darkMode ? "text-slate-300 group-hover:text-white" : "text-slate-700 group-hover:text-slate-900")
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                    </div>
+                    {active && (
+                      <span className="w-2 h-2 rounded-full bg-white shadow-xs ml-auto" />
+                    )}
+                  </button>
+                );
+              })}
             </nav>
 
-            {/* SECTION 3 (Always Visible at Bottom) */}
-            <div className="mt-auto pt-4 border-t shrink-0 border-gray-100 dark:border-white/5 space-y-1.5">
-              {/* Log Out button above settings */}
-              <button
-                type="button"
-                onClick={onLogout}
-                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white font-extrabold text-sm transition-all shadow-md shadow-red-600/25"
-              >
-                <LogOut size={16} />
-                <span>Logout</span>
-              </button>
-
+            {/* Bottom Actions */}
+            <div className={`mt-auto pt-3 border-t shrink-0 space-y-1 ${darkMode ? "border-slate-800/80" : "border-slate-200/80"}`}>
               {/* Settings button */}
               <button
                 type="button"
                 onClick={() => setShowSettingsModal(true)}
-                className={`w-full flex items-center gap-3 px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all duration-300 ${
-                  darkMode ? "text-[#a9d6e5] hover:bg-white/5 hover:text-white" : "text-gray-650 hover:bg-gray-50 hover:text-gray-900"
+                className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                  darkMode ? "text-slate-300 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
                 <Settings size={15} />
-                <span>Settings</span>
+                <span className="uppercase tracking-wider">Settings</span>
               </button>
 
               {/* Theme Toggle button */}
               <button
                 type="button"
                 onClick={() => setDarkMode(!darkMode)}
-                className={`w-full flex items-center justify-between px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all duration-300 ${
-                  darkMode ? "text-[#a9d6e5] hover:bg-white/5 hover:text-white" : "text-gray-650 hover:bg-gray-50 hover:text-gray-900"
+                className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                  darkMode ? "text-slate-300 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
                 <div className="flex items-center gap-3">
                   {darkMode ? <Sun size={15} /> : <Moon size={15} />}
-                  <span>{darkMode ? "Light Theme" : "Deep Dark"}</span>
+                  <span className="uppercase tracking-wider">{darkMode ? "Light Theme" : "Deep Dark"}</span>
                 </div>
               </button>
 
@@ -2478,22 +2898,30 @@ export default function HospitalPanel({
               <button
                 type="button"
                 onClick={() => setShowHelpModal(true)}
-                className={`w-full flex items-center gap-3 px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all duration-300 ${
-                  darkMode ? "text-[#a9d6e5] hover:bg-white/5 hover:text-white" : "text-gray-650 hover:bg-gray-50 hover:text-gray-900"
+                className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                  darkMode ? "text-slate-300 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
                 <Info size={15} />
-                <span>Help & Support</span>
+                <span className="uppercase tracking-wider">Help & Support</span>
               </button>
 
               {/* Logout button */}
               <button
                 type="button"
-                onClick={onLogout}
-                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 mt-1 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white font-extrabold text-sm transition-all shadow-md shadow-red-600/25"
+                onClick={() => {
+                  if (onLogout) {
+                    onLogout();
+                  } else {
+                    localStorage.removeItem("cb_user");
+                    sessionStorage.removeItem("cb_user");
+                    window.location.href = '/login';
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 mt-1 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200/80 dark:border-rose-900/30 font-black text-xs uppercase tracking-wider transition-all duration-200 shadow-xs active:scale-[0.98] cursor-pointer"
               >
                 <LogOut size={16} />
-                Logout
+                <span className="uppercase tracking-wider">Secure Logout</span>
               </button>
             </div>
           </div>
@@ -2501,70 +2929,87 @@ export default function HospitalPanel({
 
         <div className="flex-1 flex flex-col min-h-screen">
           {/* Top Bar */}
-          <header className="sticky top-0 z-40 h-20 transition-all duration-300 bg-linear-to-r from-[#005f73] to-[#0a9396] shadow-lg">
+          <header className={`sticky top-0 z-40 h-20 transition-all duration-300 border-b backdrop-blur-md ${
+            darkMode 
+              ? "bg-slate-950/90 border-slate-800/80 text-white" 
+              : "bg-white/90 border-slate-200/80 text-slate-900"
+          } shadow-xs`}>
             <div className="h-full px-4 lg:px-6 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 lg:gap-4 shrink-0">
                 <button
                   onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                  className={`lg:hidden p-2 rounded-xl transition-all active:scale-95 ${
-                    isSidebarOpen
-                      ? "bg-white text-[#005f73] shadow-lg"
-                      : "bg-white/10 text-white hover:bg-white/20"
+                  className={`lg:hidden p-2.5 rounded-xl transition-all active:scale-95 cursor-pointer ${
+                    darkMode
+                      ? "bg-slate-900 border border-slate-800 text-slate-200 hover:bg-slate-850"
+                      : "bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200"
                   }`}
                 >
                   <Menu size={20} />
                 </button>
-                <div className="block">
-                  <h1 className="text-xl lg:text-3xl font-black flex items-center gap-0 leading-none">
-                    <span className="text-[#ee9b00]">Care</span>
-                    <span className="text-white">bridge</span>
-                    <span className="text-[#ee9b00]">+</span>
-                  </h1>
-                  <p className="text-[#ee9b00] text-[8px] lg:text-xs font-extrabold uppercase tracking-widest mt-0.5">
-                    Hospital Dashboard
-                  </p>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 lg:w-10 lg:h-10 shrink-0 flex items-center justify-center">
+                    <img src="/carebridge-logo.png" alt="CareBridge" className="w-full h-full object-contain drop-shadow-xs" />
+                  </div>
+                  <div className="flex flex-col">
+                    <h1 className={`text-lg lg:text-xl font-black tracking-tight leading-none ${darkMode ? "text-white" : "text-slate-900"}`}>
+                      CareBridge<span className="text-[#00b4d8]">Plus</span>
+                    </h1>
+                    <p className={`text-[9px] lg:text-[10px] font-black uppercase tracking-[0.25em] mt-1 ${darkMode ? "text-[#38bdf8]" : "text-[#0077b6]"}`}>
+                      HOSPITAL WORKSPACE
+                    </p>
+                  </div>
                 </div>
               </div>
 
               {/* Middle Section: Helpline & Time */}
               <div className="flex flex-col items-center justify-center flex-1 text-center px-1">
-                <p className="text-[9px] lg:text-xs font-black uppercase tracking-widest text-white/90">
-                  Helpline: <span className="text-[#ee9b00]">9022066914</span>
+                <p className="text-[10px] lg:text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
+                  Helpline: <span className="text-[#0077b6] dark:text-[#38bdf8] font-black">9022066914</span>
                 </p>
-                <p className="text-[8px] lg:text-[10px] font-bold text-white/70">
+                <p className="text-[9px] lg:text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-0.5">
                   {formatISTDate(currentTime)} | {formatISTTime(currentTime)}
                 </p>
               </div>
 
               {/* Right Section: Hospital Info & Notification */}
-              <div className="flex items-center gap-2 lg:gap-4 shrink-0">
-                <div className="hidden sm:flex flex-col items-end text-right">
-                  <p className="text-xs font-black text-white leading-none truncate max-w-[120px] lg:max-w-[200px]">
+              <div className="flex items-center gap-2 lg:gap-3 shrink-0">
+                <div className="hidden sm:flex flex-col items-end text-right mr-1">
+                  <p className="text-xs font-black text-slate-900 dark:text-white leading-none truncate max-w-[120px] lg:max-w-[200px]">
                     {user.name}
                   </p>
-                  <p className="text-[10px] font-bold text-[#ee9b00] uppercase tracking-wider mt-1">
-                    {user.city}
+                  <p className="text-[10px] font-bold text-[#0077b6] dark:text-[#38bdf8] uppercase tracking-wider mt-1">
+                    {user.city || "Hospital Hub"}
                   </p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-white/20 border border-white/30 flex items-center justify-center shadow-sm overflow-hidden shrink-0">
-                  <HospitalIcon size={24} className="text-white" />
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#00b4d8] via-[#0077b6] to-[#2563eb] flex items-center justify-center shadow-md shadow-cyan-600/20 text-white shrink-0">
+                  <HospitalIcon size={20} className="text-white" />
                 </div>
 
-                <div className="flex items-center gap-1.5 border-l border-white/20 pl-2 lg:pl-4">
+                <div className="flex items-center gap-1.5 border-l border-slate-200 dark:border-slate-800 pl-2 lg:pl-3">
                   <button
                     onClick={() => setDarkMode(!darkMode)}
-                    className={`p-2 lg:p-2.5 rounded-xl transition-all ${darkMode ? "bg-white/10 text-yellow-400" : "bg-white/10 text-white hover:bg-white/20"}`}
+                    className={`p-2.5 rounded-xl transition-all cursor-pointer shadow-xs ${
+                      darkMode 
+                        ? "bg-slate-900 border border-slate-800 text-amber-400 hover:text-amber-300 hover:border-slate-700" 
+                        : "bg-slate-100 border border-slate-200 text-amber-600 hover:text-amber-700 hover:border-slate-300"
+                    }`}
+                    title="Toggle Theme"
                   >
-                    {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+                    {darkMode ? <Sun size={17} /> : <Moon size={17} />}
                   </button>
 
                   <button
                     onClick={() => setActiveTab("inbox")}
-                    className={`p-2 lg:p-2.5 rounded-xl transition-all relative bg-white/10 text-white hover:bg-white/20`}
+                    className={`p-2.5 rounded-xl transition-all relative cursor-pointer shadow-xs ${
+                      darkMode
+                        ? "bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
+                        : "bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900"
+                    }`}
+                    title="Inbox"
                   >
-                    <Bell size={18} />
+                    <Bell size={17} />
                     {unreadCount > 0 && (
-                      <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#ee9b00] rounded-full border-2 border-[#005f73]"></span>
+                      <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
                     )}
                   </button>
                 </div>
@@ -2574,7 +3019,7 @@ export default function HospitalPanel({
 
           {/* Mobile Bottom Nav */}
           <nav
-            className={`lg:hidden fixed bottom-0 left-0 right-0 h-16 z-50 flex items-center justify-around px-4 border-t transition-colors duration-300 ${darkMode ? "bg-[#001219] border-white/10" : "bg-white border-gray-100"}`}
+            className={`lg:hidden fixed bottom-0 left-0 right-0 h-16 z-50 flex items-center justify-around px-4 border-t backdrop-blur-md transition-colors duration-300 ${darkMode ? "bg-slate-950/95 border-slate-800/80" : "bg-white/95 border-slate-200/80"}`}
           >
             {[
               { id: "menu", icon: Menu, label: "Menu" },
@@ -2592,60 +3037,61 @@ export default function HospitalPanel({
                   }
                 }}
                 className={`flex flex-col items-center gap-1 transition-all ${
-                  activeTab === item.id ? "text-[#0a9396]" : "text-gray-400"
+                  activeTab === item.id || (item.id === "menu" && isSidebarOpen)
+                    ? "text-[#0077b6] dark:text-[#38bdf8] font-black"
+                    : "text-slate-400 dark:text-slate-500 font-bold"
                 }`}
               >
                 <motion.div
                   whileTap={{ scale: 0.8 }}
-                  animate={activeTab === item.id ? { y: -4 } : { y: 0 }}
+                  animate={activeTab === item.id || (item.id === "menu" && isSidebarOpen) ? { y: -3 } : { y: 0 }}
                 >
-                  <item.icon size={22} />
+                  <item.icon size={20} />
                 </motion.div>
-                <span className="text-[10px] font-bold">{item.label}</span>
+                <span className="text-[10px] uppercase tracking-wider">{item.label}</span>
               </button>
             ))}
           </nav>
 
           {/* Main Content Area */}
           <main
-            className={`flex-1 min-w-0 pt-24 px-4 lg:px-8 transition-colors duration-300 ${darkMode ? "bg-[#001219]" : "bg-[#F5F7FA]"} pb-32 lg:pb-10`}
+            className={`flex-1 min-w-0 pt-6 px-4 lg:px-8 transition-colors duration-300 ${darkMode ? "bg-slate-950" : "bg-slate-50"} pb-32 lg:pb-10`}
           >
             {/* Alarm Controls (Floating/Inline) */}
-            <div className="flex flex-wrap items-center gap-3 mb-6 bg-white dark:bg-gray-800 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-white/10">
+            <div className="flex flex-wrap items-center gap-3 mb-6 bg-white dark:bg-slate-900 p-3.5 rounded-2xl shadow-xs border border-slate-200/90 dark:border-slate-800">
               <button
                 onClick={() => setAlarmEnabled(!alarmEnabled)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all font-bold text-xs ${alarmEnabled ? "bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-900/20 dark:border-emerald-500/30 dark:text-emerald-400" : "bg-gray-50 border-gray-100 text-gray-400 dark:bg-white/5 dark:border-white/10"}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all font-bold text-xs cursor-pointer ${alarmEnabled ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800/40 dark:text-emerald-400" : "bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400"}`}
               >
                 {alarmEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
                 {alarmEnabled ? "Alarm On" : "Alarm Off"}
               </button>
 
-              {alarmEnabled && !isRinging && (
-                <button
-                  onClick={() => playAlarm("Test Patient")}
-                  className="text-[10px] font-bold text-[#028090] dark:text-[#0a9396] hover:underline"
-                >
-                  Test Alarm
-                </button>
+                            {alarmEnabled && !isRinging && (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={alarmLanguage}
+                    onChange={(e) => setAlarmLanguage(e.target.value as any)}
+                    className="border-none bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg px-2 py-1 text-xs outline-hidden cursor-pointer"
+                  >
+                    <option value="en">English</option>
+                    <option value="hi">Hindi</option>
+                    <option value="mr">Marathi</option>
+                  </select>
+                  <button
+                    onClick={() => playAlarm("Test Patient")}
+                    className="text-[11px] font-black uppercase tracking-wider text-[#0077b6] dark:text-[#38bdf8] hover:underline cursor-pointer"
+                  >
+                    Test Alarm
+                  </button>
+                </div>
               )}
 
               {isRinging && (
                 <div className="flex items-center gap-2">
-                  {!audioUnlocked && (
-                    <button
-                      onClick={() => {
-                        setAudioUnlockedWithRef(true);
-                        playAlarm(undefined, true);
-                      }}
-                      className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-xl font-bold text-xs animate-pulse shadow-lg shadow-amber-500/30"
-                    >
-                      <Volume2 size={16} className="animate-bounce" />
-                      Tap to Enable Audio
-                    </button>
-                  )}
                   <button
                     onClick={stopAlarm}
-                    className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-bold text-xs animate-pulse shadow-lg shadow-red-500/30"
+                    className="flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-xl font-bold text-xs animate-pulse shadow-lg shadow-rose-600/30 cursor-pointer"
                   >
                     <BellRing size={16} className="animate-bounce" />
                     Stop Alarm
@@ -2663,98 +3109,105 @@ export default function HospitalPanel({
                   exit={{ opacity: 0, y: -20 }}
                   className="space-y-6"
                 >
+                  {/* Welcome Back Hospital Admin Hero Header matching reference images */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+                    <div>
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#e0f7fa] dark:bg-cyan-950/40 text-[#0077b6] dark:text-[#38bdf8] text-[10px] font-black uppercase tracking-widest rounded-full mb-2 border border-[#b2ebf2] dark:border-cyan-800/40 shadow-xs">
+                        <Sparkles size={11} className="text-[#00b4d8] animate-pulse" />
+                        Authenticated Hospital Command Center
+                      </div>
+                      <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white uppercase leading-none">
+                        Hospital Operations Deck
+                      </h2>
+                      <p className="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
+                        Real-time incoming clinic referrals, bed occupancy, and ABDM hospital telemetry.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                          DISHA / ABDM Online
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div
-                      className={`${darkMode ? "bg-white/5" : "bg-white"} p-5 rounded-3xl shadow-sm border ${darkMode ? "border-white/10" : "border-gray-100"}`}
-                    >
+                    {[
+                      {
+                        label: "Total Referrals",
+                        value: referrals.length,
+                        icon: Users,
+                        gradient: "from-[#3B82F6] to-[#1D4ED8]",
+                        shadow: "shadow-blue-500/20",
+                        footer: "All Inbound",
+                      },
+                      {
+                        label: "Admitted",
+                        value: referrals.filter((r) => r.status === "admitted").length,
+                        icon: Activity,
+                        gradient: "from-[#F43F5E] to-[#E11D48]",
+                        shadow: "shadow-rose-500/20",
+                        footer: "Under Care",
+                      },
+                      {
+                        label: "Completed",
+                        value: referrals.filter((r) => ["completed", "consultation_done"].includes(r.status)).length,
+                        icon: CheckCircle,
+                        gradient: "from-[#10B981] to-[#047857]",
+                        shadow: "shadow-emerald-500/20",
+                        footer: "Discharged",
+                      },
+                      {
+                        label: "Conversion",
+                        value: `${referrals.length > 0 ? Math.round((referrals.filter((r) => ["admitted", "completed", "consultation_done"].includes(r.status)).length / referrals.length) * 100) : 0}%`,
+                        icon: TrendingUp,
+                        gradient: "from-[#F59E0B] to-[#D97706]",
+                        shadow: "shadow-amber-500/20",
+                        footer: "Rate Ratio",
+                      },
+                    ].map((stat, i) => (
                       <div
-                        className={`w-10 h-10 ${darkMode ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"} rounded-2xl flex items-center justify-center mb-3`}
+                        key={i}
+                        className={`p-6 rounded-[28px] border relative overflow-hidden transition-all duration-300 flex flex-col justify-between group hover:-translate-y-1 cursor-pointer ${
+                          darkMode
+                            ? "bg-slate-900/90 border-slate-800 hover:border-slate-700 hover:shadow-xl shadow-xs"
+                            : "bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-xl shadow-xs"
+                        }`}
                       >
-                        <Users size={20} />
+                        {/* Top rainbow gradient accent matching reference header */}
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#00b4d8] via-[#2563eb] to-[#7c3aed]" />
+                        <div className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-5 mix-blend-overlay pointer-events-none`} />
+
+                        <div className="relative z-10 flex justify-between items-start gap-3">
+                          <div className="space-y-1 text-left">
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                              {stat.label}
+                            </p>
+                            <h3 className="text-3xl lg:text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-none mt-1">
+                              {stat.value}
+                            </h3>
+                          </div>
+                          <div className={`w-11 h-11 rounded-2xl bg-gradient-to-tr ${stat.gradient} flex items-center justify-center text-white shadow-lg ${stat.shadow} shrink-0 group-hover:scale-110 transition-transform duration-300`}>
+                            <stat.icon size={18} className="stroke-[2.5] drop-shadow-sm" />
+                          </div>
+                        </div>
+
+                        <div className="relative z-10 mt-6 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#0077b6] dark:text-[#38bdf8]">
+                          <span>{stat.footer}</span>
+                          <span className="font-black group-hover:translate-x-1 transition-transform">→</span>
+                        </div>
                       </div>
-                      <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                        Total Referrals
-                      </p>
-                      <h3
-                        className={`text-2xl font-black ${darkMode ? "text-white" : "text-gray-900"}`}
-                      >
-                        {referrals.length}
-                      </h3>
-                    </div>
-                    <div
-                      className={`${darkMode ? "bg-white/5" : "bg-white"} p-5 rounded-3xl shadow-sm border ${darkMode ? "border-white/10" : "border-gray-100"}`}
-                    >
-                      <div
-                        className={`w-10 h-10 ${darkMode ? "bg-red-500/20 text-red-400" : "bg-red-50 text-red-600"} rounded-2xl flex items-center justify-center mb-3`}
-                      >
-                        <Activity size={20} />
-                      </div>
-                      <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                        Admitted
-                      </p>
-                      <h3
-                        className={`text-2xl font-black ${darkMode ? "text-white" : "text-gray-900"}`}
-                      >
-                        {
-                          referrals.filter((r) => r.status === "admitted")
-                            .length
-                        }
-                      </h3>
-                    </div>
-                    <div
-                      className={`${darkMode ? "bg-white/5" : "bg-white"} p-5 rounded-3xl shadow-sm border ${darkMode ? "border-white/10" : "border-gray-100"}`}
-                    >
-                      <div
-                        className={`w-10 h-10 ${darkMode ? "bg-green-500/20 text-green-400" : "bg-green-50 text-green-600"} rounded-2xl flex items-center justify-center mb-3`}
-                      >
-                        <CheckCircle size={20} />
-                      </div>
-                      <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                        Completed
-                      </p>
-                      <h3
-                        className={`text-2xl font-black ${darkMode ? "text-white" : "text-gray-900"}`}
-                      >
-                        {
-                          referrals.filter((r) => ["completed", "consultation_done"].includes(r.status))
-                            .length
-                        }
-                      </h3>
-                    </div>
-                    <div
-                      className={`${darkMode ? "bg-white/5" : "bg-white"} p-5 rounded-3xl shadow-sm border ${darkMode ? "border-white/10" : "border-gray-100"}`}
-                    >
-                      <div
-                        className={`w-10 h-10 ${darkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-50 text-amber-600"} rounded-2xl flex items-center justify-center mb-3`}
-                      >
-                        <TrendingUp size={20} />
-                      </div>
-                      <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                        Conversion
-                      </p>
-                      <h3
-                        className={`text-2xl font-black ${darkMode ? "text-white" : "text-gray-900"}`}
-                      >
-                        {referrals.length > 0
-                          ? Math.round(
-                              (referrals.filter((r) =>
-                                ["admitted", "completed", "consultation_done"].includes(r.status),
-                              ).length /
-                                referrals.length) *
-                                100,
-                            )
-                          : 0}
-                        %
-                      </h3>
-                    </div>
+                    ))}
                   </div>
 
                   {/* Healthcare Command Center - Rectangular Features */}
                   <div className="my-8">
                     <div className="flex items-center gap-2 mb-6">
-                      <div className="w-1.5 h-6 bg-[#00796b] rounded-full" />
+                      <div className="w-1.5 h-6 bg-gradient-to-b from-[#00b4d8] to-[#2563eb] rounded-full" />
                       <div>
-                        <h4 className={`text-sm font-black uppercase tracking-wider ${darkMode ? "text-slate-200" : "text-slate-800"}`}>
+                        <h4 className={`text-sm font-black uppercase tracking-wider ${darkMode ? "text-[#38bdf8]" : "text-[#0077b6]"}`}>
                           Clinical Command & Operations Deck
                         </h4>
                         <p className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
@@ -3093,6 +3546,289 @@ export default function HospitalPanel({
                   )}
                 </motion.div>
               )}
+
+            {activeTab === "find" && (
+              <motion.div
+                key="find"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-6"
+              >
+                {/* Filters */}
+                                <div
+                  className={`${darkMode ? "bg-white/5 border-white/10 shadow-none" : "bg-white border-gray-100 shadow-sm"} p-4 rounded-2xl border space-y-4 mb-6 transition-all duration-300`}
+                >
+                  <div className="relative group">
+                    <Search
+                      className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? "text-gray-500" : "text-gray-400"} group-focus-within:text-[#005f73] transition-colors`}
+                      size={16}
+                    />
+                    <input
+                      type="text"
+                      value={filterHospitalName}
+                      onChange={(e) => setFilterHospitalName(e.target.value)}
+                      placeholder="Search Hospital by Name..."
+                      className={`w-full border-none rounded-xl pl-10 pr-4 py-3 text-sm font-black outline-hidden transition-all ${darkMode ? "bg-white/5 text-cyan-400 placeholder:text-gray-500 focus:bg-gray-800" : "bg-gray-50 text-[#005f73] placeholder:text-gray-400 focus:bg-white focus:shadow-xs"}`}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label
+                        className={`text-[10px] font-extrabold uppercase tracking-wider ml-1 ${darkMode ? "text-gray-500" : "text-gray-400"}`}
+                      >
+                        Location Filter
+                      </label>
+                      <div className="relative group">
+                        <MapPin
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? "text-gray-500" : "text-gray-400"} group-focus-within:text-[#005f73] transition-colors`}
+                          size={14}
+                        />
+                        <select
+                          value={filterLocation}
+                          onChange={(e) => setFilterLocation(e.target.value)}
+                          className={`w-full border-none rounded-xl pl-10 pr-4 py-2.5 text-xs font-black outline-hidden transition-all ${darkMode ? "bg-white/5 text-cyan-400 focus:bg-gray-800" : "bg-gray-50 text-[#005f73] focus:bg-white focus:shadow-xs"}`}
+                        >
+                          <option
+                            value="all"
+                            className={darkMode ? "bg-gray-800" : ""}
+                          >
+                            All Districts
+                          </option>
+                          {availableLocations.map((loc) => (
+                            <option
+                              key={loc}
+                              value={loc.toLowerCase()}
+                              className={darkMode ? "bg-gray-800" : ""}
+                            >
+                              {loc}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label
+                        className={`text-[10px] font-extrabold uppercase tracking-wider ml-1 ${darkMode ? "text-gray-500" : "text-gray-400"}`}
+                      >
+                        Department
+                      </label>
+                      <div className="relative group">
+                        <Stethoscope
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? "text-gray-500" : "text-gray-400"} group-focus-within:text-[#005f73] transition-colors`}
+                          size={14}
+                        />
+                        <select
+                          value={filterDept}
+                          onChange={(e) => setFilterDept(e.target.value)}
+                          className={`w-full border-none rounded-xl pl-10 pr-4 py-2.5 text-xs font-black outline-hidden transition-all ${darkMode ? "bg-white/5 text-cyan-400 focus:bg-gray-800" : "bg-gray-50 text-[#005f73] focus:bg-white focus:shadow-xs"}`}
+                        >
+                          <option
+                            value="all"
+                            className={darkMode ? "bg-gray-800" : ""}
+                          >
+                            All Specialists
+                          </option>
+                          {[
+                            "Oncology",
+                            "Cardiology",
+                            "Orthopedics",
+                            "Neurology",
+                            "Gastroenterology",
+                            "Nephrology",
+                            "Urology",
+                            "Pediatrics",
+                            "Gynecology",
+                            "Dermatology",
+                            "Ophthalmology",
+                            "ENT",
+                            "Radiology",
+                            "Physiotherapy",
+                            "General Surgery",
+                          ].map((dept) => (
+                            <option
+                              key={dept}
+                              value={dept.toLowerCase()}
+                              className={darkMode ? "bg-gray-800" : ""}
+                            >
+                              {dept}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hospital List */}
+                <div className="space-y-4">
+                  {filteredHospitals.map((hosp, index) => (
+                    <div
+                      key={`${hosp.id}-${index}`}
+                      className={`${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-100"} backdrop-blur-md rounded-2xl shadow-sm border hover:shadow-md transition-all overflow-hidden group`}
+                    >
+                      {/* Hospital Image/Banner */}
+                      <div className="h-40 relative bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                        {hosp.banner ? (
+                          <img
+                            src={hosp.banner}
+                            alt={hosp.name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                          />
+                        ) : hosp.gallery && hosp.gallery.length > 0 ? (
+                          <img
+                            src={hosp.gallery[0]}
+                            alt={hosp.name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-linear-to-br from-[#005f73] to-[#0a9396] opacity-80 text-white p-6 text-center">
+                            <Hospital size={40} className="mb-2 opacity-50" />
+                            <p className="text-[10px] font-black uppercase tracking-widest">
+                              {hosp.specialization ||
+                                hosp.category ||
+                                "Multispeciality"}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Logo Overlap */}
+                        <div className="absolute -bottom-6 left-5">
+                          <div
+                            className={`w-16 h-16 rounded-2xl border-4 ${darkMode ? "bg-gray-900 border-gray-900" : "bg-white border-white"} shadow-xl flex items-center justify-center overflow-hidden`}
+                          >
+                            {hosp.logo ? (
+                              <img
+                                src={hosp.logo}
+                                alt="Logo"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-[#005f73] flex items-center justify-center text-white">
+                                <Hospital size={24} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="absolute top-3 right-3 flex flex-col gap-2">
+                          <span
+                            className={`px-3 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-lg backdrop-blur-md ${
+                              hosp.tier === "premium"
+                                ? "bg-linear-to-r from-[#005f73]/90 to-[#023e8a]/90 text-white"
+                                : hosp.tier === "priority"
+                                  ? "bg-linear-to-r from-[#0a9396]/90 to-[#0077b6]/90 text-white"
+                                  : "bg-linear-to-r from-[#ee9b00]/90 to-[#ca6702]/90 text-white"
+                            }`}
+                          >
+                            {hosp.tier === "premium" && <Crown size={10} />}
+                            {hosp.tier === "priority" && <Star size={10} />}
+                            {hosp.tier === "standard" && (
+                              <CheckCircle size={10} />
+                            )}
+                            {String(hosp.tier || "standard").toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-5 pt-10">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3
+                              className={`text-xl font-extrabold leading-tight ${darkMode ? "text-white" : "text-gray-900"}`}
+                            >
+                              {hosp.name}
+                            </h3>
+                            <div className="space-y-1.5 mt-2">
+                              <p
+                                className={`${darkMode ? "text-gray-300" : "text-gray-800"} text-sm font-black flex items-center gap-1.5`}
+                              >
+                                <MapPin size={14} className="text-red-600" />
+                                {hosp.city}
+                              </p>
+                              {hosp.address && (
+                                <p
+                                  className={`${darkMode ? "text-gray-400" : "text-gray-700"} text-xs font-extrabold leading-relaxed`}
+                                >
+                                  {hosp.address}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mb-4">
+                          <p className="text-[10px] font-extrabold text-gray-400 uppercase mb-1.5">
+                            Running Schemes:
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {String(hosp.schemes || "")
+                              .split(",")
+                              .filter(Boolean)
+                              .map((s: string, idx: number) => (
+                                <span
+                                  key={`${s}-${idx}`}
+                                  className={`${darkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#e0f2f1] text-[#0a9396] border-[#b2dfdb]"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
+                                >
+                                  {s.trim()}
+                                </span>
+                              ))}
+                            {!hosp.schemes && (
+                              <span className="text-gray-500 text-[10px] font-bold italic">
+                                No active schemes
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <p
+                          className={`${darkMode ? "text-white bg-white/5 border-white/10" : "text-gray-900 bg-gray-50/50 border-gray-100"} text-xs font-black flex items-center gap-2.5 mb-6 p-2.5 rounded-xl border`}
+                        >
+                          <Stethoscope
+                            size={18}
+                            className={`${darkMode ? "text-cyan-400" : "text-[#005f73]"}`}
+                          />
+                          {Array.isArray(hosp.departments)
+                            ? hosp.departments.join(", ")
+                            : hosp.departments || "General"}
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => {
+                              setSelectedHospital(hosp);
+                              setShowProfileModal(true);
+                            }}
+                            className={`py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 border ${
+                              darkMode
+                                ? "border-cyan-400 text-cyan-400 hover:bg-cyan-500/10"
+                                : "border-[#005f73] text-[#005f73] hover:bg-[#005f73] hover:text-white"
+                            }`}
+                          >
+                            <Hospital size={14} /> Profile
+                          </button>
+                          <a
+                            href={`tel:${hosp.helpline}`}
+                            className="border border-green-600 text-green-600 py-2 rounded-xl font-bold text-xs hover:bg-green-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                          >
+                            <Phone size={14} /> Call
+                          </a>
+                          <button
+                            onClick={() => {
+                              setSelectedHospital(hosp);
+                              setShowReferralTypeModal(true);
+                            }}
+                            className="col-span-2 bg-[#005f73] text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-[#005f73]/20 flex items-center justify-center gap-2"
+                          >
+                            <Share2 size={16} /> Refer Patient
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
 
               {activeTab === "referrals" && (
                 <motion.div
@@ -5088,24 +5824,24 @@ export default function HospitalPanel({
                 >
                   <div className="flex gap-2 mb-2">
                     <button
-                      onClick={() => setReferralView("history")}
+                      onClick={() => setReferralView("ipd")}
                       className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        referralView === "history"
+                        referralView === "ipd"
                           ? "bg-[#00796b] text-white shadow-md"
                           : `${darkMode ? "bg-white/5 text-gray-400 border-white/10" : "bg-white text-gray-500 border-gray-100"} border`
                       }`}
                     >
-                      All History
+                      IPD Patient
                     </button>
                     <button
-                      onClick={() => setReferralView("discharged")}
+                      onClick={() => setReferralView("opd")}
                       className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        referralView === "discharged"
+                        referralView === "opd"
                           ? "bg-[#0a9396] text-white shadow-md"
                           : `${darkMode ? "bg-white/5 text-gray-400 border-white/10" : "bg-white text-gray-500 border-gray-100"} border`
                       }`}
                     >
-                      Discharged
+                      OPD Patient
                     </button>
                   </div>
 
@@ -5156,7 +5892,8 @@ export default function HospitalPanel({
                     <div
                       className={`p-4 border-b ${darkMode ? "border-white/5 text-emerald-400" : "border-gray-50 text-[#00796b]"} flex items-center gap-2 font-extrabold text-sm`}
                     >
-                      <Clock size={18} /> Past Referrals
+                      <Clock size={18} />{" "}
+                      {referralView === "ipd" ? "IPD Discharge Patients" : "OPD Past History"}
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left">
@@ -5165,7 +5902,7 @@ export default function HospitalPanel({
                         >
                           <tr>
                             <th className="px-6 py-4 text-[10px] font-extrabold text-gray-400 uppercase">
-                              Referral Date
+                              Timeline
                             </th>
                             <th className="px-6 py-4 text-[10px] font-extrabold text-gray-400 uppercase">
                               Patient
@@ -5189,24 +5926,13 @@ export default function HospitalPanel({
                         >
                           {(filteredReferrals || [])
                             .filter((r) => {
-                              if (referralView === "discharged") {
-                                return r.status === "discharged";
+                              if (referralView === "ipd") {
+                                return r.referralType !== "opd" && r.status === "discharged";
                               }
-                              if (referralView === "history") {
-                                if (r.referralType === "opd") {
-                                  return ["consultation_done", "completed"].includes(r.status);
-                                }
-                                return ["admitted", "treatment_plan", "completed"].includes(
-                                  r.status,
-                                );
+                              if (referralView === "opd") {
+                                return r.referralType === "opd" && ["consultation_done", "completed"].includes(r.status);
                               }
-                              if (r.referralType === "opd") {
-                                return ["consultation_done", "completed"].includes(r.status);
-                              }
-                              return ![
-                                "pending",
-                                "under_review",
-                              ].includes(r.status);
+                              return false;
                             })
                             .map((ref, index) => (
                               <tr
@@ -5214,14 +5940,33 @@ export default function HospitalPanel({
                                 className={`hover:${darkMode ? "bg-white/5" : "bg-gray-50"} transition-colors`}
                               >
                                 <td className="px-6 py-4">
-                                  <div className="text-red-500 text-xs font-bold">
-                                    {formatISTDate(
-                                      ref.createdAt || ref.created_at,
+                                  <div className="flex flex-col gap-2">
+                                    <div>
+                                      <span className="text-[8px] text-gray-400 font-bold uppercase leading-none block mb-0.5">Referral Date</span>
+                                      <div className="text-red-500 text-xs font-bold leading-none">
+                                        {formatISTDate(ref.createdAt || ref.created_at)}
+                                      </div>
+                                      <div className="text-gray-400 text-[9px] font-bold mt-0.5">
+                                        {formatISTTime(ref.createdAt || ref.created_at)}
+                                      </div>
+                                    </div>
+                                    {ref.admittedAt && (
+                                      <div>
+                                        <span className="text-[8px] text-gray-400 font-bold uppercase leading-none block mb-0.5">Admitted</span>
+                                        <div className="text-blue-500 text-xs font-bold leading-none">
+                                          {formatISTDate(ref.admittedAt)}
+                                        </div>
+                                      </div>
                                     )}
-                                  </div>
-                                  <div className="text-gray-400 text-[10px] font-bold">
-                                    {formatISTTime(
-                                      ref.createdAt || ref.created_at,
+                                    {ref.status === "discharged" && (
+                                      <div>
+                                        <span className="text-[8px] text-gray-400 font-bold uppercase leading-none block mb-0.5">Discharged</span>
+                                        <div className="text-emerald-500 text-xs font-bold leading-none">
+                                          {ref.dischargedAt
+                                            ? formatISTDate(ref.dischargedAt)
+                                            : "N/A"}
+                                        </div>
+                                      </div>
                                     )}
                                   </div>
                                 </td>
@@ -6893,11 +7638,11 @@ export default function HospitalPanel({
                     <div className="p-8">
                       <div className="flex justify-between items-center mb-6">
                         <div>
-                          <h2 className="text-2xl font-black flex items-center gap-3 italic tracking-tight uppercase">
+                          <h2 className={`text-2xl font-black flex items-center gap-3 italic tracking-tight uppercase ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                             <Activity className="text-red-500" /> Patient
                             Admission
                           </h2>
-                          <p className="text-gray-400 text-[10px] font-bold mt-1 uppercase tracking-widest leading-none">
+                          <p className={`text-[10px] font-bold mt-1 uppercase tracking-widest leading-none ${darkMode ? 'text-gray-300' : 'text-gray-400'}`}>
                             Admission details for {selectedReferral.patientName}
                           </p>
                         </div>
@@ -6928,18 +7673,19 @@ export default function HospitalPanel({
                               <p className="text-[8px] font-black text-blue-500 uppercase mb-0.5">
                                 Patient Information
                               </p>
-                              <h4 className="font-black text-sm leading-none">
+                              <h4 className={`font-black text-sm leading-none ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                                 {selectedReferral.patientName}
                               </h4>
-                              <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">
-                                {selectedReferral.patientAge}Y •{" "}
-                                {selectedReferral.patientGender === "F"
-                                  ? "Female"
-                                  : "Male"}
+                              <p className={`text-[10px] font-bold uppercase mt-1 ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>
+                                {selectedReferral.patientAge}Y • {selectedReferral.patientGender === "F" ? "Female" : "Male"}
                               </p>
-                              <p className="text-[9px] text-gray-400 font-medium italic truncate max-w-[150px]">
-                                {selectedReferral.patientArea || "Local Area"}
-                              </p>
+                              <div className={`mt-2 text-[10px] space-y-0.5 ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}>
+                                <p><strong>Contact:</strong> {selectedReferral.patientPhone || "N/A"}</p>
+                                <p><strong>Address:</strong> {selectedReferral.patientAddress || selectedReferral.patientArea || "N/A"}</p>
+                                <p><strong>Ref Dr:</strong> {selectedReferral.doctorName || "N/A"}</p>
+                                <p><strong>Clinic:</strong> {selectedReferral.clinicName || "N/A"}</p>
+                                <p><strong>Time:</strong> {(selectedReferral.createdAt || selectedReferral.created_at) ? formatISTDate(selectedReferral.createdAt || selectedReferral.created_at) : "N/A"}</p>
+                              </div>
                             </div>
                           </div>
 
@@ -6953,10 +7699,10 @@ export default function HospitalPanel({
                               <p className="text-[8px] font-black text-emerald-600 uppercase mb-0.5">
                                 Admitting Hospital
                               </p>
-                              <h4 className="font-black text-sm leading-none">
+                              <h4 className={`font-black text-sm leading-none ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                                 {hospDetails?.name || user.name}
                               </h4>
-                              <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">
+                              <p className={`text-[10px] font-bold uppercase mt-1 ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>
                                 {hospDetails?.city ||
                                   user.city ||
                                   "Hospital City"}
@@ -6968,7 +7714,7 @@ export default function HospitalPanel({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {/* Condition */}
                           <div>
-                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                            <label className={`block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1 ${darkMode ? 'text-white' : 'text-gray-400'}`}>
                               Patient Condition
                             </label>
                             <select
@@ -6982,22 +7728,20 @@ export default function HospitalPanel({
                               }
                               className={`w-full px-4 py-3 rounded-xl border font-bold text-sm outline-none focus:ring-2 focus:ring-[#005f73] transition-all ${darkMode ? "bg-white/10 border-white/10 text-white" : "bg-white border-gray-100 text-gray-900"}`}
                             >
-                              <option value="Stable">Stable</option>
-                              <option value="Moderate">Moderate</option>
-                              <option value="Critical">Critical</option>
-                              <option value="Emergency">Emergency</option>
+                              <option value="Stable" className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}>Stable</option>
+                              <option value="Moderate" className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}>Moderate</option>
+                              <option value="Critical" className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}>Critical</option>
+                              <option value="Emergency" className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}>Emergency</option>
                             </select>
                           </div>
 
                           {/* Ward/ICU */}
                           <div>
-                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                            <label className={`block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1 ${darkMode ? 'text-white' : 'text-gray-400'}`}>
                               Admitted Ward / ICU
                             </label>
-                            <input
-                              type="text"
+                            <select
                               required
-                              placeholder="e.g. General Ward - B, ICU - 2"
                               value={admitForm.ward}
                               onChange={(e) =>
                                 setAdmitForm({
@@ -7006,20 +7750,27 @@ export default function HospitalPanel({
                                 })
                               }
                               className={`w-full px-4 py-3 rounded-xl border font-bold text-sm outline-none focus:ring-2 focus:ring-[#005f73] transition-all ${darkMode ? "bg-white/10 border-white/10 text-white" : "bg-white border-gray-100 text-gray-900"}`}
-                            />
+                            >
+                              <option value="" className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}>Select Ward</option>
+                              <option value="General Ward" className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}>General Ward</option>
+                              <option value="Deluxe" className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}>Deluxe</option>
+                              <option value="Private" className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}>Private</option>
+                              <option value="Semi-private" className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}>Semi-private</option>
+                              <option value="ICU" className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}>ICU</option>
+                            </select>
                           </div>
                         </div>
 
                         {/* Vitals */}
                         <div className="space-y-3">
-                          <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                          <label className={`block text-[10px] font-black uppercase tracking-widest ml-1 ${darkMode ? 'text-white' : 'text-gray-400'}`}>
                             Current Vitals
                           </label>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             <div
                               className={`p-3 rounded-2xl border ${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-100 shadow-xs"}`}
                             >
-                              <p className="text-[8px] font-black text-gray-400 uppercase mb-1">
+                              <p className={`text-[8px] font-black uppercase mb-1 ${darkMode ? 'text-white' : 'text-gray-400'}`}>
                                 Temp (F)
                               </p>
                               <input
@@ -7041,7 +7792,7 @@ export default function HospitalPanel({
                             <div
                               className={`p-3 rounded-2xl border ${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-100 shadow-xs"}`}
                             >
-                              <p className="text-[8px] font-black text-gray-400 uppercase mb-1">
+                              <p className={`text-[8px] font-black uppercase mb-1 ${darkMode ? 'text-white' : 'text-gray-400'}`}>
                                 BP (mmHg)
                               </p>
                               <input
@@ -7063,7 +7814,7 @@ export default function HospitalPanel({
                             <div
                               className={`p-3 rounded-2xl border ${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-100 shadow-xs"}`}
                             >
-                              <p className="text-[8px] font-black text-gray-400 uppercase mb-1">
+                              <p className={`text-[8px] font-black uppercase mb-1 ${darkMode ? 'text-white' : 'text-gray-400'}`}>
                                 Pulse (bpm)
                               </p>
                               <input
@@ -7085,7 +7836,7 @@ export default function HospitalPanel({
                             <div
                               className={`p-3 rounded-2xl border ${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-100 shadow-xs"}`}
                             >
-                              <p className="text-[8px] font-black text-gray-400 uppercase mb-1">
+                              <p className={`text-[8px] font-black uppercase mb-1 ${darkMode ? 'text-white' : 'text-gray-400'}`}>
                                 SpO2 (%)
                               </p>
                               <input
@@ -7109,7 +7860,7 @@ export default function HospitalPanel({
 
                         {/* Initial Diagnosis */}
                         <div>
-                          <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                          <label className={`block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1 ${darkMode ? 'text-white' : 'text-gray-400'}`}>
                             Initial Diagnosis
                           </label>
                           <textarea
@@ -7129,7 +7880,7 @@ export default function HospitalPanel({
 
                         {/* Scheme */}
                         <div>
-                          <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                          <label className={`block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1 ${darkMode ? 'text-white' : 'text-gray-400'}`}>
                             Admission Scheme / Insurance
                           </label>
                           <input
@@ -7523,7 +8274,9 @@ export default function HospitalPanel({
             </nav>
 
             {/* Compliance Footer */}
-            <LegalFooter darkMode={darkMode} />
+      
+
+      <LegalFooter darkMode={darkMode} />
           </main>
         </div>
       </div>
@@ -7619,7 +8372,7 @@ export default function HospitalPanel({
                     For priority data adjustments, legal sync issues, or system errors regarding medical histories, call clinical administration support immediately:
                   </p>
                   <div className="p-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-center rounded-xl font-extrabold text-sm">
-                    +91 9921-229-21D
+                    9022066914
                   </div>
                 </div>
 
@@ -7642,6 +8395,1510 @@ export default function HospitalPanel({
         )}
       </AnimatePresence>
 
+
+      {/* ===== SEARCH HOSPITAL MODALS ===== */}
+      <AnimatePresence>
+            {showReferralTypeModal && (
+              <motion.div
+                key="referral-type-modal-wrapper"
+                className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
+              >
+                <motion.div
+                  key="referral-type-modal-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowReferralTypeModal(false)}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-xs"
+                />
+                <motion.div
+                  key="referral-type-modal-content"
+                  initial={{ y: "100%", opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: "100%", opacity: 0 }}
+                  className={`w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh] ${darkMode ? "bg-gray-950 border border-white/10" : "bg-white"}`}
+                >
+                  <div className="bg-gradient-to-r from-[#005f73] to-[#0a9396] p-6 text-white text-center">
+                    <button
+                      onClick={() => setShowReferralTypeModal(false)}
+                      className="absolute right-6 top-6 text-white/70 hover:text-white transition-colors"
+                    >
+                      <X size={24} />
+                    </button>
+                    <h3 className="text-xl font-extrabold tracking-tight">
+                      SELECT REFERRAL TYPE
+                    </h3>
+                    <p className="text-white/80 text-xs font-semibold mt-1">
+                      To: {selectedHospital?.name} • Carebridge+ ERP Desk
+                    </p>
+                  </div>
+
+                  <div className={`p-6 md:p-8 space-y-6 overflow-y-auto ${darkMode ? "bg-gray-900" : "bg-gray-50"}`}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* IPD Card */}
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        className={`p-6 rounded-2xl border-2 flex flex-col justify-between cursor-pointer transition-all ${
+                          darkMode 
+                            ? "bg-gray-800/50 border-white/10 hover:border-[#005f73] hover:shadow-[0_0_15px_rgba(0,95,115,0.3)]" 
+                            : "bg-white border-gray-100 hover:border-[#005f73] hover:shadow-lg hover:shadow-teal-100"
+                        }`}
+                        onClick={() => {
+                          setReferralForm(prev => ({ ...prev, referralType: "ipd" }));
+                          setShowReferralTypeModal(false);
+                          setShowReferralModal(true);
+                        }}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-xl">
+                              <Hospital size={28} />
+                            </div>
+                            <span className="text-[10px] font-black uppercase text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-500/10 px-2.5 py-1 rounded-full">
+                              Inpatient Desk
+                            </span>
+                          </div>
+                          <h4 className={`text-lg font-extrabold ${darkMode ? "text-white" : "text-gray-900"}`}>
+                            IPD Referral
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 leading-relaxed font-semibold">
+                            For clinical admissions, emergency procedures, ward stays, or major surgical bookings. Auto-triggers real-time loud hospital alarms & alert sirens.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="mt-6 w-full text-center py-3 rounded-xl font-black text-xs uppercase transition-all bg-[#005f73] text-white hover:bg-[#005f73]/95 active:scale-95 shadow-md shadow-[#005f73]/20"
+                        >
+                          Book IPD Admission
+                        </button>
+                      </motion.div>
+
+                      {/* OPD Card */}
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        className={`p-6 rounded-2xl border-2 flex flex-col justify-between cursor-pointer transition-all ${
+                          darkMode 
+                            ? "bg-gray-800/50 border-white/10 hover:border-[#0a9396] hover:shadow-[0_0_15px_rgba(10,147,150,0.3)]" 
+                            : "bg-white border-gray-100 hover:border-[#0a9396] hover:shadow-lg hover:shadow-cyan-100"
+                        }`}
+                        onClick={() => {
+                          setShowReferralTypeModal(false);
+                          setShowOPDReferralModal(true);
+                        }}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-cyan-50 dark:bg-cyan-500/10 text-[#0a9396] dark:text-cyan-400 rounded-xl">
+                              <Activity size={28} />
+                            </div>
+                            <span className="text-[10px] font-black uppercase text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-500/10 px-2.5 py-1 rounded-full">
+                              Outpatient Desk
+                            </span>
+                          </div>
+                          <h4 className={`text-lg font-extrabold ${darkMode ? "text-white" : "text-gray-900"}`}>
+                            OPD Referral
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 leading-relaxed font-semibold font-semibold">
+                            For specialist checkups, second opinions, same-day diagnostic lab services, and follow-ups. Sends real-time consult notifications on hospital receiver.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="mt-6 w-full text-center py-3 rounded-xl font-black text-xs uppercase transition-all bg-gradient-to-r from-[#005f73] to-[#0a9396] text-white hover:opacity-95 active:scale-95 shadow-md shadow-teal-500/15"
+                        >
+                          Initiate Consult
+                        </button>
+                      </motion.div>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+            {showOPDReferralModal && (
+              <motion.div
+                key="opd-referral-modal-wrapper"
+                className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
+              >
+                <motion.div
+                  key="opd-referral-modal-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowOPDReferralModal(false)}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                />
+                <motion.div
+                  key="opd-referral-modal-content"
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  className={`w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh] ${darkMode ? "bg-gray-900 border border-white/10" : "bg-white"}`}
+                >
+                  <div className="bg-[#0a9396] p-6 text-white">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-xl font-extrabold font-sans">
+                          New OPD Patient Referral
+                        </h3>
+                        <p className="text-white/70 text-xs font-bold mt-1">
+                          To: {selectedHospital?.name} • Outpatient Desk
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowOPDReferralModal(false)}
+                        className="text-white/50 hover:text-white"
+                      >
+                        <X size={24} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`p-6 overflow-y-auto flex-grow ${darkMode ? "bg-white/5" : "bg-gray-50"}`}
+                  >
+                    <form onSubmit={handleOPDReferralSubmit} className="space-y-6">
+                      {/* Search / Select Section */}
+                      <div
+                        className={`${darkMode ? "bg-white/5 border border-white/10" : "bg-white"} p-4 rounded-2xl shadow-sm space-y-4`}
+                      >
+                        <h4
+                          className={`${darkMode ? "text-cyan-400" : "text-[#005f73]"} font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-2`}
+                        >
+                          <Search size={14} /> Search Existing Patient
+                        </h4>
+                        <div className="relative">
+                          <div className="relative group">
+                            <Search
+                              className={`absolute left-4 top-1/2 -translate-y-1/2 ${darkMode ? "text-gray-500" : "text-gray-400"} group-focus-within:text-[#005f73] transition-colors`}
+                              size={16}
+                            />
+                            <input
+                              type="text"
+                              value={opdReferralPatientSearch}
+                              onChange={(e) =>
+                                setOpdReferralPatientSearch(e.target.value)
+                              }
+                              className={`w-full border-2 border-blue-100/50 rounded-xl pl-12 pr-4 py-3 text-sm font-black outline-hidden focus:border-[#005f73] focus:ring-4 focus:ring-[#005f73]/10 transition-all ${darkMode ? "bg-white/5 text-white" : "bg-blue-50/50 text-gray-900"}`}
+                              placeholder="Search Patient Name or Phone..."
+                            />
+                          </div>
+
+                          {opdReferralPatientSuggestions.length > 0 && (
+                            <div
+                              className={`absolute z-10 w-full mt-2 rounded-2xl shadow-2xl border overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 ${darkMode ? "bg-gray-800 border-white/10" : "bg-white border-gray-100"}`}
+                            >
+                              {opdReferralPatientSuggestions.map(
+                                (p: any, idx: number) => (
+                                  <button
+                                    key={`${p.phone}-${idx}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setOpdReferralForm({
+                                        ...opdReferralForm,
+                                        patientName: p.name,
+                                        patientAge: p.age,
+                                        patientGender: p.gender || "M",
+                                        patientPhone: p.phone,
+                                        patientAddress: p.area || p.address || "",
+                                      });
+                                      setOpdReferralPatientSearch("");
+                                    }}
+                                    className={`w-full p-4 flex items-center gap-4 transition-colors border-b last:border-0 group ${darkMode ? "hover:bg-white/5 border-white/5" : "hover:bg-blue-50 border-gray-50"}`}
+                                  >
+                                    <div
+                                      className={`w-10 h-10 rounded-full flex items-center justify-center font-black transition-all ${darkMode ? "bg-white/10 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-white" : "bg-blue-100 text-[#005f73] group-hover:bg-[#005f73] group-hover:text-white"}`}
+                                    >
+                                      {p.name[0]}
+                                    </div>
+                                    <div className="text-left flex-grow">
+                                      <p
+                                        className={`text-sm font-black ${darkMode ? "text-white" : "text-gray-900"}`}
+                                      >
+                                        {p.name}
+                                      </p>
+                                      <div className="flex items-center gap-3 mt-0.5">
+                                        <p
+                                          className={`${darkMode ? "text-gray-500" : "text-gray-500"} text-[10px] font-bold flex items-center gap-1`}
+                                        >
+                                          <Phone size={10} /> {p.phone}
+                                        </p>
+                                        {p.area && (
+                                          <p
+                                            className={`${darkMode ? "text-gray-500" : "text-gray-400"} text-[10px] font-bold flex items-center gap-1`}
+                                          >
+                                            <MapPin size={10} /> {p.area}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </button>
+                                ),
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Patient Details Cards */}
+                      <div
+                        className={`${darkMode ? "bg-white/5 border border-white/10" : "bg-white"} p-4 rounded-2xl shadow-sm space-y-4`}
+                      >
+                        <h4
+                          className={`${darkMode ? "text-cyan-400" : "text-[#005f73]"} font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-2`}
+                        >
+                          <User size={14} /> Demographics & Contacts
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Patient Full Name</label>
+                            <input
+                              type="text"
+                              required
+                              value={opdReferralForm.patientName}
+                              onChange={(e) =>
+                                setOpdReferralForm({
+                                  ...opdReferralForm,
+                                  patientName: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#0a9396] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                              placeholder="Full Name"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Age</label>
+                            <input
+                              type="number"
+                              required
+                              value={opdReferralForm.patientAge}
+                              onChange={(e) =>
+                                setOpdReferralForm({
+                                  ...opdReferralForm,
+                                  patientAge: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#0a9396] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                              placeholder="Age (Years)"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Gender</label>
+                            <select
+                              required
+                              value={opdReferralForm.patientGender}
+                              onChange={(e) =>
+                                setOpdReferralForm({
+                                  ...opdReferralForm,
+                                  patientGender: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#0a9396] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-905"}`}
+                            >
+                              <option value="M">Male</option>
+                              <option value="F">Female</option>
+                              <option value="O">Other</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Contact Number</label>
+                            <input
+                              type="tel"
+                              required
+                              value={opdReferralForm.patientPhone}
+                              onChange={(e) =>
+                                setOpdReferralForm({
+                                  ...opdReferralForm,
+                                  patientPhone: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#0a9396] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                              placeholder="10-digit number"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 uppercase">Address / Residential Area</label>
+                          <input
+                            type="text"
+                            required
+                            value={opdReferralForm.patientAddress}
+                            onChange={(e) =>
+                              setOpdReferralForm({
+                                ...opdReferralForm,
+                                patientAddress: e.target.value,
+                              })
+                            }
+                            className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#0a9396] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                            placeholder="Full Address or Area name"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Clinical details & Direct Doctor Mapping */}
+                      <div
+                        className={`${darkMode ? "bg-white/5 border border-white/10" : "bg-white"} p-4 rounded-2xl shadow-sm space-y-4`}
+                      >
+                        <h4
+                          className={`${darkMode ? "text-cyan-400" : "text-[#0a9396]"} font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-2`}
+                        >
+                          <Activity size={14} /> Clinical Referral Mapping
+                        </h4>
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Select Speciality / Department</label>
+                            <select
+                              required
+                              value={opdReferralForm.department}
+                              onChange={(e) =>
+                                setOpdReferralForm({
+                                  ...opdReferralForm,
+                                  department: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#0a9396] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-905"}`}
+                            >
+                              <option value="" disabled>Select Specialty Department</option>
+                              <option value="All Departments">All Departments</option>
+                              {selectedHospital?.departments &&
+                                (Array.isArray(selectedHospital.departments)
+                                  ? selectedHospital.departments
+                                  : String(selectedHospital.departments).split(",")
+                                ).map((dept: any, idx: number) => {
+                                  const d = String(dept).trim();
+                                  if (!d) return null;
+                                  return (
+                                    <option key={`${d}-${idx}`} value={d}>
+                                      {d}
+                                    </option>
+                                  );
+                                })}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1 relative">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Select Target Consultant Doctor</label>
+                            
+                            {/* Searchable Toggle Button */}
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() => setShowOpdDoctorDropdown(!showOpdDoctorDropdown)}
+                                className={`w-full text-left rounded-xl px-4 py-3 text-sm font-bold flex items-center justify-between border transition-all ${
+                                  darkMode 
+                                    ? "bg-white/5 text-white border-white/10 hover:bg-white/10" 
+                                    : "bg-gray-50 border-gray-100 text-gray-900 hover:bg-gray-100/50"
+                                }`}
+                              >
+                                <span>
+                                  {opdReferralForm.doctorId === "" && "Select Target Specialist"}
+                                  {opdReferralForm.doctorId === "any" && "Any Available Consultant"}
+                                  {opdReferralForm.doctorId !== "" && opdReferralForm.doctorId !== "any" && (
+                                    <>Dr. {opdReferralForm.doctorName}</>
+                                  )}
+                                </span>
+                                <ChevronDown size={16} className={`transition-transform duration-200 ${showOpdDoctorDropdown ? "rotate-180 text-[#0a9396]" : "text-gray-450"}`} />
+                              </button>
+                            </div>
+
+                            {/* Dropdown with Internal Filter Search Bar */}
+                            {showOpdDoctorDropdown && (
+                              <div className={`absolute left-0 right-0 z-[120] mt-1 p-2 rounded-xl shadow-2xl border ${
+                                darkMode 
+                                  ? "bg-gray-800 border-gray-700 text-white shadow-black/40" 
+                                  : "bg-white border-gray-100 text-gray-950 shadow-gray-200"
+                              }`}>
+                                {/* Doctor Search Bar Input */}
+                                <div className="relative mb-2" onClick={(e) => e.stopPropagation()}>
+                                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                                  <input
+                                    type="text"
+                                    placeholder="Search doctor by name, qualification, department..."
+                                    value={opdDoctorSearch}
+                                    onChange={(e) => setOpdDoctorSearch(e.target.value)}
+                                    className={`w-full pl-9 pr-3 py-2 text-xs font-bold rounded-lg border outline-hidden focus:ring-1 focus:ring-[#0a9396] ${
+                                      darkMode 
+                                        ? "bg-gray-900 border-gray-700 text-white" 
+                                        : "bg-gray-50 border-gray-100 text-gray-900"
+                                    }`}
+                                    autoFocus
+                                  />
+                                </div>
+
+                                {/* SCROLL ALL RESULTS */}
+                                <div className="max-h-56 overflow-y-auto space-y-1 pr-1 no-scrollbar" onClick={(e) => e.stopPropagation()}>
+                                  {/* Option: Any Available */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpdReferralForm({
+                                        ...opdReferralForm,
+                                        doctorId: "any",
+                                        doctorName: "any",
+                                      });
+                                      setShowOpdDoctorDropdown(false);
+                                      setOpdDoctorSearch("");
+                                    }}
+                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex flex-col transition-all border ${
+                                      opdReferralForm.doctorId === "any"
+                                        ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400"
+                                        : darkMode
+                                          ? "hover:bg-white/5 border-transparent text-gray-200"
+                                          : "hover:bg-gray-50 border-transparent text-gray-750"
+                                    }`}
+                                  >
+                                    <span className="font-extrabold text-xs">Any Available Consultant</span>
+                                    <span className="text-[9px] text-gray-400 font-medium">Auto-route reference to any duty doctor</span>
+                                  </button>
+
+                                  {(() => {
+                                    const doctorsList = getOPDReferralDoctors();
+                                    const filtered = doctorsList.filter((doc) => {
+                                      const query = opdDoctorSearch.toLowerCase().trim();
+                                      if (!query) return true;
+                                      return (
+                                        (doc.name || "").toLowerCase().includes(query) ||
+                                        (doc.specialization || "").toLowerCase().includes(query) ||
+                                        (doc.qualification || "").toLowerCase().includes(query)
+                                      );
+                                    });
+
+                                    if (filtered.length === 0) {
+                                      return (
+                                        <div className="text-center py-4 text-xs font-medium text-gray-400">
+                                          No matching doctors available.
+                                        </div>
+                                      );
+                                    }
+
+                                    return filtered.map((doc: any, index: number) => {
+                                      const isSelected = opdReferralForm.doctorId === doc.id;
+                                      return (
+                                        <button
+                                          key={`${doc.id}-${index}`}
+                                          type="button"
+                                          onClick={() => {
+                                            setOpdReferralForm({
+                                              ...opdReferralForm,
+                                              doctorId: doc.id,
+                                              doctorName: doc.name,
+                                              department: doc.specialization || doc.department || opdReferralForm.department,
+                                            });
+                                            setShowOpdDoctorDropdown(false);
+                                            setOpdDoctorSearch("");
+                                          }}
+                                          className={`w-full text-left px-3 py-2 rounded-lg flex flex-col transition-all border ${
+                                            isSelected
+                                              ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400"
+                                              : darkMode
+                                                ? "hover:bg-white/5 border-transparent text-gray-100"
+                                                : "hover:bg-gray-50 border-transparent text-gray-800"
+                                          }`}
+                                        >
+                                          <div className="flex items-center justify-between w-full">
+                                            <span className="font-extrabold text-xs">Dr. {doc.name}</span>
+                                            {doc.qualification && (
+                                              <span className="text-[9px] bg-cyan-100 dark:bg-cyan-500/10 text-[#0a9396] px-1.5 py-0.5 rounded-sm font-bold animate-pulse">
+                                                {doc.qualification}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <span className="text-[10px] text-[#0a9396] dark:text-[#0bbfcc] font-black uppercase mt-0.5">
+                                            {doc.specialization || "General Medicine"}
+                                          </span>
+                                        </button>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Provisional Diagnosis</label>
+                            <input
+                              type="text"
+                              required
+                              value={opdReferralForm.diagnosis}
+                              onChange={(e) =>
+                                setOpdReferralForm({
+                                  ...opdReferralForm,
+                                  diagnosis: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#0a9396] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                              placeholder="e.g. Chronic Migraine, Hypertension, Mild Asthma"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Symptoms & Complaints / Clinical Reason for Referral</label>
+                            <textarea
+                              required
+                              rows={3}
+                              value={opdReferralForm.note}
+                              onChange={(e) =>
+                                setOpdReferralForm({
+                                  ...opdReferralForm,
+                                  note: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#0a9396] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                              placeholder="Please write clinical symptoms, recent complaints, or patient consultation reasons..."
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Sticky Action Footer */}
+                      <div className="flex gap-3 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowOPDReferralModal(false)}
+                          className={`flex-1 font-bold py-3.5 rounded-xl border transition-all ${
+                            darkMode
+                              ? "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"
+                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isReferralSubmitting}
+                          className="flex-1 bg-gradient-to-r from-[#005f73] to-[#0a9396] text-white font-extrabold py-3.5 rounded-xl shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2"
+                        >
+                          {isReferralSubmitting ? "Submitting..." : "Submit OPD Referral"} <Send size={16} />
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+            {showReferralModal && (
+              <motion.div
+                key="referral-modal-wrapper"
+                className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
+              >
+                <motion.div
+                  key="referral-modal-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowReferralModal(false)}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                />
+                <motion.div
+                  key="referral-modal-content"
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  className={`w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh] ${darkMode ? "bg-gray-900 border border-white/10" : "bg-white"}`}
+                >
+                  <div className="bg-[#005f73] p-6 text-white">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-xl font-extrabold">
+                          New Patient Referral
+                        </h3>
+                        <p className="text-white/70 text-xs font-bold mt-1">
+                          To: {selectedHospital?.name}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowReferralModal(false)}
+                        className="text-white/50 hover:text-white"
+                      >
+                        <X size={24} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`p-6 overflow-y-auto flex-grow ${darkMode ? "bg-white/5" : "bg-gray-50"}`}
+                  >
+                    <form onSubmit={handleReferralSubmit} className="space-y-6">
+                      <div
+                        className={`${darkMode ? "bg-white/5 border border-white/10" : "bg-white"} p-4 rounded-2xl shadow-sm space-y-4`}
+                      >
+                        <h4
+                          className={`${darkMode ? "text-cyan-400" : "text-[#005f73]"} font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-2`}
+                        >
+                          <User size={14} /> Patient Information
+                        </h4>
+                        <div className="space-y-3">
+                          <div className="relative">
+                            <div className="relative group">
+                              <Search
+                                className={`absolute left-4 top-1/2 -translate-y-1/2 ${darkMode ? "text-gray-500" : "text-gray-400"} group-focus-within:text-[#005f73] transition-colors`}
+                                size={16}
+                              />
+                              <input
+                                type="text"
+                                value={referralPatientSearch}
+                                onChange={(e) =>
+                                  setReferralPatientSearch(e.target.value)
+                                }
+                                className={`w-full border-2 border-blue-100/50 rounded-xl pl-12 pr-4 py-3 text-sm font-black outline-hidden focus:border-[#005f73] focus:ring-4 focus:ring-[#005f73]/10 transition-all ${darkMode ? "bg-white/5 text-white" : "bg-blue-50/50 text-gray-900"}`}
+                                placeholder="Search Existing Patient (Name or Phone)..."
+                              />
+                            </div>
+
+                            {referralPatientSuggestions.length > 0 && (
+                              <div
+                                className={`absolute z-10 w-full mt-2 rounded-2xl shadow-2xl border overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 ${darkMode ? "bg-gray-800 border-white/10" : "bg-white border-gray-100"}`}
+                              >
+                                {referralPatientSuggestions.map(
+                                  (p: any, idx: number) => (
+                                    <button
+                                      key={`${p.phone}-${idx}`}
+                                      type="button"
+                                      onClick={() => {
+                                        setReferralForm({
+                                          ...referralForm,
+                                          patientName: p.name,
+                                          patientAge: p.age,
+                                          patientGender: p.gender || "M",
+                                          patientPhone: p.phone,
+                                          patientAddress: p.area || p.address || "",
+                                        });
+                                        setReferralPatientSearch("");
+                                      }}
+                                      className={`w-full p-4 flex items-center gap-4 transition-colors border-b last:border-0 group ${darkMode ? "hover:bg-white/5 border-white/5" : "hover:bg-blue-50 border-gray-50"}`}
+                                    >
+                                      <div
+                                        className={`w-10 h-10 rounded-full flex items-center justify-center font-black transition-all ${darkMode ? "bg-white/10 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-white" : "bg-blue-100 text-[#005f73] group-hover:bg-[#005f73] group-hover:text-white"}`}
+                                      >
+                                        {p.name[0]}
+                                      </div>
+                                      <div className="text-left flex-grow">
+                                        <p
+                                          className={`text-sm font-black ${darkMode ? "text-white" : "text-gray-900"}`}
+                                        >
+                                          {p.name}
+                                        </p>
+                                        <div className="flex items-center gap-3 mt-0.5">
+                                          <p
+                                            className={`${darkMode ? "text-gray-500" : "text-gray-500"} text-[10px] font-bold flex items-center gap-1`}
+                                          >
+                                            <Phone size={10} /> {p.phone}
+                                          </p>
+                                          {p.area && (
+                                            <p
+                                              className={`${darkMode ? "text-gray-500" : "text-gray-400"} text-[10px] font-bold flex items-center gap-1`}
+                                            >
+                                              <MapPin size={10} /> {p.area}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <ChevronRight
+                                        size={16}
+                                        className="text-gray-300"
+                                      />
+                                    </button>
+                                  ),
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="relative">
+                            <input
+                              type="text"
+                              required
+                              value={referralForm.patientName}
+                              onChange={(e) =>
+                                setReferralForm({
+                                  ...referralForm,
+                                  patientName: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                              placeholder="Patient Full Name"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <input
+                              type="number"
+                              required
+                              value={referralForm.patientAge}
+                              onChange={(e) =>
+                                setReferralForm({
+                                  ...referralForm,
+                                  patientAge: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                              placeholder="Age"
+                            />
+                            <select
+                              required
+                              value={referralForm.patientGender}
+                              onChange={(e) =>
+                                setReferralForm({
+                                  ...referralForm,
+                                  patientGender: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                            >
+                              <option value="M">Male</option>
+                              <option value="F">Female</option>
+                              <option value="O">Other</option>
+                            </select>
+                          </div>
+                          <input
+                            type="tel"
+                            required
+                            value={referralForm.patientPhone}
+                            onChange={(e) =>
+                              setReferralForm({
+                                ...referralForm,
+                                patientPhone: e.target.value,
+                              })
+                            }
+                            className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                            placeholder="Contact No."
+                          />
+                          <input
+                            type="text"
+                            value={referralForm.patientAddress}
+                            onChange={(e) =>
+                              setReferralForm({
+                                ...referralForm,
+                                patientAddress: e.target.value,
+                              })
+                            }
+                            className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                            placeholder="Patient Area / Place (e.g. Pune)"
+                          />
+                        </div>
+                      </div>
+
+                      <div
+                        className={`${darkMode ? "bg-white/5 border border-white/10" : "bg-white"} p-4 rounded-2xl shadow-sm space-y-4`}
+                      >
+                        <h4
+                          className={`${darkMode ? "text-cyan-400" : "text-[#005f73]"} font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-2`}
+                        >
+                          <Stethoscope size={14} /> Clinical Details
+                        </h4>
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label
+                              className={`text-[10px] font-bold ${darkMode ? "text-gray-500" : "text-gray-400"} uppercase ml-1`}
+                            >
+                              Patient Condition
+                            </label>
+                            <select
+                              required
+                              value={referralForm.patientCondition}
+                              onChange={(e) =>
+                                setReferralForm({
+                                  ...referralForm,
+                                  patientCondition: e.target.value,
+                                })
+                              }
+                              className={`w-full border rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${
+                                referralForm.patientCondition === "Emergency"
+                                  ? darkMode
+                                    ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                    : "bg-red-50 text-red-600 border-red-100"
+                                  : darkMode
+                                    ? "bg-green-500/10 text-green-400 border-green-500/20"
+                                    : "bg-green-50 text-green-600 border-green-100"
+                              }`}
+                            >
+                              <option value="Stable">Stable</option>
+                              <option value="Emergency Stable">
+                                Emergency Stable
+                              </option>
+                              <option value="Emergency">Emergency</option>
+                            </select>
+                          </div>
+                          <select
+                            required
+                            value={referralForm.department}
+                            onChange={(e) =>
+                              setReferralForm({
+                                ...referralForm,
+                                department: e.target.value,
+                              })
+                            }
+                            className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                          >
+                            <option
+                              value=""
+                              disabled
+                              className={darkMode ? "bg-gray-800" : ""}
+                            >
+                              Select Department
+                            </option>
+                            <option
+                              value="All Departments"
+                              className={darkMode ? "bg-gray-800" : ""}
+                            >
+                              All Departments
+                            </option>
+                            {selectedHospital?.departments &&
+                              (Array.isArray(selectedHospital.departments)
+                                ? selectedHospital.departments
+                                : String(selectedHospital.departments).split(
+                                    ",",
+                                  )
+                              ).map((dept: any, idx: number) => {
+                                const d = String(dept).trim();
+                                if (!d) return null;
+                                return (
+                                  <option
+                                    key={`${d}-${idx}`}
+                                    value={d}
+                                    className={darkMode ? "bg-gray-800" : ""}
+                                  >
+                                    {d}
+                                  </option>
+                                );
+                              })}
+                          </select>
+
+                          <select
+                            required
+                            value={referralForm.doctorId}
+                            onChange={(e) => {
+                              const doctorsList = getReferralDoctors();
+                              const doc = doctorsList.find(
+                                (d) => d.id === e.target.value,
+                              );
+                              setReferralForm({
+                                ...referralForm,
+                                doctorId: e.target.value,
+                                doctorName: doc
+                                  ? doc.name
+                                  : e.target.value === "any"
+                                    ? "any"
+                                    : "",
+                              });
+                            }}
+                            className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                          >
+                            <option
+                              value=""
+                              disabled
+                              className={darkMode ? "bg-gray-800" : ""}
+                            >
+                              Select Doctor
+                            </option>
+                            <option
+                              value="any"
+                              className={darkMode ? "bg-gray-800" : ""}
+                            >
+                              Any Available Doctor
+                            </option>
+                            {getReferralDoctors().map(
+                              (doc: any, index: number) => (
+                                <option
+                                  key={`${doc.id}-${index}`}
+                                  value={doc.id}
+                                  className={darkMode ? "bg-gray-800" : ""}
+                                >
+                                  {doc.name} {doc.qualification ? `(${doc.qualification})` : ""} - {doc.specialization}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                          <input
+                            type="text"
+                            required
+                            value={referralForm.diagnosis}
+                            onChange={(e) =>
+                              setReferralForm({
+                                ...referralForm,
+                                diagnosis: e.target.value,
+                              })
+                            }
+                            className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                            placeholder="Diagnosis"
+                          />
+                          <textarea
+                            value={referralForm.note}
+                            onChange={(e) =>
+                              setReferralForm({
+                                ...referralForm,
+                                note: e.target.value,
+                              })
+                            }
+                            className={`w-full rounded-xl px-4 py-3 text-sm font-medium outline-hidden focus:ring-2 focus:ring-[#005f73] min-h-[80px] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                            placeholder="Note to Hospital (Optional)"
+                          />
+                        </div>
+                      </div>
+
+                      <div
+                        className={`${darkMode ? "bg-white/5 border border-white/10" : "bg-white"} p-4 rounded-2xl shadow-sm space-y-4`}
+                      >
+                        <h4
+                          className={`${darkMode ? "text-cyan-400" : "text-[#005f73]"} font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-2`}
+                        >
+                          <IndianRupee size={14} /> Financial Status
+                        </h4>
+                        <select
+                          required
+                          value={referralForm.economicalCondition}
+                          onChange={(e) =>
+                            setReferralForm({
+                              ...referralForm,
+                              economicalCondition: e.target.value,
+                            })
+                          }
+                          className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                        >
+                          <option
+                            value=""
+                            disabled
+                            className={darkMode ? "bg-gray-800" : ""}
+                          >
+                            Select Condition
+                          </option>
+                          <option
+                            value="General (Paying)"
+                            className={darkMode ? "bg-gray-800" : ""}
+                          >
+                            General (Paying)
+                          </option>
+                          <option
+                            value="MJPJAY Scheme"
+                            className={darkMode ? "bg-gray-800" : ""}
+                          >
+                            MJPJAY Scheme
+                          </option>
+                          <option
+                            value="PMJAY (Ayushman)"
+                            className={darkMode ? "bg-gray-800" : ""}
+                          >
+                            PMJAY (Ayushman)
+                          </option>
+                          <option
+                            value="Corporate Insurance"
+                            className={darkMode ? "bg-gray-800" : ""}
+                          >
+                            Corporate Insurance
+                          </option>
+                        </select>
+
+                        <div className="space-y-1">
+                          <label
+                            className={`text-[10px] font-bold ${darkMode ? "text-gray-500" : "text-gray-400"} uppercase ml-1`}
+                          >
+                            Applicable Scheme
+                          </label>
+                          <select
+                            required
+                            value={referralForm.applicableScheme}
+                            onChange={(e) =>
+                              setReferralForm({
+                                ...referralForm,
+                                applicableScheme: e.target.value,
+                              })
+                            }
+                            className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${darkMode ? "bg-white/5 text-white border-white/10" : "bg-gray-50 border-gray-100 text-gray-900"}`}
+                          >
+                            <option
+                              value=""
+                              disabled
+                              className={darkMode ? "bg-gray-800" : ""}
+                            >
+                              Select Scheme
+                            </option>
+                            <option
+                              value="No Scheme"
+                              className={darkMode ? "bg-gray-800" : ""}
+                            >
+                              No Scheme / Private
+                            </option>
+                            {selectedHospital?.schemes &&
+                              (Array.isArray(selectedHospital.schemes)
+                                ? selectedHospital.schemes
+                                : String(selectedHospital.schemes).split(",")
+                              ).map((scheme: any, idx: number) => {
+                                const s = String(scheme).trim();
+                                if (!s) return null;
+                                return (
+                                  <option
+                                    key={`${s}-${idx}`}
+                                    value={s}
+                                    className={darkMode ? "bg-gray-800" : ""}
+                                  >
+                                    {s}
+                                  </option>
+                                );
+                              })}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 pb-6">
+                        <button
+                          type="button"
+                          onClick={() => setShowReferralModal(false)}
+                          className={`flex-1 font-bold py-3 rounded-xl transition-all ${darkMode ? "bg-white/10 text-gray-300 hover:bg-white/20" : "bg-gray-200 text-gray-700 hover:bg-gray-200"}`}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="flex-2 bg-[#005f73] text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 hover:bg-[#005f73]/90 transition-all"
+                        >
+                          Submit Referral <Send size={18} />
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+            {showProfileModal &&
+              selectedHospital &&
+              (() => {
+                const hospData =
+                  filteredHospitals.find(
+                    (h) => String(h.id) === String(selectedHospital?.id),
+                  ) || selectedHospital;
+                return (
+                  <motion.div
+                    key="profile-modal-wrapper"
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                  >
+                    <motion.div
+                      key="profile-modal-backdrop"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={() => setShowProfileModal(false)}
+                      className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                    />
+                    <motion.div
+                      key="profile-modal-content"
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.9, opacity: 0 }}
+                      className={`w-full max-w-md rounded-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh] ${darkMode ? "bg-gray-900 border border-white/10" : "bg-white"}`}
+                    >
+                      <div
+                        className={`${darkMode ? "bg-white/5 border-b border-white/10" : "bg-gray-50 border-b border-gray-100"} p-6 shrink-0`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span
+                              className={`px-3 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm mb-2 w-fit ${
+                                hospData.tier === "premium"
+                                  ? "bg-linear-to-r from-[#005f73] to-[#023e8a] text-white"
+                                  : hospData.tier === "priority"
+                                    ? "bg-linear-to-r from-[#0a9396] to-[#0077b6] text-white"
+                                    : "bg-linear-to-r from-[#ee9b00] to-[#ca6702] text-white"
+                              }`}
+                            >
+                              {hospData.tier === "premium" && (
+                                <Crown size={10} />
+                              )}
+                              {String(hospData.tier || "").toUpperCase()}{" "}
+                              PARTNER
+                            </span>
+                            <h3
+                              className={`text-xl font-extrabold ${darkMode ? "text-white" : "text-gray-900"}`}
+                            >
+                              {hospData.name}
+                            </h3>
+                          </div>
+                          <button
+                            onClick={() => setShowProfileModal(false)}
+                            className={`${darkMode ? "text-gray-500 hover:text-white" : "text-gray-400 hover:text-gray-600"}`}
+                          >
+                            <X size={24} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="p-6 space-y-6 overflow-y-auto no-scrollbar">
+                        <div>
+                          <p
+                            className={`${darkMode ? "text-gray-400" : "text-gray-500"} text-xs font-bold flex items-center gap-2`}
+                          >
+                            <MapPin size={14} className="text-red-500" />
+                            {hospData.city}
+                          </p>
+                          <div className="mt-4">
+                            <a
+                              href={`tel:${hospData.helpline}`}
+                              className={`w-full border border-green-600 text-green-600 py-3 rounded-xl font-bold text-sm ${darkMode ? "hover:bg-green-600/20" : "hover:bg-green-600 hover:text-white"} transition-all flex items-center justify-center gap-2 shadow-sm`}
+                            >
+                              <Phone size={18} /> Join Call / Reception
+                            </a>
+                          </div>
+                        </div>
+
+                        <div
+                          className={`border-t ${darkMode ? "border-white/10" : "border-gray-100"} pt-6`}
+                        >
+                          <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                            <Activity size={12} className="inline mr-1" /> Bed
+                            Availability
+                          </label>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div
+                              className={`${darkMode ? "bg-red-500/10 border-red-500/20" : "bg-red-50 border-red-100"} p-2 rounded-xl border text-center`}
+                            >
+                              <p
+                                className={`text-[8px] font-bold ${darkMode ? "text-red-400/80" : "text-red-400"} uppercase`}
+                              >
+                                ICU
+                              </p>
+                              <p
+                                className={`text-sm font-black ${darkMode ? "text-red-400" : "text-red-600"}`}
+                              >
+                                {hospData.bedsICU || 0}
+                              </p>
+                            </div>
+                            <div
+                              className={`${darkMode ? "bg-blue-500/10 border-blue-500/20" : "bg-blue-50 border-blue-100"} p-2 rounded-xl border text-center`}
+                            >
+                              <p
+                                className={`text-[8px] font-bold ${darkMode ? "text-blue-400/80" : "text-blue-400"} uppercase`}
+                              >
+                                General
+                              </p>
+                              <p
+                                className={`text-sm font-black ${darkMode ? "text-blue-400" : "text-blue-600"}`}
+                              >
+                                {hospData.bedsGeneral || 0}
+                              </p>
+                            </div>
+                            <div
+                              className={`${darkMode ? "bg-orange-500/10 border-orange-500/20" : "bg-orange-50 border-orange-100"} p-2 rounded-xl border text-center`}
+                            >
+                              <p
+                                className={`text-[8px] font-bold ${darkMode ? "text-orange-400/80" : "text-orange-400"} uppercase`}
+                              >
+                                Ventilator
+                              </p>
+                              <p
+                                className={`text-sm font-black ${darkMode ? "text-orange-400" : "text-orange-600"}`}
+                              >
+                                {hospData.bedsVentilator || 0}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          className={`border-t ${darkMode ? "border-white/10" : "border-gray-100"} pt-6`}
+                        >
+                          <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                            <ShieldAlert
+                              size={12}
+                              className="inline mr-1 text-red-500"
+                            />{" "}
+                            Emergency & Ambulance
+                          </label>
+                          <div className="space-y-3">
+                            {hospData.emergencyContact && (
+                              <div
+                                className={`flex justify-between items-center ${darkMode ? "bg-red-500/10 border-red-500/20" : "bg-red-50 border-red-100"} p-3 rounded-xl border`}
+                              >
+                                <div>
+                                  <p
+                                    className={`text-[8px] font-bold ${darkMode ? "text-red-400/80" : "text-red-400"} uppercase`}
+                                  >
+                                    Emergency Line
+                                  </p>
+                                  <p
+                                    className={`text-xs font-black ${darkMode ? "text-red-400" : "text-red-600"}`}
+                                  >
+                                    {hospData.emergencyContact}
+                                  </p>
+                                </div>
+                                <a
+                                  href={`tel:${hospData.emergencyContact}`}
+                                  className="bg-red-500 text-white p-2 rounded-lg shadow-sm"
+                                >
+                                  <Phone size={14} />
+                                </a>
+                              </div>
+                            )}
+                            <div
+                              className={`flex justify-between items-center ${darkMode ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-100"} p-3 rounded-xl border`}
+                            >
+                              <div>
+                                <p
+                                  className={`text-[8px] font-bold ${darkMode ? "text-gray-500" : "text-gray-400"} uppercase`}
+                                >
+                                  Ambulance (
+                                  {hospData.ambulanceStatus || "Available"})
+                                </p>
+                                <p
+                                  className={`text-xs font-black ${darkMode ? "text-gray-300" : "text-gray-700"}`}
+                                >
+                                  {hospData.ambulanceContact || "N/A"}
+                                </p>
+                              </div>
+                              {hospData.ambulanceContact && (
+                                <a
+                                  href={`tel:${hospData.ambulanceContact}`}
+                                  className="bg-[#005f73] text-white p-2 rounded-lg shadow-sm"
+                                >
+                                  <Smartphone size={14} />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {hospData.admissionNotes && (
+                          <div
+                            className={`border-t ${darkMode ? "border-white/10" : "border-gray-100"} pt-6`}
+                          >
+                            <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-2 block">
+                              <FileText size={12} className="inline mr-1" />{" "}
+                              Admission Guidelines
+                            </label>
+                            <p
+                              className={`text-[11px] font-bold ${darkMode ? "text-amber-400 bg-amber-500/10 border-amber-500/20" : "text-gray-600 bg-amber-50 border-amber-100"} p-3 rounded-xl border leading-relaxed`}
+                            >
+                              {hospData.admissionNotes}
+                            </p>
+                          </div>
+                        )}
+
+                        {hospData.webinarLink && (
+                          <div
+                            className={`border-t ${darkMode ? "border-white/10" : "border-gray-100"} pt-6`}
+                          >
+                            <a
+                              href={hospData.webinarLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`w-full ${darkMode ? "bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20" : "bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"} py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border transition-all`}
+                            >
+                              <ExternalLink size={14} /> View Training / Webinar
+                            </a>
+                          </div>
+                        )}
+
+                        <div
+                          className={`border-t ${darkMode ? "border-white/10" : "border-gray-100"} pt-6`}
+                        >
+                          <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                            <Stethoscope size={12} className="inline mr-1" />{" "}
+                            Departments
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {Array.isArray(hospData.departments)
+                              ? hospData.departments.map(
+                                  (d: string, idx: number) => (
+                                    <span
+                                      key={`${d}-${idx}`}
+                                      className={`${darkMode ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-50 text-blue-600 border-blue-100"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
+                                    >
+                                      {d}
+                                    </span>
+                                  ),
+                                )
+                              : String(hospData.departments || "General")
+                                  .split(",")
+                                  .map((d: string, idx: number) => (
+                                    <span
+                                      key={`${d}-${idx}`}
+                                      className={`${darkMode ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-50 text-blue-600 border-blue-100"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
+                                    >
+                                      {d.trim()}
+                                    </span>
+                                  ))}
+                          </div>
+                        </div>
+
+                        <div
+                          className={`border-t ${darkMode ? "border-white/10" : "border-gray-100"} pt-6`}
+                        >
+                          <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                            <FileText size={12} className="inline mr-1" />{" "}
+                            Accepted Schemes
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {Array.isArray(hospData.schemes)
+                              ? hospData.schemes.map(
+                                  (s: string, idx: number) => (
+                                    <span
+                                      key={`${s}-${idx}`}
+                                      className={`${darkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#e0f2f1] text-[#0a9396] border-[#b2dfdb]"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
+                                    >
+                                      {s}
+                                    </span>
+                                  ),
+                                )
+                              : String(hospData.schemes || "")
+                                  .split(",")
+                                  .filter(Boolean)
+                                  .map((s: string, idx: number) => (
+                                    <span
+                                      key={`${s}-${idx}`}
+                                      className={`${darkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#e0f2f1] text-[#0a9396] border-[#b2dfdb]"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
+                                    >
+                                      {s.trim()}
+                                    </span>
+                                  ))}
+                          </div>
+                        </div>
+
+                        {((selectedHospitalDoctors &&
+                          selectedHospitalDoctors.length > 0) ||
+                          (hospData.specialists &&
+                            hospData.specialists.length > 0)) && (
+                          <div
+                            className={`border-t ${darkMode ? "border-white/10" : "border-gray-100"} pt-6`}
+                          >
+                            <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                              <UserMd size={12} className="inline mr-1" />{" "}
+                              Doctors & Specialists
+                            </label>
+                            <div className="space-y-3 max-h-60 overflow-y-auto pr-2 no-scrollbar">
+                              {/* Show Specialists from hospital_details (profile array) */}
+                              {hospData.specialists?.map(
+                                (doc: any, index: number) => (
+                                  <div
+                                    key={`specialist-${index}`}
+                                    className={`${darkMode ? "bg-emerald-500/10 border-emerald-500/20" : "bg-emerald-50/30 border-emerald-100/50"} p-3 rounded-xl border`}
+                                  >
+                                    <div className="flex justify-between items-start">
+                                      <h6
+                                        className={`font-extrabold ${darkMode ? "text-white" : "text-gray-900"} text-xs`}
+                                      >
+                                        {doc.name}
+                                      </h6>
+                                      <span
+                                        className={`text-[8px] font-black ${darkMode ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700"} px-1.5 py-0.5 rounded uppercase`}
+                                      >
+                                        Profile
+                                      </span>
+                                    </div>
+                                    <p
+                                      className={`${darkMode ? "text-gray-400" : "text-gray-500"} text-[10px] font-bold uppercase`}
+                                    >
+                                      {doc.qualification}
+                                    </p>
+                                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                                      <p
+                                        className={`${darkMode ? "text-emerald-400" : "text-[#00796b]"} text-[10px] font-bold flex items-center gap-1`}
+                                      >
+                                        <Stethoscope size={10} />{" "}
+                                        {doc.department || "General"}
+                                      </p>
+                                      <p className="text-orange-400 text-[10px] font-bold flex items-center gap-1">
+                                        <Clock size={10} />{" "}
+                                        {doc.timing || "N/A"}
+                                      </p>
+                                      {doc.contact && (
+                                        <p className="text-blue-400 text-[10px] font-bold flex items-center gap-1">
+                                          <Phone size={10} /> {doc.contact}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ),
+                              )}
+
+                              {/* Show Doctors from doctors collection */}
+                              {selectedHospitalDoctors.map(
+                                (doc: any, index: number) => {
+                                  // Avoid duplication if already in specialists
+                                  const isDuplicate =
+                                    hospData.specialists?.some(
+                                      (s: any) =>
+                                        s.name?.toLowerCase() ===
+                                          doc.name?.toLowerCase() &&
+                                        s.qualification?.toLowerCase() ===
+                                          doc.qualification?.toLowerCase(),
+                                    );
+                                  if (isDuplicate) return null;
+
+                                  return (
+                                    <div
+                                      key={`doctor-${doc.id}-${index}`}
+                                      className={`${darkMode ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-100"} p-3 rounded-xl border`}
+                                    >
+                                      <h6
+                                        className={`font-extrabold ${darkMode ? "text-white" : "text-gray-900"} text-xs`}
+                                      >
+                                        {doc.name}
+                                      </h6>
+                                      <p
+                                        className={`${darkMode ? "text-gray-400" : "text-gray-500"} text-[10px] font-bold uppercase`}
+                                      >
+                                        {doc.qualification}
+                                      </p>
+                                      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                                        <p
+                                          className={`${darkMode ? "text-emerald-400" : "text-[#00796b]"} text-[10px] font-bold flex items-center gap-1`}
+                                        >
+                                          <Stethoscope size={10} />{" "}
+                                          {doc.department || "General"}
+                                        </p>
+                                        <p className="text-orange-400 text-[10px] font-bold flex items-center gap-1">
+                                          <Clock size={10} />{" "}
+                                          {doc.timing || "N/A"}
+                                        </p>
+                                        {doc.contact && (
+                                          <p className="text-blue-400 text-[10px] font-bold flex items-center gap-1">
+                                            <Phone size={10} /> {doc.contact}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                },
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div
+                        className={`p-6 flex gap-3 ${darkMode ? "bg-white/5 border-t border-white/10" : "bg-gray-50 border-t border-gray-100"}`}
+                      >
+                        <button
+                          onClick={() => setShowProfileModal(false)}
+                          className={`flex-1 font-bold py-3 rounded-xl flex items-center justify-center gap-2 border transition-all ${
+                            darkMode
+                              ? "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"
+                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          <ChevronLeft size={18} /> Back to List
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowProfileModal(false);
+                            setShowReferralTypeModal(true);
+                          }}
+                          className="flex-1 bg-[#005f73] text-white font-bold py-3 rounded-xl shadow-lg hover:bg-[#005f73]/90 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Share2 size={18} /> Refer Patient
+                        </button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                );
+              })()}
+      </AnimatePresence>
     </>
   );
 }

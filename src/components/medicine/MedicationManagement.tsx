@@ -7,6 +7,7 @@ import {
   Plus,
   Trash2,
   Clock,
+  Bell,
   Activity,
   Heart,
   Volume2,
@@ -87,6 +88,7 @@ export default function MedicationManagement({
   const [formRefillThreshold, setFormRefillThreshold] = useState("5");
   const [formNotes, setFormNotes] = useState("");
   const [formColor, setFormColor] = useState("#3B82F6"); // default primary blue
+  const [formLanguage, setFormLanguage] = useState<"English" | "Hindi" | "Marathi">("English");
   const [selectedSymbol, setSelectedSymbol] = useState("pill");
 
   // Speech voice settings
@@ -102,6 +104,9 @@ export default function MedicationManagement({
   // AI Health Coach insights state
   const [coachInsight, setCoachInsight] = useState<string>("");
   const [coachLoading, setCoachLoading] = useState(false);
+
+  // Auto alarm trigger ref
+  const lastTriggeredAlarm = useRef<string>("");
 
   // -------------------------------------------------------------
   // Load Web Speech Voices
@@ -258,15 +263,46 @@ export default function MedicationManagement({
 
       setNextDose({ medicine: closestDose, timing: targetDateStr });
 
+      // Trigger automatic alarm if within 1 minute
+      if (minDiff > 0 && minDiff <= 60000) {
+        const alarmKey = `${closestDose.id}-${targetDateStr}`;
+        if (lastTriggeredAlarm.current !== alarmKey) {
+          lastTriggeredAlarm.current = alarmKey;
+          triggerVoiceGuidance(closestDose, targetDateStr);
+          
+          let screenMsg = `Alarm: Time to take ${closestDose.medicineName}!`;
+          if (closestDose.language === "Marathi") {
+            screenMsg = `वेळ झाली आहे! तुमची ${closestDose.medicineName} घ्या.`;
+          } else if (closestDose.language === "Hindi") {
+            screenMsg = `समय हो गया! अपनी ${closestDose.medicineName} लें।`;
+          }
+          showNotification(screenMsg, "info");
+        }
+      }
+
       // Generate the display remaining minutes / hours text
       const totalSecs = Math.floor(minDiff / 1000);
       const hrs = Math.floor(totalSecs / 3600);
       const mins = Math.floor((totalSecs % 3600) / 60);
 
-      if (hrs > 0) {
-        setCountdownText(`Next Medicine: ${closestDose.medicineName} in ${hrs} Hr ${mins} Min`);
+      if (closestDose.language === "Marathi") {
+         if (hrs > 0) {
+           setCountdownText(`पुढील औषध: ${closestDose.medicineName} ${hrs} तास ${mins} मिनिटांत`);
+         } else {
+           setCountdownText(`पुढील औषध: ${closestDose.medicineName} ${mins} मिनिटांत`);
+         }
+      } else if (closestDose.language === "Hindi") {
+         if (hrs > 0) {
+           setCountdownText(`अगली दवा: ${closestDose.medicineName} ${hrs} घंटे ${mins} मिनट में`);
+         } else {
+           setCountdownText(`अगली दवा: ${closestDose.medicineName} ${mins} मिनट में`);
+         }
       } else {
-        setCountdownText(`Next Medicine: ${closestDose.medicineName} in ${mins} Minutes`);
+         if (hrs > 0) {
+           setCountdownText(`Next Medicine: ${closestDose.medicineName} in ${hrs} Hr ${mins} Min`);
+         } else {
+           setCountdownText(`Next Medicine: ${closestDose.medicineName} in ${mins} Minutes`);
+         }
       }
     };
 
@@ -323,6 +359,7 @@ export default function MedicationManagement({
         stockQuantity: parseInt(formStock, 10) || 50,
         refillThreshold: parseInt(formRefillThreshold, 10) || 5,
         alarmTone: "soft medical tone",
+        language: formLanguage,
         notes: formNotes,
         color: formColor,
         symbol: selectedSymbol,
@@ -360,6 +397,7 @@ export default function MedicationManagement({
     setFormStock("30");
     setFormRefillThreshold("5");
     setFormNotes("");
+    setFormLanguage("English");
     setFormColor("#3B82F6");
     setSelectedSymbol("pill");
     setEditingReminder(null);
@@ -393,6 +431,7 @@ export default function MedicationManagement({
     setFormStock(String(rem.stockQuantity || 30));
     setFormRefillThreshold(String(rem.refillThreshold || 5));
     setFormNotes(rem.notes || "");
+    setFormLanguage(rem.language || "English");
     setFormColor(rem.color || "#3B82F6");
     setSelectedSymbol(rem.symbol || "pill");
     setShowAddModal(true);
@@ -500,14 +539,105 @@ export default function MedicationManagement({
     }
   };
 
-  const triggerVoiceGuidance = (rem: any, timing: string) => {
-    const hour = parseInt(timing.split(":")[0], 10);
-    let greeting = "Good morning";
-    if (hour >= 12 && hour < 17) greeting = "Good afternoon";
-    else if (hour >= 17) greeting = "Good evening";
+  const playRingChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
 
-    const textToSpeak = `${greeting} ${user.name || "Patient"}. It is time for your scheduled dosage of ${rem.medicineName}. Dose requirement is ${rem.dosage}. Please take this ${rem.mealTime === "before" ? "before meals" : rem.mealTime === "after" ? "after meals" : rem.mealTime === "with" ? "together with your food" : "on an empty stomach"}. Happy healing!`;
-    speakText(textToSpeak);
+      // First chime ring tone
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(880, now);
+      osc1.frequency.exponentialRampToValueAtTime(1760, now + 0.15);
+      gain1.gain.setValueAtTime(0.3, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.3);
+
+      // Second chime ring tone
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = "sine";
+      osc2.frequency.setValueAtTime(1046.5, now + 0.18);
+      osc2.frequency.exponentialRampToValueAtTime(2093, now + 0.35);
+      gain2.gain.setValueAtTime(0.35, now + 0.18);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.18);
+      osc2.stop(now + 0.45);
+    } catch (err) {
+      console.warn("Ring sound playback error:", err);
+    }
+  };
+
+  const triggerVoiceGuidance = (rem: any, timing: string) => {
+    // 1. Play ring chime sound first
+    playRingChime();
+
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    
+    const timingStr = typeof timing === "string" ? timing : "08:00";
+    const hour = parseInt(timingStr.split(":")[0], 10) || 8;
+    const langRaw = String(rem?.audioLang || rem?.language || "english").toLowerCase();
+    
+    let greeting = "";
+    let textToSpeak = "";
+    let langCode = "en-US";
+
+    const pName = user?.name || "Patient";
+    const mName = typeof rem === "string" ? rem : (rem?.medicineName || rem?.medicine || "Medicine");
+    const mealTime = rem?.mealTime || "after";
+    const mealTextMr = mealTime === "after" ? "जेवणानंतर" : mealTime === "before" ? "जेवणापूर्वी" : mealTime === "with" ? "जेवणासोबत" : "रिकाम्या पोटी";
+    const mealTextHi = mealTime === "after" ? "खाने के बाद" : mealTime === "before" ? "खाने से पहले" : mealTime === "with" ? "खाने के साथ" : "खाली पेट";
+    const mealTextEn = mealTime === "after" ? "after food" : mealTime === "before" ? "before food" : mealTime === "with" ? "with food" : "on empty stomach";
+
+    if (langRaw.includes("marathi") || langRaw.includes("mr")) {
+      if (hour >= 12 && hour < 17) greeting = "शुभ दुपार";
+      else if (hour >= 17) greeting = "शुभ संध्याकाळ";
+      else greeting = "शुभ प्रभात";
+      textToSpeak = `${greeting} ${pName} जी, तुमची ${mName} औषध घेण्याची वेळ झाली आहे. कृपया ही औषध ${mealTextMr} घ्या.`;
+      langCode = "mr-IN";
+    } else if (langRaw.includes("hindi") || langRaw.includes("hi")) {
+      if (hour >= 12 && hour < 17) greeting = "शुभ दोपहर";
+      else if (hour >= 17) greeting = "शुभ संध्या";
+      else greeting = "शुभ प्रभात";
+      textToSpeak = `${greeting} ${pName} जी, आपके ${mName} दवाई लेने का समय हो गया है। कृपया इसे ${mealTextHi} लें।`;
+      langCode = "hi-IN";
+    } else {
+      if (hour >= 12 && hour < 17) greeting = "Good afternoon";
+      else if (hour >= 17) greeting = "Good evening";
+      else greeting = "Good morning";
+      textToSpeak = `${greeting} ${pName}, it is time to take your ${mName}. Please take it ${mealTextEn}.`;
+      langCode = "en-US";
+    }
+
+    // 2. Announce voice message after ring sound
+    setTimeout(() => {
+      try {
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.resume();
+        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        utterance.lang = langCode;
+        utterance.pitch = 1.0;
+        utterance.rate = 0.95;
+        
+        const voices = window.speechSynthesis.getVoices();
+        const matchedVoice = voices.find(v => v.lang.toLowerCase() === langCode.toLowerCase()) ||
+                             voices.find(v => v.lang.toLowerCase().startsWith(langCode.split("-")[0]));
+        if (matchedVoice) {
+          utterance.voice = matchedVoice;
+        }
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.error("Speech Synthesis Error:", err);
+      }
+    }, 450);
   };
 
   // -------------------------------------------------------------
@@ -710,7 +840,7 @@ export default function MedicationManagement({
               className={`flex items-center gap-2 px-4.5 py-3.5 rounded-[1.1rem] font-bold text-xs uppercase tracking-wider transition-all duration-300 relative cursor-pointer ${
                 isActive 
                   ? "bg-emerald-600 text-white shadow-md shadow-emerald-500/20" 
-                  : "text-slate-400 hover:text-slate-200"
+                  : darkMode ? "text-slate-400 hover:text-slate-200" : "text-slate-600 hover:text-slate-800"
               }`}
             >
               <Icon size={14} />
@@ -817,17 +947,17 @@ export default function MedicationManagement({
                           <div className="flex items-center gap-2.5">
                             <span className={`h-3 w-3 rounded-full bg-gradient-to-tr ${period.color} shadow-md`} />
                             <div>
-                              <h4 className="font-extrabold text-sm uppercase tracking-wider text-slate-800 dark:text-slate-100">{period.label}</h4>
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{period.range}</span>
+                              <h4 className={`font-extrabold text-sm uppercase tracking-wider ${darkMode ? "text-slate-100" : "text-slate-800"}`}>{period.label}</h4>
+                              <span className={`text-[10px] font-mono ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{period.range}</span>
                             </div>
                           </div>
-                          <span className="px-2.5 py-1 rounded-lg bg-slate-500/10 text-[10px] font-black">{doses.length} Doses</span>
+                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${darkMode ? "bg-slate-700/60 text-slate-300" : "bg-slate-500/10 text-slate-600"}`}>{doses.length} Doses</span>
                         </div>
 
                         {/* List Doses */}
                         <div className="mt-4 space-y-3">
                           {doses.length === 0 ? (
-                            <p className="text-xs font-semibold text-slate-405/40 italic py-2 text-center">No medicines schedule for this block.</p>
+                            <p className={`text-xs font-semibold italic py-2 text-center ${darkMode ? "text-slate-500" : "text-slate-400"}`}>No medicines schedule for this block.</p>
                           ) : (
                             doses.map((rem) => {
                               // Match exact timing for this period range
@@ -865,7 +995,7 @@ export default function MedicationManagement({
                                       {rem.type === "Syrup" ? <Droplet size={14} style={{ color: rem.color }} /> : rem.type === "Injection" ? <Syringe size={14} style={{ color: rem.color }} /> : <Pill size={14} style={{ color: rem.color }} />}
                                     </div>
                                     <div className="min-w-0">
-                                      <h5 className="font-extrabold text-xs truncate leading-tight dark:text-slate-100">{rem.medicineName}</h5>
+                                      <h5 className={`font-extrabold text-xs truncate leading-tight ${darkMode ? "text-slate-100" : "text-slate-800"}`}>{rem.medicineName}</h5>
                                       <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 capitalize truncate font-mono">
                                         {rem.dosage} • {rem.mealTime} food
                                       </p>
@@ -919,7 +1049,7 @@ export default function MedicationManagement({
             <div className={`p-6 rounded-[2.2rem] border overflow-hidden relative shadow-md ${
               darkMode ? "bg-slate-900/40 border-white/5" : "bg-white border-slate-200"
             }`}>
-              <h4 className="font-extrabold text-sm uppercase tracking-wider mb-4 text-slate-800 dark:text-slate-100">Treatment adherence score</h4>
+              <h4 className={`font-extrabold text-sm uppercase tracking-wider mb-4 ${darkMode ? "text-slate-100" : "text-slate-800"}`}>Treatment adherence score</h4>
               
               <div className="flex items-center gap-6">
                 {/* SVG circular progress */}
@@ -964,12 +1094,12 @@ export default function MedicationManagement({
               <div className="flex items-center justify-between border-b border-slate-500/10 pb-3">
                 <div className="flex items-center gap-2">
                   <Brain size={18} className="text-emerald-500 animate-pulse" />
-                  <h4 className="font-extrabold text-sm uppercase tracking-wider text-slate-800 dark:text-slate-100">AI Health Supervisor Coach</h4>
+                  <h4 className={`font-extrabold text-sm uppercase tracking-wider ${darkMode ? "text-slate-100" : "text-slate-800"}`}>AI Health Supervisor Coach</h4>
                 </div>
                 <button
                   onClick={fetchCoachReview}
                   disabled={coachLoading}
-                  className="p-1 text-slate-450 hover:text-emerald-500 transition-colors"
+                  className={`p-1 transition-colors ${darkMode ? "text-slate-400 hover:text-emerald-500" : "text-slate-500 hover:text-emerald-500"}`}
                 >
                   <RefreshCw size={13} className={coachLoading ? "animate-spin" : ""} />
                 </button>
@@ -984,7 +1114,7 @@ export default function MedicationManagement({
                     <span>Analyzing intake logs...</span>
                   </div>
                 ) : coachInsight ? (
-                  <div className="text-xs text-slate-500 dark:text-slate-350 leading-relaxed font-semibold">
+                  <div className={`text-xs leading-relaxed font-semibold ${darkMode ? "text-slate-300" : "text-slate-500"}`}>
                     <p className="whitespace-pre-line leading-relaxed">{coachInsight}</p>
                   </div>
                 ) : (
@@ -1004,19 +1134,19 @@ export default function MedicationManagement({
             <div className={`p-6 rounded-[2.2rem] border shadow-md ${
               darkMode ? "bg-slate-900/40 border-white/5" : "bg-white border-slate-200"
             }`}>
-              <h4 className="font-extrabold text-sm uppercase tracking-wider mb-4 text-slate-800 dark:text-slate-100">Medicine Stock & Refills</h4>
+              <h4 className={`font-extrabold text-sm uppercase tracking-wider mb-4 ${darkMode ? "text-slate-100" : "text-slate-800"}`}>Medicine Stock & Refills</h4>
               
               <div className="space-y-4">
                 {reminders.length === 0 ? (
-                  <p className="text-xs italic text-slate-450 text-center py-4">No scheduled stock tracking</p>
+                  <p className={`text-xs italic text-center py-4 ${darkMode ? "text-slate-500" : "text-slate-400"}`}>No scheduled stock tracking</p>
                 ) : (
                   reminders.map((rem) => {
                     const isLow = rem.stockQuantity <= (rem.refillThreshold || 5);
                     return (
                       <div key={rem.id} className="flex items-center justify-between gap-3 text-xs border-b border-slate-500/5 pb-3 last:border-0 last:pb-0">
                         <div className="min-w-0">
-                          <h5 className="font-extrabold dark:text-slate-100 truncate max-w-[120px]">{rem.medicineName}</h5>
-                          <span className={`text-[10px] font-bold mt-1 block ${isLow ? "text-rose-500" : "text-slate-450"}`}>
+                          <h5 className={`font-extrabold truncate max-w-[120px] ${darkMode ? "text-slate-100" : "text-slate-800"}`}>{rem.medicineName}</h5>
+                          <span className={`text-[10px] font-bold mt-1 block ${isLow ? "text-rose-500" : darkMode ? "text-slate-400" : "text-slate-500"}`}>
                             {rem.stockQuantity !== undefined ? `${rem.stockQuantity} Remaining` : "Unlimited"}
                           </span>
                         </div>
@@ -1465,127 +1595,150 @@ export default function MedicationManagement({
 
             {/* Modal Box */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className={`relative w-full max-w-2xl max-h-[85vh] overflow-y-auto p-8 rounded-[2.5rem] border ${
-                darkMode ? "bg-slate-900 text-white border-white/5" : "bg-white text-slate-900 border-slate-200"
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className={`relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl ${
+                darkMode
+                  ? "bg-[#0b1120] text-white border-white/8 shadow-black/60"
+                  : "bg-white text-slate-900 border-slate-200/80 shadow-slate-300/40"
               }`}
             >
-              {/* Close Button */}
-              <button
-                onClick={() => { setShowAddModal(false); resetForm(); }}
-                className="absolute top-6 right-6 p-2 rounded-full hover:bg-slate-500/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-
-              <h3 className="font-black text-xl mb-6">
-                {editingReminder ? "Update Medication Alarms" : "Schedule New Remedy Alarm"}
-              </h3>
-
-              <form onSubmit={handleAddNewReminder} className="space-y-6 text-xs font-bold uppercase tracking-wider">
-                {/* 1. Basic properties */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Medicine Name *</label>
-                    <input
-                      required
-                      type="text"
-                      value={formName}
-                      onChange={(e) => setFormName(e.target.value)}
-                      placeholder="e.g. Paracetamol"
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide"
-                    />
+              {/* ── HEADER BAR ── */}
+              <div className={`sticky top-0 z-10 flex items-center justify-between px-7 py-5 border-b ${darkMode ? "bg-[#0b1120] border-white/8" : "bg-white border-slate-100"}`}>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-500/30">
+                    <Bell size={18} className="text-white" />
                   </div>
+                  <div>
+                    <h3 className="font-black text-base tracking-tight uppercase">
+                      {editingReminder ? "UPDATE MEDICATION ALARMS" : "SCHEDULE NEW REMEDY ALARM"}
+                    </h3>
+                    <p className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
+                      CONFIGURE MEDICATION TIMELINE
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowAddModal(false); resetForm(); }}
+                  className={`p-2 rounded-xl transition-all cursor-pointer ${darkMode ? "hover:bg-white/10 text-slate-400 hover:text-white" : "hover:bg-slate-100 text-slate-400 hover:text-slate-700"}`}
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Generic alternative formula (Optional)</label>
-                    <input
-                      type="text"
-                      value={formGeneric}
-                      onChange={(e) => setFormGeneric(e.target.value)}
-                      placeholder="e.g. Acetaminophen"
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide"
-                    />
+              <form onSubmit={handleAddNewReminder} className="p-7 space-y-5">
+
+                {/* ── SECTION 1: MEDICINE IDENTITY ── */}
+                <div className={`rounded-2xl border p-4 space-y-4 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                  <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>
+                    <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-[9px]">1</span>
+                    MEDICINE IDENTITY
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>MEDICINE NAME *</label>
+                      <input
+                        required
+                        type="text"
+                        value={formName}
+                        onChange={(e) => setFormName(e.target.value.toUpperCase())}
+                        placeholder="E.G. PARACETAMOL"
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:bg-white/8" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-emerald-400 shadow-sm"}`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>GENERIC ALTERNATIVE (OPTIONAL)</label>
+                      <input
+                        type="text"
+                        value={formGeneric}
+                        onChange={(e) => setFormGeneric(e.target.value.toUpperCase())}
+                        placeholder="E.G. ACETAMINOPHEN"
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:bg-white/8" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-emerald-400 shadow-sm"}`}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* 2. Type & Dosage parameters */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Dosage Type</label>
-                    <select
-                      value={formType}
-                      onChange={(e) => setFormType(e.target.value as any)}
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide dark:bg-slate-900"
-                    >
-                      {["Tablet", "Capsule", "Syrup", "Injection", "Drops", "Ointment", "Powder"].map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+                {/* ── SECTION 2: DOSAGE PARAMETERS ── */}
+                <div className={`rounded-2xl border p-4 space-y-4 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                  <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-blue-400" : "text-blue-600"}`}>
+                    <span className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center text-[9px]">2</span>
+                    DOSAGE PARAMETERS
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>DOSAGE TYPE</label>
+                      <select
+                        value={formType}
+                        onChange={(e) => setFormType(e.target.value as any)}
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-[#0b1120] border-white/10 text-white focus:border-blue-500/50" : "bg-white border-slate-200 text-slate-800 focus:border-blue-400 shadow-sm"}`}
+                      >
+                        {["Tablet", "Capsule", "Syrup", "Injection", "Drops", "Ointment", "Powder"].map(t => (
+                          <option key={t} value={t}>{t.toUpperCase()}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>STRENGTH (E.G. 500MG, 10ML)</label>
+                      <input
+                        type="text"
+                        value={formStrength}
+                        onChange={(e) => setFormStrength(e.target.value.toUpperCase())}
+                        placeholder="E.G. 500 MG"
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-blue-400 shadow-sm"}`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>QUANTITY PER DOSE</label>
+                      <input
+                        type="text"
+                        value={formQuantityPerDose}
+                        onChange={(e) => setFormQuantityPerDose(e.target.value)}
+                        placeholder="E.G. 1 TABLET"
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-blue-400 shadow-sm"}`}
+                      />
+                    </div>
                   </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Strength (e.g., 500mg, 10ml)</label>
-                    <input
-                      type="text"
-                      value={formStrength}
-                      onChange={(e) => setFormStrength(e.target.value)}
-                      placeholder="e.g. 500 mg"
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Quantity Per Dose</label>
-                    <input
-                      type="text"
-                      value={formQuantityPerDose}
-                      onChange={(e) => setFormQuantityPerDose(e.target.value)}
-                      placeholder="e.g. 1 Tablet"
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>DOSAGE SCHEDULE LOOP</label>
+                      <select
+                        value={formSchedule}
+                        onChange={(e) => handleScheduleChange(e.target.value as any)}
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-[#0b1120] border-white/10 text-white focus:border-blue-500/50" : "bg-white border-slate-200 text-slate-800 focus:border-blue-400 shadow-sm"}`}
+                      >
+                        {["Once Daily", "Twice Daily", "Thrice Daily", "Four Times Daily", "Weekly", "Custom"].map(s => (
+                          <option key={s} value={s}>{s.toUpperCase()}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>MEAL ASSOCIATION</label>
+                      <select
+                        value={formMealTime}
+                        onChange={(e) => setFormMealTime(e.target.value as any)}
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-[#0b1120] border-white/10 text-white focus:border-blue-500/50" : "bg-white border-slate-200 text-slate-800 focus:border-blue-400 shadow-sm"}`}
+                      >
+                        <option value="after">TAKE AFTER FOOD</option>
+                        <option value="before">TAKE BEFORE FOOD</option>
+                        <option value="with">TAKE WITH FOOD</option>
+                        <option value="empty">TAKE ON EMPTY STOMACH</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                {/* 3. Schedule & Meal instruct */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Dosage Schedule loop</label>
-                    <select
-                      value={formSchedule}
-                      onChange={(e) => handleScheduleChange(e.target.value as any)}
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide dark:bg-slate-900"
-                    >
-                      {["Once Daily", "Twice Daily", "Thrice Daily", "Four Times Daily", "Weekly", "Custom"].map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Meal association</label>
-                    <select
-                      value={formMealTime}
-                      onChange={(e) => setFormMealTime(e.target.value as any)}
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide dark:bg-slate-900"
-                    >
-                      <option value="after">Take After Food</option>
-                      <option value="before">Take Before Food</option>
-                      <option value="with">Take Together with Food</option>
-                      <option value="empty">Take On Empty Stomach</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* 4. Reminder times list */}
-                <div className="space-y-2 p-4 rounded-xl bg-slate-500/5 border border-slate-500/10">
-                  <label className="text-slate-400 text-[10px] block">Reminder alarm Times (HH:MM)</label>
+                {/* ── SECTION 3: ALARM TIMES ── */}
+                <div className={`rounded-2xl border p-4 space-y-3 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                  <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-amber-400" : "text-amber-600"}`}>
+                    <span className="w-4 h-4 rounded-full bg-amber-500/20 flex items-center justify-center text-[9px]">3</span>
+                    REMINDER ALARM TIMES (HH:MM)
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {formTimings.map((time, idx) => (
-                      <div key={idx} className="flex items-center gap-1.5 bg-slate-500/10 p-2 rounded-xl">
-                        <Clock size={12} className="text-blue-500" />
+                      <div key={idx} className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${darkMode ? "bg-white/8 border-white/10" : "bg-white border-slate-200 shadow-sm"}`}>
+                        <Clock size={13} className="text-amber-500 shrink-0" />
                         <input
                           type="time"
                           value={time}
@@ -1594,15 +1747,15 @@ export default function MedicationManagement({
                             copy[idx] = e.target.value;
                             setFormTimings(copy);
                           }}
-                          className="bg-transparent text-xs font-bold outline-none font-mono dark:text-white text-slate-800"
+                          className={`bg-transparent text-sm font-black outline-none font-mono w-[72px] ${darkMode ? "text-white" : "text-slate-800"}`}
                         />
                         {formTimings.length > 1 && (
                           <button
                             type="button"
                             onClick={() => setFormTimings(formTimings.filter((_, i) => i !== idx))}
-                            className="p-0.5 text-rose-500 hover:text-rose-450 transition-all cursor-pointer"
+                            className="p-0.5 text-rose-400 hover:text-rose-500 transition-all cursor-pointer"
                           >
-                            <X size={10} />
+                            <X size={11} />
                           </button>
                         )}
                       </div>
@@ -1610,96 +1763,142 @@ export default function MedicationManagement({
                     <button
                       type="button"
                       onClick={() => setFormTimings([...formTimings, "12:00"])}
-                      className="flex items-center gap-1 p-2 px-3 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 text-[10px] rounded-xl cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 text-[11px] font-black uppercase tracking-wider cursor-pointer border border-amber-500/20 transition-all"
                     >
-                      <Plus size={11} /> Add Time
+                      <Plus size={12} /> ADD TIME
                     </button>
                   </div>
                 </div>
 
-                {/* 5. Start, Days duration parameters */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Start Date</label>
-                    <input
-                      required
-                      type="date"
-                      value={formStartDate}
-                      onChange={(e) => setFormStartDate(e.target.value)}
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide font-mono"
-                    />
+                {/* ── SECTION 4: TREATMENT DURATION ── */}
+                <div className={`rounded-2xl border p-4 space-y-4 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                  <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-purple-400" : "text-purple-600"}`}>
+                    <span className="w-4 h-4 rounded-full bg-purple-500/20 flex items-center justify-center text-[9px]">4</span>
+                    TREATMENT DURATION & STOCK
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>START DATE</label>
+                      <input
+                        required
+                        type="date"
+                        value={formStartDate}
+                        onChange={(e) => setFormStartDate(e.target.value)}
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold outline-none border transition-all font-mono ${darkMode ? "bg-white/5 border-white/10 text-white focus:border-purple-500/50" : "bg-white border-slate-200 text-slate-800 focus:border-purple-400 shadow-sm"}`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>TREATMENT DURATION (DAYS)</label>
+                      <input
+                        required
+                        type="number"
+                        min="1"
+                        value={formDurationDays}
+                        onChange={(e) => setFormDurationDays(e.target.value)}
+                        placeholder="E.G. 7"
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold outline-none border transition-all font-mono ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-purple-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-purple-400 shadow-sm"}`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>DERIVED END DATE</label>
+                      <input
+                        readOnly
+                        disabled
+                        type="date"
+                        value={formEndDate}
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold outline-none border font-mono cursor-not-allowed ${darkMode ? "bg-white/3 border-white/5 text-slate-500" : "bg-slate-100 border-slate-200 text-slate-400"}`}
+                      />
+                    </div>
                   </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Treatment Duration (Days)</label>
-                    <input
-                      required
-                      type="number"
-                      min="1"
-                      value={formDurationDays}
-                      onChange={(e) => setFormDurationDays(e.target.value)}
-                      placeholder="e.g. 7"
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide font-mono"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Derived End Date</label>
-                    <input
-                      readOnly
-                      disabled
-                      type="date"
-                      value={formEndDate}
-                      className="w-full p-4 bg-slate-500/5 border border-slate-500/5 text-slate-400 outline-none rounded-xl font-bold font-mono cursor-not-allowed"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>INITIAL PILL STOCK AVAILABLE</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formStock}
+                        onChange={(e) => setFormStock(e.target.value)}
+                        placeholder="E.G. 30"
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold outline-none border transition-all font-mono ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-purple-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-purple-400 shadow-sm"}`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>LOW STOCK ALERT THRESHOLD</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formRefillThreshold}
+                        onChange={(e) => setFormRefillThreshold(e.target.value)}
+                        placeholder="E.G. 5"
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-bold outline-none border transition-all font-mono ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-purple-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-purple-400 shadow-sm"}`}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* 6. Stocks and refill alert limits */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Initial Pill Stock available</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formStock}
-                      onChange={(e) => setFormStock(e.target.value)}
-                      placeholder="e.g. 30"
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide font-mono"
-                    />
+                {/* ── SECTION 5: AUDIO ALARM LANGUAGE ── */}
+                <div className={`rounded-2xl border p-4 space-y-3 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                  <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-rose-400" : "text-rose-600"}`}>
+                    <span className="w-4 h-4 rounded-full bg-rose-500/20 flex items-center justify-center text-[9px]">5</span>
+                    AUDIO ALARM LANGUAGE
+                  </p>
+                  <p className={`text-[10px] font-semibold ${darkMode ? "text-slate-500" : "text-slate-400"}`}>SELECT THE LANGUAGE FOR VOICE REMINDER ANNOUNCEMENTS</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { id: "English", label: "ENGLISH", sub: "IN ENGLISH", emoji: "🇬🇧" },
+                      { id: "Hindi",   label: "हिंदी",   sub: "IN HINDI",   emoji: "🇮🇳" },
+                      { id: "Marathi", label: "मराठी",  sub: "IN MARATHI",  emoji: "🫶" },
+                    ] as const).map((lang) => (
+                      <button
+                        key={lang.id}
+                        type="button"
+                        onClick={() => setFormLanguage(lang.id as any)}
+                        className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 font-black text-[11px] uppercase tracking-wider transition-all cursor-pointer ${
+                          formLanguage === lang.id
+                            ? "border-rose-500 bg-rose-500/10 text-rose-500 shadow-md shadow-rose-500/15"
+                            : darkMode
+                              ? "border-white/8 bg-white/3 text-slate-400 hover:border-white/20 hover:text-white"
+                              : "border-slate-200 bg-white text-slate-500 hover:border-rose-300 hover:text-rose-500 shadow-sm"
+                        }`}
+                      >
+                        <span className="text-xl">{lang.emoji}</span>
+                        <span>{lang.label}</span>
+                        <span className={`text-[8px] font-bold tracking-widest ${formLanguage === lang.id ? "text-rose-400" : darkMode ? "text-slate-600" : "text-slate-400"}`}>{lang.sub}</span>
+                      </button>
+                    ))}
                   </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-slate-400 text-[10px]">Low stock alert threshold (Warning limit)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formRefillThreshold}
-                      onChange={(e) => setFormRefillThreshold(e.target.value)}
-                      placeholder="e.g. 5"
-                      className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide font-mono"
-                    />
+                  {/* Voice announcement preview */}
+                  <div className={`mt-1 p-3 rounded-xl border text-[11px] font-semibold leading-relaxed ${darkMode ? "bg-black/20 border-white/5 text-slate-400" : "bg-slate-100/80 border-slate-200 text-slate-500"}`}>
+                    🔔{" "}
+                    {formLanguage === "Marathi"
+                      ? `"${formName || "औषध"} घेण्याची वेळ झाली आहे. ${formMealTime === "after" ? "जेवणानंतर" : formMealTime === "before" ? "जेवणापूर्वी" : formMealTime === "with" ? "जेवणासोबत" : "रिकाम्या पोटी"} ${formQuantityPerDose || "1"} ${formType === "Tablet" ? "गोळी" : formType === "Syrup" ? "चमचा" : formType} घ्या."`
+                      : formLanguage === "Hindi"
+                      ? `"${formName || "दवाई"} लेने का समय हो गया है। ${formMealTime === "after" ? "खाने के बाद" : formMealTime === "before" ? "खाने से पहले" : formMealTime === "with" ? "खाने के साथ" : "खाली पेट"} ${formQuantityPerDose || "1"} ${formType === "Tablet" ? "गोली" : formType === "Syrup" ? "चम्मच" : formType} लें।"`
+                      : `"IT IS TIME TO TAKE YOUR ${formName || "MEDICINE"}. PLEASE TAKE ${formQuantityPerDose || "1"} ${formType.toUpperCase()} ${formMealTime === "after" ? "AFTER FOOD" : formMealTime === "before" ? "BEFORE FOOD" : formMealTime === "with" ? "WITH FOOD" : "ON EMPTY STOMACH"}."`}
                   </div>
                 </div>
 
-                {/* 7. Extra medical notes details */}
-                <div className="space-y-1.5">
-                  <label className="text-slate-400 text-[10px]">Doctor instructions / Patient notes</label>
+                {/* ── SECTION 6: DOCTOR NOTES ── */}
+                <div className={`rounded-2xl border p-4 space-y-3 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                  <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-cyan-400" : "text-cyan-600"}`}>
+                    <span className="w-4 h-4 rounded-full bg-cyan-500/20 flex items-center justify-center text-[9px]">6</span>
+                    DOCTOR INSTRUCTIONS / PATIENT NOTES
+                  </p>
                   <textarea
                     rows={2}
                     value={formNotes}
-                    onChange={(e) => setFormNotes(e.target.value)}
-                    placeholder="e.g. Do not consume alcohol within 6 hours. Chew tablet completely."
-                    className="w-full p-4 bg-slate-500/5 hover:bg-slate-500/10 focus:bg-slate-500/10 outline-none border border-slate-500/10 rounded-xl font-bold dark:text-white text-slate-800 tracking-wide leading-relaxed normal-case"
+                    onChange={(e) => setFormNotes(e.target.value.toUpperCase())}
+                    placeholder="E.G. DO NOT CONSUME ALCOHOL WITHIN 6 HOURS. CHEW TABLET COMPLETELY."
+                    className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all leading-relaxed resize-none ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-cyan-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-cyan-400 shadow-sm"}`}
                   />
                 </div>
 
-                {/* Submit configure button */}
+                {/* ── SUBMIT ── */}
                 <button
                   type="submit"
-                  className="w-full py-4.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer mt-2"
+                  className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/25 cursor-pointer active:scale-[0.98]"
                 >
-                  {editingReminder ? "Save Configuration Changes" : "Apply Medication Alarms Timeline"}
+                  ✓ {editingReminder ? "UPDATE MEDICATION ALARMS" : "APPLY MEDICATION ALARM TIMELINE"}
                 </button>
               </form>
             </motion.div>

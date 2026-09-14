@@ -1,0 +1,271 @@
+activeTab === "find" && (
+              <motion.div
+                key="find"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-6"
+              >
+                {/* Filters */}
+                <div
+                  className={`${darkMode ? "bg-white/5 border-white/10 shadow-none" : "bg-white border-gray-100 shadow-sm"} p-4 rounded-2xl border space-y-4 mb-6 transition-all duration-300`}
+                >
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label
+                        className={`text-[10px] font-extrabold uppercase tracking-wider ml-1 ${darkMode ? "text-gray-500" : "text-gray-400"}`}
+                      >
+                        Location Filter
+                      </label>
+                      <div className="relative group">
+                        <MapPin
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? "text-gray-500" : "text-gray-400"} group-focus-within:text-[#005f73] transition-colors`}
+                          size={14}
+                        />
+                        <select
+                          value={filterLocation}
+                          onChange={(e) => setFilterLocation(e.target.value)}
+                          className={`w-full border-none rounded-xl pl-10 pr-4 py-2.5 text-xs font-black outline-hidden transition-all ${darkMode ? "bg-white/5 text-cyan-400 focus:bg-gray-800" : "bg-gray-50 text-[#005f73] focus:bg-white focus:shadow-xs"}`}
+                        >
+                          <option
+                            value="all"
+                            className={darkMode ? "bg-gray-800" : ""}
+                          >
+                            All Districts
+                          </option>
+                          {availableLocations.map((loc) => (
+                            <option
+                              key={loc}
+                              value={loc.toLowerCase()}
+                              className={darkMode ? "bg-gray-800" : ""}
+                            >
+                              {loc}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label
+                        className={`text-[10px] font-extrabold uppercase tracking-wider ml-1 ${darkMode ? "text-gray-500" : "text-gray-400"}`}
+                      >
+                        Department
+                      </label>
+                      <div className="relative group">
+                        <Stethoscope
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? "text-gray-500" : "text-gray-400"} group-focus-within:text-[#005f73] transition-colors`}
+                          size={14}
+                        />
+                        <select
+                          value={filterDept}
+                          onChange={(e) => setFilterDept(e.target.value)}
+                          className={`w-full border-none rounded-xl pl-10 pr-4 py-2.5 text-xs font-black outline-hidden transition-all ${darkMode ? "bg-white/5 text-cyan-400 focus:bg-gray-800" : "bg-gray-50 text-[#005f73] focus:bg-white focus:shadow-xs"}`}
+                        >
+                          <option
+                            value="all"
+                            className={darkMode ? "bg-gray-800" : ""}
+                          >
+                            All Specialists
+                          </option>
+                          {[
+                            "Oncology",
+                            "Cardiology",
+                            "Orthopedics",
+                            "Neurology",
+                            "Gastroenterology",
+                            "Nephrology",
+                            "Urology",
+                            "Pediatrics",
+                            "Gynecology",
+                            "Dermatology",
+                            "Ophthalmology",
+                            "ENT",
+                            "Radiology",
+                            "Physiotherapy",
+                            "General Surgery",
+                          ].map((dept) => (
+                            <option
+                              key={dept}
+                              value={dept.toLowerCase()}
+                              className={darkMode ? "bg-gray-800" : ""}
+                            >
+                              {dept}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hospital List */}
+                <div className="space-y-4">
+                  {filteredHospitals.map((hosp, index) => (
+                    <div
+                      key={`${hosp.id}-${index}`}
+                      className={`${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-100"} backdrop-blur-md rounded-2xl shadow-sm border hover:shadow-md transition-all overflow-hidden group`}
+                    >
+                      {/* Hospital Image/Banner */}
+                      <div className="h-40 relative bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                        {hosp.banner ? (
+                          <img
+                            src={hosp.banner}
+                            alt={hosp.name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                          />
+                        ) : hosp.gallery && hosp.gallery.length > 0 ? (
+                          <img
+                            src={hosp.gallery[0]}
+                            alt={hosp.name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-linear-to-br from-[#005f73] to-[#0a9396] opacity-80 text-white p-6 text-center">
+                            <Hospital size={40} className="mb-2 opacity-50" />
+                            <p className="text-[10px] font-black uppercase tracking-widest">
+                              {hosp.specialization ||
+                                hosp.category ||
+                                "Multispeciality"}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Logo Overlap */}
+                        <div className="absolute -bottom-6 left-5">
+                          <div
+                            className={`w-16 h-16 rounded-2xl border-4 ${darkMode ? "bg-gray-900 border-gray-900" : "bg-white border-white"} shadow-xl flex items-center justify-center overflow-hidden`}
+                          >
+                            {hosp.logo ? (
+                              <img
+                                src={hosp.logo}
+                                alt="Logo"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-[#005f73] flex items-center justify-center text-white">
+                                <Hospital size={24} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="absolute top-3 right-3 flex flex-col gap-2">
+                          <span
+                            className={`px-3 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-lg backdrop-blur-md ${
+                              hosp.tier === "premium"
+                                ? "bg-linear-to-r from-[#005f73]/90 to-[#023e8a]/90 text-white"
+                                : hosp.tier === "priority"
+                                  ? "bg-linear-to-r from-[#0a9396]/90 to-[#0077b6]/90 text-white"
+                                  : "bg-linear-to-r from-[#ee9b00]/90 to-[#ca6702]/90 text-white"
+                            }`}
+                          >
+                            {hosp.tier === "premium" && <Crown size={10} />}
+                            {hosp.tier === "priority" && <Star size={10} />}
+                            {hosp.tier === "standard" && (
+                              <CheckCircle size={10} />
+                            )}
+                            {String(hosp.tier || "standard").toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-5 pt-10">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3
+                              className={`text-xl font-extrabold leading-tight ${darkMode ? "text-white" : "text-gray-900"}`}
+                            >
+                              {hosp.name}
+                            </h3>
+                            <div className="space-y-1.5 mt-2">
+                              <p
+                                className={`${darkMode ? "text-gray-300" : "text-gray-800"} text-sm font-black flex items-center gap-1.5`}
+                              >
+                                <MapPin size={14} className="text-red-600" />
+                                {hosp.city}
+                              </p>
+                              {hosp.address && (
+                                <p
+                                  className={`${darkMode ? "text-gray-400" : "text-gray-700"} text-xs font-extrabold leading-relaxed`}
+                                >
+                                  {hosp.address}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mb-4">
+                          <p className="text-[10px] font-extrabold text-gray-400 uppercase mb-1.5">
+                            Running Schemes:
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {String(hosp.schemes || "")
+                              .split(",")
+                              .filter(Boolean)
+                              .map((s: string, idx: number) => (
+                                <span
+                                  key={`${s}-${idx}`}
+                                  className={`${darkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#e0f2f1] text-[#0a9396] border-[#b2dfdb]"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
+                                >
+                                  {s.trim()}
+                                </span>
+                              ))}
+                            {!hosp.schemes && (
+                              <span className="text-gray-500 text-[10px] font-bold italic">
+                                No active schemes
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <p
+                          className={`${darkMode ? "text-white bg-white/5 border-white/10" : "text-gray-900 bg-gray-50/50 border-gray-100"} text-xs font-black flex items-center gap-2.5 mb-6 p-2.5 rounded-xl border`}
+                        >
+                          <Stethoscope
+                            size={18}
+                            className={`${darkMode ? "text-cyan-400" : "text-[#005f73]"}`}
+                          />
+                          {Array.isArray(hosp.departments)
+                            ? hosp.departments.join(", ")
+                            : hosp.departments || "General"}
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => {
+                              setSelectedHospital(hosp);
+                              setShowProfileModal(true);
+                            }}
+                            className={`py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 border ${
+                              darkMode
+                                ? "border-cyan-400 text-cyan-400 hover:bg-cyan-500/10"
+                                : "border-[#005f73] text-[#005f73] hover:bg-[#005f73] hover:text-white"
+                            }`}
+                          >
+                            <Hospital size={14} /> Profile
+                          </button>
+                          <a
+                            href={`tel:${hosp.helpline}`}
+                            className="border border-green-600 text-green-600 py-2 rounded-xl font-bold text-xs hover:bg-green-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                          >
+                            <Phone size={14} /> Call
+                          </a>
+                          <button
+                            onClick={() => {
+                              setSelectedHospital(hosp);
+                              setShowReferralTypeModal(true);
+                            }}
+                            className="col-span-2 bg-[#005f73] text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-[#005f73]/20 flex items-center justify-center gap-2"
+                          >
+                            <Share2 size={16} /> Refer Patient
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {

@@ -1,15 +1,19 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { 
-  Sparkles, Users, TrendingUp, Calendar, MapPin, Activity, Heart, Volume2, 
+  Sparkles, Users, TrendingUp, Calendar, MapPin, Activity, Heart,
   Smartphone, Plus, Search, Filter, Check, Award, Image as ImageIcon, 
   ArrowRight, Share2, Clipboard, ChevronRight, CheckCircle2, Star, Send, 
   MessageSquare, Copy, RefreshCw, FileText, Printer, Trash, Info, Phone, 
-  Grid, Download, BookOpen, ThumbsUp, Clock, HelpCircle, AlertCircle, 
-  Globe, LayoutGrid, CalendarRange, Share, BarChart3, ListTodo, List
+  Download, BookOpen, ThumbsUp, Clock, HelpCircle, AlertCircle, 
+  Globe, LayoutGrid, CalendarRange, Share, BarChart3, ListTodo, X,
+  Settings, ChevronLeft, Play, Pause, AlertTriangle, Eye, FileDown, Layers, 
+  FileSpreadsheet, ShieldAlert, Megaphone, PieChart as PieChartIcon, 
+  ArrowUpRight, Zap, Facebook, Instagram, Monitor, PenTool, Hash, Type, 
+  Brush, Move, MoreVertical, Layout, AlignLeft, CheckCircle, Trash2, Mail
 } from "lucide-react";
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, 
-  Bar, Cell, PieChart, Pie, Legend
+  Bar, Cell, PieChart, Pie, Legend, CartesianGrid, LineChart, Line
 } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -28,17 +32,7 @@ interface PatientCRMProps {
   openWhatsAppPreview: (phone: string, msg: string, title: string, patientName: string, type: string, meta?: any) => void;
 }
 
-// SubTab options matching every requested studio
-type CRMSubTab = 
-  | "dashboard" 
-  | "poster_studio" 
-  | "image_studio" 
-  | "whatsapp_studio" 
-  | "campaign_studio" 
-  | "scheduler" 
-  | "templates" 
-  | "advisor" 
-  | "analytics";
+type CRMTab = "dashboard" | "segmentation" | "campaign_builder" | "poster_studio" | "whatsapp_creator" | "broadcast" | "automation" | "templates" | "analytics" | "notifications";
 
 export default function HealthcareCRM({
   allPatients = [],
@@ -55,2571 +49,2276 @@ export default function HealthcareCRM({
   openWhatsAppPreview
 }: PatientCRMProps) {
 
-  const [activeTab, setActiveTab] = useState<CRMSubTab>("dashboard");
-  const STORAGE_PREFIX = `carebridge_smart_marketing_${user?.id || "default"}`;
+  // Active Tab & Substates
+  const [activeTab, setActiveTab] = useState<CRMTab>("dashboard");
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [globalSearch, setGlobalSearch] = useState("");
 
-  // Seeding local states
-  const [scheduledCampaigns, setScheduledCampaigns] = useState<any[]>(() => {
-    const cached = localStorage.getItem(`${STORAGE_PREFIX}_schedules`);
-    if (cached) return JSON.parse(cached);
-    return [
-      { id: "sched-1", name: "Hypertension Awareness Broadcast", date: "2026-06-15", time: "10:30", type: "WhatsApp Campaign", audience: "Hypertension Patients", status: "Active" },
-      { id: "sched-2", name: "International Yoga Day Greeting", date: "2026-06-21", time: "08:00", type: "Poster Studio", audience: "All Patients", status: "Active" }
-    ];
-  });
+  // Role Access (Simulated Role Selection for Demo)
+  const [currentUserRole, setCurrentUserRole] = useState<"Admin" | "Receptionist" | "Marketing Manager" | "Doctor">("Marketing Manager");
 
-  const [campaignHistory, setCampaignHistory] = useState<any[]>(() => {
-    const cached = localStorage.getItem(`${STORAGE_PREFIX}_history`);
-    if (cached) return JSON.parse(cached);
-    return [
-      { id: "camp-01", name: "Diabetes Active Alert", category: "Health Awareness", target: "All Patients", reach: 184, clicks: 122, sentAt: "2026-06-01", status: "Completed" },
-      { id: "camp-02", name: "Summer Hydration Alert", category: "Seasonal Health", target: "All Patients", reach: 145, clicks: 94, sentAt: "2026-06-04", status: "Completed" },
-      { id: "camp-03", name: "Heart Care Diagnostics Day", category: "Clinic Promotion", target: "Senior Citizens", reach: 76, clicks: 54, sentAt: "2026-06-10", status: "Completed" }
-    ];
-  });
-
-  const [successBanner, setSuccessBanner] = useState<string | null>(null);
-  const showNotification = (msg: string) => {
-    setSuccessBanner(msg);
-    setTimeout(() => setSuccessBanner(null), 4000);
-  };
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}_schedules`, JSON.stringify(scheduledCampaigns));
-  }, [scheduledCampaigns]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}_history`, JSON.stringify(campaignHistory));
-  }, [campaignHistory]);
-
-  // Shared CRM details helper
-  const resolvedClinicName = clinicDetails?.clinicName || clinicDetails?.clinic_name || "Carebridge Plus Clinic";
-  const resolvedDoctorName = clinicDetails?.doctor_name || user?.name || "Dr. Pawar";
-  const resolvedSpeciality = clinicDetails?.qualification || clinicDetails?.degree || "General Physician";
-  const resolvedContact = clinicDetails?.contact_no || clinicDetails?.contactName || "9988776655";
-  const resolvedAddress = clinicDetails?.address || "Main Clinic Road";
-
-  // Dynamic Patient Metric Analytics mapping
-  const metrics = useMemo(() => {
-    const total = allPatients.length;
-    const diabetesCount = allPatients.filter(p => {
-      const condition = (p.complaint || p.diagnosis || "").toLowerCase();
-      const sugar = parseInt(p.sugar || "0");
-      return condition.includes("diabet") || condition.includes("sugar") || sugar >= 130;
-    }).length;
-
-    const hypertensionCount = allPatients.filter(p => {
-      const condition = (p.complaint || p.diagnosis || "").toLowerCase();
-      const bpSys = parseInt((p.bp || "").split("/")[0]);
-      return condition.includes("bp") || condition.includes("hypertens") || bpSys >= 140;
-    }).length;
-
-    const seniorCitizens = allPatients.filter(p => parseInt(p.age || "0") >= 60).length;
-
-    return {
-      total,
-      diabetesCount,
-      hypertensionCount,
-      seniorCitizens,
-      totalCampaigns: campaignHistory.length + scheduledCampaigns.length,
-      postersGenerated: 16,
-      imagesGenerated: 12,
-      broadcastsSent: campaignHistory.filter(h => h.status === "Completed").length,
-      scheduled: scheduledCampaigns.filter(s => s.status === "Active").length
-    };
-  }, [allPatients, campaignHistory, scheduledCampaigns]);
-
-  // 1. MULTILINGUAL & SELECTION STATES
-  const [selectedLanguage, setSelectedLanguage] = useState<"english" | "hindi" | "marathi">("english");
-
-  const getLangValue = (fieldVal: any, lang: "english" | "hindi" | "marathi" = selectedLanguage) => {
-    if (!fieldVal) return "";
-    if (typeof fieldVal === "string") return fieldVal;
-    return fieldVal[lang] || fieldVal.english || fieldVal.marathi || fieldVal.hindi || "";
-  };
-
-  // Patient Segmentation Filters
-  const [filterGender, setFilterGender] = useState<string>("All");
-  const [filterAgeGroup, setFilterAgeGroup] = useState<string>("All");
-  const [filterPatientType, setFilterPatientType] = useState<string>("All");
-  const [filterLocation, setFilterLocation] = useState<string>("All");
-  const [filterDisease, setFilterDisease] = useState<string>("All");
-  const [customDiseaseQuery, setCustomDiseaseQuery] = useState<string>("");
-  const [filterStatus, setFilterStatus] = useState<string>("All");
-  const [filterAdherence, setFilterAdherence] = useState<string>("All");
-
-  // Selected Patients for campaign checkboxes
-  const [selectedCampaignPatients, setSelectedCampaignPatients] = useState<string[]>([]);
-
-  // Unique list of patient areas
-  const uniqueLocations = useMemo(() => {
-    const locs = new Set<string>();
-    allPatients.forEach(p => {
-      if (p.area) {
-        const cleaned = p.area.trim();
-        if (cleaned) locs.add(cleaned);
-      }
-    });
-    return Array.from(locs);
-  }, [allPatients]);
-
-  // Filtered Patients List Creator
-  const filteredPatients = useMemo(() => {
-    return allPatients.filter(patient => {
-      // 1. Gender filter
-      if (filterGender !== "All") {
-        const pGender = (patient.gender || "").toLowerCase();
-        if (filterGender === "Male" && pGender !== "male" && pGender !== "m") return false;
-        if (filterGender === "Female" && pGender !== "female" && pGender !== "f") return false;
-        if (filterGender === "Other" && (pGender === "male" || pGender === "m" || pGender === "female" || pGender === "f")) return false;
-      }
-
-      // 2. Age Group Filter
-      const age = parseInt(patient.age || "0");
-      if (filterAgeGroup !== "All") {
-        if (filterAgeGroup === "Children" && (age > 12 || age < 0)) return false;
-        if (filterAgeGroup === "Teenagers" && (age < 13 || age > 19)) return false;
-        if (filterAgeGroup === "Adults" && (age < 20 || age > 59)) return false;
-        if (filterAgeGroup === "Senior Citizens" && age < 60) return false;
-      }
-
-      // 3. Patient Type Filter
-      const visitCount = patient.visitCount || 1;
-      const lastVisitStr = patient.lastVisit || "";
-      if (filterPatientType !== "All") {
-        if (filterPatientType === "New Patients" && visitCount !== 1) return false;
-        if (filterPatientType === "Existing Patients" && visitCount <= 1) return false;
-        if (filterPatientType === "Returning Patients" && visitCount < 3) return false;
-        if (filterPatientType === "Inactive Patients") {
-          if (!lastVisitStr) return true;
-          const lastVisitDate = new Date(lastVisitStr);
-          const ninetyDaysAgo = new Date();
-          ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-          if (lastVisitDate > ninetyDaysAgo) return false;
-        }
-      }
-
-      // 4. Location Filter
-      if (filterLocation !== "All") {
-        const areaStr = (patient.area || "").toLowerCase();
-        if (!areaStr.includes(filterLocation.toLowerCase())) return false;
-      }
-
-      // 5. Disease Category Filter
-      if (filterDisease !== "All") {
-        const complaint = (patient.complaint || "").toLowerCase();
-        const sugar = parseInt(patient.sugar || "0");
-        const bp = patient.bp || "";
-        const bpSys = parseInt(bp.split("/")[0] || "0");
-
-        if (filterDisease === "Diabetes") {
-          if (!complaint.includes("diabet") && !complaint.includes("sugar") && sugar < 130) return false;
-        } else if (filterDisease === "Hypertension") {
-          if (!complaint.includes("bp") && !complaint.includes("hypertens") && bpSys < 140) return false;
-        } else if (filterDisease === "Obesity") {
-          if (!complaint.includes("obesity") && !complaint.includes("overweight") && !complaint.includes("weight")) return false;
-        } else if (filterDisease === "Arthritis") {
-          if (!complaint.includes("arthri") && !complaint.includes("joint") && !complaint.includes("knee")) return false;
-        } else if (filterDisease === "Skin Disorders") {
-          if (!complaint.includes("skin") && !complaint.includes("rash") && !complaint.includes("derm") && !complaint.includes("itch")) return false;
-        } else if (filterDisease === "Women's Health") {
-          if (patient.gender?.toLowerCase() !== "female" && patient.gender?.toLowerCase() !== "f") return false;
-          if (!complaint.includes("preg") && !complaint.includes("gyn") && !complaint.includes("women") && !complaint.includes("period")) return false;
-        } else if (filterDisease === "Child Health") {
-          if (age > 12) return false;
-        } else if (filterDisease === "Custom Diseases") {
-          if (customDiseaseQuery && !complaint.includes(customDiseaseQuery.toLowerCase())) return false;
-        }
-      }
-
-      // 6. Appointment Status Filter
-      if (filterStatus !== "All") {
-        const lastVisitStr = patient.lastVisit || "";
-        if (!lastVisitStr) return false;
-        const lastVisitDate = new Date(lastVisitStr);
-        const now = new Date();
-        const diffTime = Math.abs(now.getTime() - lastVisitDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (filterStatus === "Active" && diffDays > 30) return false;
-        if (filterStatus === "Follow-Up Pending" && (diffDays <= 30 || diffDays > 60)) return false;
-        if (filterStatus === "Missed Follow-Up" && diffDays <= 60) return false;
-      }
-
-      // 7. Medicine Adherence Filter
-      if (filterAdherence !== "All") {
-        const charSum = (patient.name || "").split("").reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-        const adherenceScore = charSum % 3; // 0 = Good, 1 = Average, 2 = Poor
-        const adherenceStr = adherenceScore === 0 ? "Good" : adherenceScore === 1 ? "Average" : "Poor";
-        if (filterAdherence !== adherenceStr) return false;
-      }
-
-      return true;
-    });
-  }, [allPatients, filterGender, filterAgeGroup, filterPatientType, filterLocation, filterDisease, customDiseaseQuery, filterStatus, filterAdherence]);
-
-  // Keep checkboxes in sync with filtered patients
-  useEffect(() => {
-    setSelectedCampaignPatients(filteredPatients.map(p => p.phone || ""));
-  }, [filteredPatients]);
-
-  // AI Campaign Recommendation Engine
-  const recommendedCampaigns = useMemo(() => {
-    const totalSeniors = allPatients.filter(p => parseInt(p.age || "0") >= 60).length;
-    const totalFemales = allPatients.filter(p => {
-      const g = (p.gender || "").toLowerCase();
-      return g === "female" || g === "f";
-    }).length;
-    const totalDiabetics = allPatients.filter(p => {
-      const comp = (p.complaint || p.diagnosis || "").toLowerCase();
-      const sug = parseInt(p.sugar || "0");
-      return comp.includes("diabet") || comp.includes("sugar") || sug >= 130;
-    }).length;
-    const totalChildren = allPatients.filter(p => {
-      const age = parseInt(p.age || "0");
-      return age > 0 && age <= 12;
-    }).length;
-
-    return [
-      {
-        id: "rec-1",
-        title: "Monsoon Health Campaign",
-        targetName: "All Patients",
-        targetCount: allPatients.length || 80,
-        reason: "Monsoon seasonal trends active. Prevention of dengue, malaria, and typhoid.",
-        specialtyMatch: "Family Medicine & General Practice Speciality",
-        days: "5 Days",
-        topic: "Monsoon Immune Shield & Vaccine Awareness Camp",
-      },
-      {
-        id: "rec-2",
-        title: "Diabetes Awareness Campaign",
-        targetName: "Diabetic Patients",
-        targetCount: totalDiabetics || 24,
-        reason: `Detected ${totalDiabetics} patients with glycemic metrics or diabetes history in your database.`,
-        specialtyMatch: "Chronic Metabolism Management",
-        days: "7 Days",
-        topic: "HbA1c Blood Sugar Screening & Wellness Camp",
-      },
-      {
-        id: "rec-3",
-        title: "Women's Wellness Campaign",
-        targetName: "Female Adults",
-        targetCount: totalFemales || 42,
-        reason: `Identified ${totalFemales} female patients in your clinic roster. Ideal for annual screening checkups.`,
-        specialtyMatch: "Gynecology & Preventive Primary Care",
-        days: "4 Days",
-        topic: "Women's Diagnostic Health Checkup & Wellness Screening",
-      },
-      {
-        id: "rec-4",
-        title: "Child Health Campaign",
-        targetName: "Children under 12",
-        targetCount: totalChildren || 15,
-        reason: `School reopening season and transitional climate risk for ${totalChildren} pediatric index children.`,
-        specialtyMatch: "Pediatric Wellness & Immunity Vaccination",
-        days: "3 Days",
-        topic: "School Reopening Pediatric Immunity Checkup",
-      },
-      {
-        id: "rec-5",
-        title: "Senior Citizen Care Campaign",
-        targetName: "Senior Citizens (60+)",
-        targetCount: totalSeniors || 18,
-        reason: `Database holds ${totalSeniors} elder patients requiring routine bone, kidney, or cardiovascular monitoring.`,
-        specialtyMatch: "Geriatric Care & Heart Health Supervision",
-        days: "7 Days",
-        topic: "Senior Citizen Joint Health & Bone Density Camp",
-      }
-    ];
-  }, [allPatients]);
-
-  const handleApplyRecommendation = (rec: any) => {
-    setPosterTopic(rec.topic);
-    setCampaignTopic(rec.topic);
-    setWhatsappCustomDetails(rec.topic);
-    setFilterDisease(rec.id === "rec-2" ? "Diabetes" : "All");
-    setFilterGender(rec.id === "rec-3" ? "Female" : "All");
-    setFilterAgeGroup(rec.id === "rec-4" ? "Children" : rec.id === "rec-5" ? "Senior Citizens" : "All");
-    
-    setPosterCopy({
-      headline: {
-        english: rec.topic.substring(0, 30).toUpperCase(),
-        hindi: `विशेष शिविर: ${rec.topic.substring(0, 20)}`,
-        marathi: `विशेष शिबीर: ${rec.topic.substring(0, 20)}`
-      },
-      tagline: {
-        english: "Schedule your priority screening slot today",
-        hindi: "आज ही अपना परामर्श समय सुनिश्चित करें",
-        marathi: "आजच तुमची तपासणीची वेळ निश्चित करा"
-      },
-      content: {
-        english: `Proactive tracking remains critical for your wellbeing. The clinic has launched a premium ${rec.title} in association with top diagnostics partners.`,
-        hindi: `अपने स्वास्थ्य की बेहतर सुरक्षा के लिए नियमित जांच करवाएं। हमारे क्लीनिक में ${rec.title} के अंतर्गत मुफ्त जांच शिविर शुरू किया जा रहा है।`,
-        marathi: `तुमच्या आरोग्याचे रक्षण करण्यासाठी नियमित तपासणी उपयुक्त ठरते. आमच्या क्लिनिकमध्ये ${rec.title} निमित्त विशेष आरोग्य शिबिराचे आयोजन केले जात आहे.`
-      },
-      cta: {
-        english: "Book Diagnostics Slot Today",
-        hindi: "आज ही स्लॉट बुक करें",
-        marathi: "आजच वेळ निश्चित करा"
-      },
-      accent: rec.id === "rec-1" ? "from-indigo-650 to-teal-900" : rec.id === "rec-2" ? "from-teal-600 to-cyan-900" : "from-emerald-600 to-teal-950"
-    });
-
-    setActiveTab("whatsapp_studio");
-    showNotification(`AI Recommendation "${rec.title}" applied with custom audience targets matching!`);
-  };
-
-  // POSTER STUDIO STATES
-  const [posterTopic, setPosterTopic] = useState("Monsoon Immunity Shield");
-  const [posterStyle, setPosterStyle] = useState("Modern Medical Teal");
-  const [posterType, setPosterType] = useState("Seasonal Health Posters");
-  const [posterFormat, setPosterFormat] = useState<"square" | "portrait" | "landscape">("square");
-  const [posterIsLoading, setPosterIsLoading] = useState(false);
-  
-  const [posterCopy, setPosterCopy] = useState<any>({
-    headline: {
-      english: "STRENGTHEN YOUR IMMUNITY",
-      hindi: "अपनी रोग प्रतिरोधक क्षमता बढ़ाएं",
-      marathi: "तुमची रोगप्रतिकारक शक्ती मजबूत करा"
-    },
-    tagline: {
-      english: "Prevent Monsoon Fevers & Infections Proactively",
-      hindi: "मानसून बुखार और संक्रमण से खुद को बचाएं",
-      marathi: "पावसाळी ताप आणि संसर्ग यांपासून स्वतःचा बचाव करा"
-    },
-    content: {
-      english: "Monsoon seasons bring elevated risks of dengue, malaria, and waterborne gastroenteritis. Keep your health parameters protected under expert medical supervision.",
-      hindi: "मानसून के मौसम में डेंगू, मलेरिया और जलजनित पेट के संक्रमण का खतरा बढ़ जाता है। अनुभवी डॉक्टरों की देखरेख में खुद को सुरक्षित रखें।",
-      marathi: "पावसाळ्यात डेंग्यू, मलेरिया आणि दूषित पाण्यामुळे होणाऱ्या पोटाच्या आजारांचा धोका वाढतो. निष्णात डॉक्टरांच्या मार्गदर्शनाखाली आपल्या आरोग्याची काळजी घ्या."
-    },
-    cta: {
-      english: "Book Monsoon Evaluation Slot Today",
-      hindi: "आज ही अपना स्क्रीनिंग अपॉइंटमेंट बुक करें",
-      marathi: "आजच तुमची तपासणीची वेळ निश्चित करा"
-    },
-    accent: "from-teal-600 to-cyan-900"
-  });
-
-  const handleGeneratePoster = async () => {
-    setPosterIsLoading(true);
-    try {
-      const response = await fetch("/api/ai/marketing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "poster",
-          payload: {
-            topic: posterTopic,
-            clinicName: resolvedClinicName,
-            doctorName: resolvedDoctorName,
-            speciality: resolvedSpeciality,
-            contactName: resolvedContact,
-            address: resolvedAddress,
-            category: posterType
-          }
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setPosterCopy({
-          headline: data.headline || posterCopy.headline,
-          tagline: data.tagline || posterCopy.tagline,
-          content: data.content || posterCopy.content,
-          cta: data.cta || posterCopy.cta,
-          accent: data.accent || "from-teal-600 to-cyan-900"
-        });
-        showNotification("Multilingual Smart AI Poster generated successfully!");
-      }
-    } catch (err) {
-      console.error(err);
-      showNotification("Error generating content. Default preview loaded.");
-    } finally {
-      setPosterIsLoading(false);
-    }
-  };
-
-  // IMAGE STUDIO STATES
-  const [imageCategory, setImageCategory] = useState("General Practice");
-  const [imageStyle, setImageStyle] = useState("Photorealistic Illustration");
-  const [imageIsLoading, setImageIsLoading] = useState(false);
-  const [imageSeedIdx, setImageSeedIdx] = useState(10);
-  const [imageDetails, setImageDetails] = useState<any>({
-    prompt: "Photorealistic depiction of a modern medical consultation scene, professional healthcare providers advising patients with high clinical warmth, bright ambient lighting.",
-    title: {
-      english: "Primary Consultation Banner",
-      hindi: "प्राथमिक चिकित्सा परामर्श बैनर",
-      marathi: "प्राथमिक वैद्यकीय तपासणी बॅनर"
-    },
-    suggestedLayout: {
-      english: "Healthcare workers on the right, typography space on the left",
-      hindi: "दाईं ओर स्वास्थ्य कर्मचारी, दाईं ओर पाठ के लिए खाली स्थान",
-      marathi: "उजव्या बाजूला आरोग्य कर्मचारी, मजकुरासाठी डाव्या बाजूला जागा"
-    },
-    description: {
-      english: "Builds absolute trust and emphasizes medical excellence on clinic social platforms.",
-      hindi: "चिकित्सा उत्कृष्टता को दर्शाता है और क्लीनिक के प्रति विश्वास जगाता है।",
-      marathi: "आरोग्य उत्कृष्टता दर्शवतो आणि क्लिनिकच्या माध्यमातून विश्वास निर्माण करतो."
-    }
-  });
-
-  const handleGenerateImage = async () => {
-    setImageIsLoading(true);
-    try {
-      const response = await fetch("/api/ai/marketing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "image",
-          payload: {
-            category: imageCategory,
-            visualType: imageStyle,
-            theme: `Medical marketing visual for ${imageCategory} speciality clinic`
-          }
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setImageDetails({
-          prompt: data.prompt || imageDetails.prompt,
-          title: data.title || imageDetails.title,
-          suggestedLayout: data.suggestedLayout || imageDetails.suggestedLayout,
-          description: data.description || imageDetails.description
-        });
-        setImageSeedIdx(prev => prev + 1);
-        showNotification("Medical illustration visual prompts updated!");
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setImageIsLoading(false);
-    }
-  };
-
-  // WHATSAPP message generator states
-  const [whatsappCategory, setWhatsappCategory] = useState("Health Tips");
-  const [whatsappCustomDetails, setWhatsappCustomDetails] = useState("Drink warm water and consume seasonal fruits during monsoon seasons");
-  const [whatsappIsLoading, setWhatsappIsLoading] = useState(false);
-  const [whatsappMessages, setWhatsappMessages] = useState<any>({
-    short: {
-      english: "✨ *Seasonal Alert from Carebridge Plus Clinic*: Stay hydrated and restrict street food consumption during Monsoon. Text back to book! 📞",
-      hindi: "✨ *स्वास्थ्य अलर्ट (केयरब्रिज प्लस क्लिनिक)*: मानसून के दौरान पर्याप्त मात्रा में पानी पिएं और बाहर का खाना खाने से बचें। स्लॉट बुक करने के लिए रिप्लाई करें! 📞",
-      marathi: "✨ *आरोग्य सल्ला (केअरब्रिज प्लस क्लिनिक)*: पावसाळ्यात भरपूर पाणी प्या आणि बाहेरील उघड्यावरील अन्न खाणे टाळा. तपासणीसाठी त्वरित संपर्क साधा! 📞"
-    },
-    medium: {
-      english: "🚨 *Monsoon Health Tips by Dr. Pawar* 🚨\n\nProtective protocols for your family:\n• Wash green vegetables thoroughly\n• Keep water containers stored safe\n• Walk standard daily loops indoors\n\nTo consult our medical specialists, reply directly to this thread! 🩺",
-      hindi: "🚨 *डॉ. पवार कडून आवश्यक मानसून स्वास्थ्य टिप्स* 🚨\n\nअपने परिवार की सुरक्षा के लिए:\n• हरी सब्जियों को पानी से अच्छी तरह धोएं\n• पीने के पानी को हमेशा झांक कर रखें\n• रोजाना घर के अंदर ही टहलें\n\nतज्ञ डॉक्टरों से सलाह के लिए इस संदेश का उत्तर दें! 🩺",
-      marathi: "🚨 *डॉ. पवार कडून पावसाळी आरोग्य सल्ला* 🚨\n\nआपल्या कुटुंबाच्या आरोग्यासाठी महत्त्वाचे नियम:\n• पालेभाज्या स्वच्छ धुवून वापरा\n• पिण्यासाठी शुद्ध व सुरक्षित पाण्याचा वापर करा\n• घरामध्येच नियमितपणे चाला\n\nअधिक मार्गदर्शनासाठी या मेसेजला थेट रिप्लाय करा! 🩺"
-    },
-    detailed: {
-      english: "🌱 *Monsoon Immuno-Shield Protocol* 🌱\n\nDear Patients,\n\nOur specialists warn against seasonal threats. Early diagnostic check-ups guard against fevers.\n\n*Why choose Carebridge Plus?*\n1. Standard health checks\n2. Realtime OPD tracking\n3. Personalized advice\n\n👉 Respond directly to book consultation slot!\n📞 9988776655",
-      hindi: "🌱 *मानसून इम्यूनो-शील्ड प्रोटोकॉल* 🌱\n\nप्रिय मरीज मित्र,\n\nहमारे विशेषज्ञ मौसमी बीमारियों से सचेत रहने की सलाह देते हैं। शुरुआती जांच बुखार और अन्य खतरों से बचाती है।\n\n*केयरब्रिज प्लस क्यों चुनें?*\n1. मानक स्वास्थ्य जांच\n2. त्वरित ओपीडी ट्रैकिंग\n3. वैयक्तिक स्वास्थ्य परामर्श\n\n👉 स्लॉट बुक करने के लिए इस संदेश का उत्तर दें!\n📞 9988776655",
-      marathi: "🌱 *पावसाळी इम्युनो-शील्ड प्रोटोकॉल* 🌱\n\nप्रिय रुग्ण मित्रहो,\n\nआमचे तज्ञ डॉक्टर पावसाळी आजारांविषयी काळजी घेण्याचा सल्ला देतात. वेळीच केलेली तपासणी तापासारख्या आजारांपासून रक्षण करते.\n\n*केअरब्रिज प्लस का निवडावे?*\n1. उत्कृष्ट आरोग्य तपासणी\n2. रिअलटाइम ओपीडी ट्रॅकिंग\n3. वैयक्तिक सल्ला आणि औषधोपचार\n\n👉 आपली वेळ निश्चित करण्यासाठी या मेसेजला थेट उत्तर द्या!\n📞 9988776655"
-    }
-  });
-
-  const handleGenerateWhatsApp = async () => {
-    setWhatsappIsLoading(true);
-    try {
-      const response = await fetch("/api/ai/marketing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "whatsapp",
-          payload: {
-            category: whatsappCategory,
-            details: whatsappCustomDetails,
-            clinicName: resolvedClinicName,
-            contact: resolvedContact
-          }
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setWhatsappMessages({
-          short: data.short,
-          medium: data.medium,
-          detailed: data.detailed
-        });
-        showNotification("Multilingual WhatsApp copies generated successfully!");
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setWhatsappIsLoading(false);
-    }
-  };
-
-  const handleBroadcastWhatsApp = async (text: string) => {
-    try {
-      const targetCount = selectedCampaignPatients.length;
-      if (targetCount === 0) {
-        showNotification("Warning: No patients checked in current segment list!");
-        return;
-      }
-
-      await handleBulkSendWhatsApp(text, "campaign");
-      // log campaign in history
-      const logCamp = {
-        id: `camp-${Date.now()}`,
-        name: `Broadcast [${selectedLanguage.toUpperCase()}]: ${whatsappCategory}`,
-        category: "WhatsApp Campaign",
-        target: `${filterGender} ${filterAgeGroup} ${filterDisease !== "All" ? filterDisease : "Patients"}`.trim(),
-        reach: targetCount,
-        clicks: Math.floor(targetCount * 0.65),
-        sentAt: new Date().toISOString().split("T")[0],
-        status: "Completed"
-      };
-      setCampaignHistory(prev => [logCamp, ...prev]);
-      showNotification(`WhatsApp broadcast successfully dispatched to ${targetCount} patients!`);
-    } catch (e) {
-      console.error(e);
-      showNotification("Failed to execute bulk send.");
-    }
-  };
-
-  // CAMPAIGN STUDIO STATES (Campaign Packages & Multilingual copy)
-  const [campaignTopic, setCampaignTopic] = useState("Diabetes Awareness Week");
-  const [campaignTargetAudience, setCampaignTargetAudience] = useState("Chronic Patients");
-  const [campaignIsLoading, setCampaignIsLoading] = useState(false);
-  const [campaignContent, setCampaignContent] = useState<any>({
-    posterHeadline: {
-      english: "DIABETES CONTROL PROGRAM",
-      hindi: "मधुमेह नियंत्रण कार्यक्रम",
-      marathi: "मधुमेह नियंत्रण मोहीम"
-    },
-    posterContent: {
-      english: "Proactive dietary balancing and systematic blood sugar feedback loops protect renal pathways.",
-      hindi: "सक्रिय आहार संतुलन और व्यवस्थित रक्त शर्करा नियंत्रण किडनी के स्वास्थ्य की रक्षा करते हैं।",
-      marathi: "सक्रिय आहार संतुलन आणि नियमित रक्तातील साखर तपासणी किडनीच्या आरोग्याचे रक्षण करते."
-    },
-    posterCta: {
-      english: "Book HbA1c Screening Slot",
-      hindi: "आज ही HbA1c जांच के लिए संपर्क करें",
-      marathi: "आजच HbA1c तपासणी बुक करा"
-    },
-    imagePrompt: "Warm ambient studio portrait of a patient happily monitoring sugar logs with their doctor.",
-    whatsappMessage: {
-      english: "📢 *Diabetes Check-up Week at Carebridge Plus*: Don't let chronic sugar variables compromise your system. Restructure parameters with our specialists.",
-      hindi: "📢 *मधुमेह जांच सप्ताह (केयरब्रिज प्लस)*: रक्तातील साखरेचे प्रमाण वाढल्याने शरीरावर वाईट परिणाम होऊ देऊ नका, आजच तज्ञांचा सल्ला घ्या।",
-      marathi: "📢 *मधुमेह तपासणी शिबीर (केअरब्रिज प्लस)*: रक्तातील साखरेचे वाढलेले प्रमाण तुमच्या शरीरावर परिणाम करू देऊ नका, आजच तज्ञांचा सल्ला घ्या।"
-    },
-    socialCaption: {
-      english: "🩺 Check out our upcoming Wellness Initiative. Preventive health first! Let's conquer health milestones together. #Wellness #DiabetesCare",
-      hindi: "🩺 आने वाली विशेष स्वास्थ्य पहल में भाग लें। सुरक्षात्मक स्वास्थ्य पहले! आइए मिलकर स्वस्थ जीवन का लक्ष्य प्राप्त करें। #Wellness #DiabetesCare",
-      marathi: "🩺 आमच्या आगामी आरोग्य उपक्रमात सहभागी व्हा. प्रतिबंधात्मक उपचार पहिले! चला मिळून निरोगी जीवनाचे ध्येय गाठूया. #Wellness #DiabetesCare"
-    },
-    suggestedSchedule: {
-      english: "Day 1: Patient broadcast recall | Day 3: Poster status rollout | Day 7: Checkup OPD dispatch",
-      hindi: "दिन 1: मरीज ब्रॉडकास्ट संदेश | दिन 3: पोस्टर रोलआउट | दिन 7: ओपीडी फॉलो-अप",
-      marathi: "दिवस १: रुग्ण संदेश ब्रॉडकास्ट | दिवस ३: पोस्टर रोलआउट | दिवस ७: ओपीडी पाठपुरावा"
-    }
-  });
-
-  const [multilingualPost, setMultilingualPost] = useState({
-    english: "🩺 Secure your family's health parameters with custom advice from Dr. Pawar at Carebridge Plus Clinic today.",
-    marathi: "🩺 नियमित तपासणीने स्वतःला सुरक्षित ठेवा! आजच केअरब्रिज प्लस क्लिनिकमध्ये डॉक्टरांशी संपर्क साधा आणि आरोग्य जपा.",
-    hindi: "🩺 नियमित जांच से जीवन सुरक्षित रखें! आज ही केयरब्रिज प्लस क्लिनिक से संपर्क करें और स्वास्थ्य सुनिश्चित करें।"
-  });
-  const [isMultilingualLoading, setIsMultilingualLoading] = useState(false);
-  const [postSubject, setPostSubject] = useState("Benefits of regular healthcare checkups and clinical screenings");
-
-  const handleGenerateCampaign = async () => {
-    setCampaignIsLoading(true);
-    try {
-      const response = await fetch("/api/ai/marketing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "campaign",
-          payload: {
-            topic: campaignTopic,
-            target: campaignTargetAudience,
-            clinicName: resolvedClinicName
-          }
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setCampaignContent(data);
-        showNotification("Dynamic Multilingual Campaign assets successfully structured!");
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setCampaignIsLoading(false);
-    }
-  };
-
-  const handleGenerateMultilingualPost = async () => {
-    setIsMultilingualLoading(true);
-    try {
-      const response = await fetch("/api/ai/marketing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "content",
-          payload: {
-            format: "Social Media Post",
-            clinicName: resolvedClinicName,
-            subject: postSubject
-          }
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setMultilingualPost({
-          english: data.english,
-          marathi: data.marathi,
-          hindi: data.hindi
-        });
-        showNotification("Multilingual copies created in seconds!");
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsMultilingualLoading(false);
-    }
-  };
-
-  // 5. SCHEDULER STATES
-  const [scheduleName, setScheduleName] = useState("Seasonal Flu Checkup Camp Alert");
-  const [scheduleDate, setScheduleDate] = useState("2026-06-25");
-  const [scheduleTime, setScheduleTime] = useState("09:00");
-  const [scheduleType, setScheduleType] = useState("WhatsApp Studio");
-  const [scheduleAudience, setScheduleAudience] = useState("Chronic Patients");
-
-  const handleCreateSchedule = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newSchedule = {
-      id: `sched-${Date.now()}`,
-      name: scheduleName,
-      date: scheduleDate,
-      time: scheduleTime,
-      type: scheduleType,
-      audience: scheduleAudience,
-      status: "Active"
-    };
-    setScheduledCampaigns(prev => [newSchedule, ...prev]);
-    showNotification("Campaign scheduler updated successfully!");
-    setScheduleName("");
-  };
-
-  const handleCancelSchedule = (id: string) => {
-    setScheduledCampaigns(prev => prev.filter(s => s.id !== id));
-    showNotification("Scheduled campaign alert cancelled.");
-  };
-
-  // 6. ADVISOR STATES
-  const [advisorIsLoading, setAdvisorIsLoading] = useState(false);
-  const [advisorInsights, setAdvisorInsights] = useState<any[]>([
-    {
-      title: "Senior Citizens Bone & Mineral Camp",
-      description: "A customized camp to engage elders with bone health, dietary calcium plans, and local vital tracking.",
-      effort: "Low",
-      impact: "High",
-      actionPlan: "1. Generate WhatsApp Broadcast\n2. Download Campaign Poster\n3. Start registration on Clinic Floor"
-    },
-    {
-      title: "Active Diabetes & Sugar Alert Week",
-      description: "Weekend diagnostic checks for blood sugar and HbA1c screenings combined with heart vitals.",
-      effort: "Medium",
-      impact: "High",
-      actionPlan: "1. Segregate chronic indices on Admin ERP\n2. Schedule targeted campaign outreach\n3. Offer test bundle parameters"
-    }
+  // Notifications state
+  const [notifications, setNotifications] = useState([
+    { id: "1", type: "success", title: "Campaign Completed", message: "Monsoon Health Checkup delivered successfully to 845 patients.", time: "10 mins ago", read: false },
+    { id: "2", type: "failed", title: "Campaign Failed", message: "SMS delivery failed for 12 recipients in high-range area due to carrier failure.", time: "1 hour ago", read: false },
+    { id: "3", type: "warning", title: "Low Credits Warning", message: "Your WhatsApp API credit balance is below 500. Recharge soon to avoid interruptions.", time: "3 hours ago", read: true },
+    { id: "4", type: "info", title: "Automation Triggered", message: "14 birthday wishes queued for automated dispatch at 10:00 AM.", time: "5 hours ago", read: true }
   ]);
 
-  const handleFetchAdvisorInsights = async () => {
-    setAdvisorIsLoading(true);
-    try {
-      const response = await fetch("/api/ai/marketing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "advisor",
-          payload: {
-            speciality: resolvedSpeciality,
-            city: clinicDetails?.city || user?.city || "Aurangabad",
-            doctorName: resolvedDoctorName
-          }
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setAdvisorInsights(data);
-        showNotification("Actionable marketing advisor tips generated!");
+  // Mock Campaigns Database
+  const [campaigns, setCampaigns] = useState([
+    { id: "c-1", name: "Diabetic Care Outreach", type: "WhatsApp Broadcast", status: "Running", createdDate: "2026-07-09", reach: 1420, clicks: 423, appointments: 86, revenue: 38200, roi: "310%", channel: "WhatsApp" },
+    { id: "c-2", name: "Monsoon Dental Camp", type: "Festival Campaign", status: "Completed", createdDate: "2026-07-05", reach: 3500, clicks: 890, appointments: 145, revenue: 72500, roi: "415%", channel: "WhatsApp" },
+    { id: "c-3", name: "Weekly Health Advisory", type: "Email Campaign", status: "Scheduled", createdDate: "2026-07-08", reach: 2800, clicks: 310, appointments: 15, revenue: 6400, roi: "120%", channel: "Email" },
+    { id: "c-4", name: "Vaccination Reminder", type: "Vaccination Reminder", status: "Paused", createdDate: "2026-07-01", reach: 980, clicks: 120, appointments: 40, revenue: 18000, roi: "280%", channel: "SMS" },
+    { id: "c-5", name: "Cardiac Camp Promo", type: "SMS Campaign", status: "Completed", createdDate: "2026-06-28", reach: 5000, clicks: 1100, appointments: 210, revenue: 105000, roi: "520%", channel: "SMS" }
+  ]);
+
+  // Dynamic Patient Segmentation Filters
+  const [segmentationFilters, setSegmentationFilters] = useState({
+    ageMin: "",
+    ageMax: "",
+    gender: "all",
+    area: "",
+    village: "",
+    city: "",
+    pinCode: "",
+    disease: "",
+    diagnosis: "",
+    procedure: "",
+    medicine: "",
+    doctor: "",
+    lastVisitMonths: "",
+    missedFollowup: false,
+    highValue: false,
+    inactive: false,
+    newPatient: false,
+    birthdayToday: false,
+    anniversaryToday: false,
+    pregnant: false,
+    seniorCitizen: false,
+    child: false,
+    customTag: "",
+    logicMode: "AND" // "AND" | "OR"
+  });
+
+  // Saved Audiences State
+  const [savedAudiences, setSavedAudiences] = useState([
+    { id: "aud-1", name: "Elderly Diabetics (Pune)", count: 245, disease: "Diabetes", minAge: 60 },
+    { id: "aud-2", name: "Monsoon Skin Care Target", count: 512, procedure: "Consultation", area: "Hadapsar" },
+    { id: "aud-3", name: "High Value Pediatric Patients", count: 88, maxAge: 12, value: "high" }
+  ]);
+  const [saveAudienceName, setSaveAudienceName] = useState("");
+
+  // Campaign Builder Form
+  const [campaignBuilder, setCampaignBuilder] = useState({
+    step: 1,
+    name: "",
+    goal: "Lead Generation",
+    targetAudienceId: "",
+    channel: "WhatsApp Broadcast",
+    scheduleType: "Immediate", // Immediate, Scheduled, Recurring
+    scheduleTime: "",
+    recurringFrequency: "Weekly",
+    aiTiming: true,
+    templateId: "",
+    aiGeneratedHeadline: "",
+    aiGeneratedCaption: "",
+    aiGeneratedCTA: "",
+    aiTone: "Professional",
+    aiLanguage: "English"
+  });
+
+  // AI Content Generator State
+  const [aiGenerator, setAiGenerator] = useState({
+    prompt: "",
+    tone: "Friendly",
+    language: "English",
+    resultHeadline: "",
+    resultCaption: "",
+    resultWhatsApp: "",
+    resultSMS: "",
+    resultEmail: "",
+    resultPosterText: "",
+    resultSocial: "",
+    resultHashtags: "",
+    resultCTA: "",
+    generating: false
+  });
+
+  // Poster Studio Canvas State
+  const [posterStudio, setPosterStudio] = useState({
+    category: "General Medicine",
+    headline: "Protect Your Family's Health",
+    description: "Book an annual health checkup package today at CareBridge Clinic. Special packages for senior citizens.",
+    cta: "Call 98765 43210 to book",
+    brandColor: "#0f766e",
+    logoUploaded: false,
+    doctorPhotoUploaded: false,
+    clinicPhotoUploaded: false,
+    aiPrompt: "",
+    aiImageLoading: false,
+    generatedImageUrl: "",
+    exportFormat: "PNG"
+  });
+
+  // WhatsApp Post Creator States
+  const [waCreator, setWaCreator] = useState({
+    aspectRatio: "square", // square, portrait, story, status, carousel
+    caption: "Take charge of your health! Regular checkups are the first step to healthy living. 🌟",
+    suggestedEmojis: ["🩺", "❤️", "📅", "🏥"],
+    cta: "Click here to book a consult",
+    previewImage: null as string | null
+  });
+
+  // AI Topic Auto-Generation States
+  const [aiPosterTopic, setAiPosterTopic] = useState("Festival Greeting");
+  const aiPosterTopicsList = [
+    { id: "Festival Greeting", label: "Festival Greeting" },
+    { id: "Health Tips", label: "Health Tips" },
+    { id: "Doctor Promotion", label: "Doctor Promotion" },
+    { id: "Vaccination Drive", label: "Vaccination Drive" },
+    { id: "Seasonal Diseases Alert", label: "Seasonal Diseases Alert" },
+    { id: "Diabetes Care Checkup", label: "Diabetes Care Checkup" }
+  ];
+
+  const autoGenerateAIPoster = (topic: string) => {
+    switch (topic) {
+      case "Festival Greeting":
+        setPosterStudio(prev => ({
+          ...prev,
+          headline: "Happy Diwali & Healthy Season!",
+          description: "CareBridge Clinic wishes you a happy, safe, and healthy festival season! Protect your health and family.",
+          cta: "Call 98765 43210 for emergency support",
+          brandColor: "#d97706"
+        }));
+        break;
+      case "Health Tips":
+        setPosterStudio(prev => ({
+          ...prev,
+          headline: "Daily Monsoon Health Tips",
+          description: "Drink boiled water, keep surroundings mosquito-free, and boost immunity with fresh vitamins.",
+          cta: "Read more tips at CareBridge",
+          brandColor: "#0284c7"
+        }));
+        break;
+      case "Doctor Promotion":
+        setPosterStudio(prev => ({
+          ...prev,
+          headline: "Meet Our Senior Consultant",
+          description: "Dr. Rajesh Pawar (MD, Medicine) is available for consultations this week from 10 AM to 5 PM.",
+          cta: "Schedule consulting slot",
+          brandColor: "#4f46e5"
+        }));
+        break;
+      case "Vaccination Drive":
+        setPosterStudio(prev => ({
+          ...prev,
+          headline: "Free Pediatric Vaccination Camp",
+          description: "Ensure your children's immunity is up to date. Schedule standard and booster vaccinations on Sunday.",
+          cta: "Book a pediatric slot",
+          brandColor: "#059669"
+        }));
+        break;
+      case "Seasonal Diseases Alert":
+        setPosterStudio(prev => ({
+          ...prev,
+          headline: "Monsoon Dengue & Malaria Alert",
+          description: "Fever? Don't self-medicate. Get a rapid blood screen test done today and secure early safety.",
+          cta: "Book Blood Screen Test",
+          brandColor: "#dc2626"
+        }));
+        break;
+      case "Diabetes Care Checkup":
+        setPosterStudio(prev => ({
+          ...prev,
+          headline: "Comprehensive Diabetes Health Check",
+          description: "Includes HbA1c, fasting sugar, kidney function, and cardiac consults. Normal rates reduced by 30%.",
+          cta: "Book Diabetes Package",
+          brandColor: "#0891b2"
+        }));
+        break;
+      default:
+        break;
+    }
+    alert(`Automatically generated poster layout for "${topic}"!`);
+  };
+
+  const [aiWhatsAppTopic, setAiWhatsAppTopic] = useState("Diabetic Health Checkup Alert");
+  const aiWhatsAppTopicsList = [
+    { id: "Diabetic Health Checkup Alert", label: "Diabetic Health Checkup" },
+    { id: "Dental Camp Promotion", label: "Dental Camp Promotion" },
+    { id: "General Medicine Consultation", label: "General Medicine Consultation" },
+    { id: "Monsoon Skin Care Tips", label: "Monsoon Skin Care Tips" },
+    { id: "Vaccination Refill Alert", label: "Vaccination Refill Alert" }
+  ];
+
+  const autoGenerateAIWhatsApp = (topic: string) => {
+    switch (topic) {
+      case "Diabetic Health Checkup Alert":
+        setWaCreator(prev => ({
+          ...prev,
+          caption: "Attention! 🩸 Keep your HbA1c in check. Join our Diabetes Checkup Camp this Sunday. Special concession for families. 🩺❤️",
+          cta: "Click to book diabetes slot",
+          suggestedEmojis: ["🩺", "❤️", "🩸", "📅"]
+        }));
+        break;
+      case "Dental Camp Promotion":
+        setWaCreator(prev => ({
+          ...prev,
+          caption: "Smile bright! 🦷 Free dental scaling & consults at CareBridge Clinic. Only this Saturday. Limited spots. Book yours now! ✨",
+          cta: "Click to book dental consult",
+          suggestedEmojis: ["🦷", "✨", "📅", "🏥"]
+        }));
+        break;
+      case "General Medicine Consultation":
+        setWaCreator(prev => ({
+          ...prev,
+          caption: "Feeling under the weather? 🤒 Consult our expert general physician. Easy walk-ins or online bookings. Stay healthy, stay safe! 🏥",
+          cta: "Click to book physician consult",
+          suggestedEmojis: ["🤒", "🏥", "📞", "📅"]
+        }));
+        break;
+      case "Monsoon Skin Care Tips":
+        setWaCreator(prev => ({
+          ...prev,
+          caption: "Monsoon humidity causing skin rashes or acne? 🧴 Get expert guidance from our dermatologist. Glow naturally and healthily! 🌟",
+          cta: "Click to book skin consult",
+          suggestedEmojis: ["🧴", "🌟", "❤️", "🏥"]
+        }));
+        break;
+      case "Vaccination Refill Alert":
+        setWaCreator(prev => ({
+          ...prev,
+          caption: "Parent Alert! 👶 Don't miss your child's vaccination schedule. Booking open for monthly booster doses. 🩺💉",
+          cta: "Click to book baby vaccine slot",
+          suggestedEmojis: ["👶", "🩺", "💉", "📅"]
+        }));
+        break;
+      default:
+        break;
+    }
+    alert(`Automatically generated WhatsApp status copy for "${topic}"!`);
+  };
+
+  // Broadcast Module States
+  const [broadcastForm, setBroadcastForm] = useState({
+    name: "",
+    selectedAudienceId: "",
+    channel: "WhatsApp",
+    scheduleType: "immediate", // immediate, scheduled
+    scheduleDate: ""
+  });
+  const [broadcastProgress, setBroadcastProgress] = useState(-1); // -1 = idle, 0 to 100 = active
+  const [broadcastStatus, setBroadcastStatus] = useState<"idle" | "sending" | "completed" | "failed">("idle");
+  const [broadcastLogs, setBroadcastLogs] = useState<string[]>([]);
+
+  // Automation Hub Workflows
+  const [automations, setAutomations] = useState([
+    { id: "a-1", type: "Birthday Wishes", active: true, channel: "WhatsApp", desc: "Send dynamic birthday poster + special discount voucher." },
+    { id: "a-2", type: "Anniversary Wishes", active: false, channel: "WhatsApp", desc: "Automated couple health packages promotion." },
+    { id: "a-3", type: "Follow-up Reminder", active: true, channel: "WhatsApp", desc: "Send 7 days after last consultation for chronic follow-ups." },
+    { id: "a-4", type: "Missed Appointment Alert", active: true, channel: "SMS & WhatsApp", desc: "Send 2 hours after missed appointment to prompt rescheduling." },
+    { id: "a-5", type: "Medicine Refill Alert", active: true, channel: "WhatsApp", desc: "Refill reminders for diabetic & hypertensive patients." },
+    { id: "a-6", type: "Google Review Request", active: false, channel: "WhatsApp", desc: "Send Google Review link 24 hours post-consultation." },
+    { id: "a-7", type: "Health Camp Invite", active: true, channel: "SMS", desc: "Broadcast free local diagnostic camp invites automatically." },
+    { id: "a-8", type: "Festival Greetings", active: true, channel: "WhatsApp", desc: "Automated greeting posters on major local festivals." },
+    { id: "a-9", type: "Inactive Patient Reactivation", active: false, channel: "Email", desc: "Offer checkup discounts to patients inactive for >6 months." }
+  ]);
+
+  // Templates Manager
+  const [templates, setTemplates] = useState([
+    { id: "t-1", name: "Festival Greeting Template", category: "Festival Posters", rating: 4.8, favorite: true },
+    { id: "t-2", name: "Weekly Diabetic Advisory", category: "Diabetes", rating: 4.5, favorite: false },
+    { id: "t-3", name: "Specialist Consultation Callout", category: "Doctor Promotion", rating: 4.9, favorite: true },
+    { id: "t-4", name: "Immunization & Vaccination Alert", category: "Vaccination", rating: 4.2, favorite: false },
+    { id: "t-5", name: "Seasonal Health Tips", category: "Seasonal Diseases", rating: 4.7, favorite: false }
+  ]);
+
+  // Analytics timeframe
+  const [analyticsTimeframe, setAnalyticsTimeframe] = useState<"daily" | "weekly" | "monthly">("monthly");
+
+  // Dynamic filter logic: matches allPatients
+  const filteredPatientsForSegmentation = useMemo(() => {
+    return allPatients.filter(patient => {
+      const matchAgeMin = !segmentationFilters.ageMin || (patient.age && patient.age >= parseInt(segmentationFilters.ageMin));
+      const matchAgeMax = !segmentationFilters.ageMax || (patient.age && patient.age <= parseInt(segmentationFilters.ageMax));
+      const matchGender = segmentationFilters.gender === "all" || (patient.gender && patient.gender.toLowerCase() === segmentationFilters.gender.toLowerCase());
+      
+      const matchArea = !segmentationFilters.area || (patient.area && patient.area.toLowerCase().includes(segmentationFilters.area.toLowerCase()));
+      const matchVillage = !segmentationFilters.village || (patient.village && patient.village.toLowerCase().includes(segmentationFilters.village.toLowerCase()));
+      const matchCity = !segmentationFilters.city || (patient.city && patient.city.toLowerCase().includes(segmentationFilters.city.toLowerCase()));
+      const matchPin = !segmentationFilters.pinCode || (patient.pinCode && patient.pinCode.includes(segmentationFilters.pinCode));
+      
+      const matchDisease = !segmentationFilters.disease || (patient.disease && patient.disease.toLowerCase().includes(segmentationFilters.disease.toLowerCase()));
+      const matchDiagnosis = !segmentationFilters.diagnosis || (patient.diagnosis && patient.diagnosis.toLowerCase().includes(segmentationFilters.diagnosis.toLowerCase()));
+      const matchProcedure = !segmentationFilters.procedure || (patient.procedure && patient.procedure.toLowerCase().includes(segmentationFilters.procedure.toLowerCase()));
+      const matchMedicine = !segmentationFilters.medicine || (patient.medicine && patient.medicine.toLowerCase().includes(segmentationFilters.medicine.toLowerCase()));
+      const matchDoctor = !segmentationFilters.doctor || (patient.doctor && patient.doctor.toLowerCase().includes(segmentationFilters.doctor.toLowerCase()));
+      
+      // Last visit months filter
+      let matchLastVisit = true;
+      if (segmentationFilters.lastVisitMonths) {
+        if (!patient.lastVisit) matchLastVisit = false;
+        else {
+          const monthsAgo = (new Date().getTime() - new Date(patient.lastVisit).getTime()) / (1000 * 60 * 60 * 24 * 30.4);
+          matchLastVisit = monthsAgo >= parseInt(segmentationFilters.lastVisitMonths);
+        }
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setAdvisorIsLoading(false);
-    }
+
+      // Boolean filters
+      const matchMissedFollowup = !segmentationFilters.missedFollowup || patient.missedFollowup;
+      const matchHighValue = !segmentationFilters.highValue || patient.tags?.includes("high-value") || patient.highValue;
+      const matchInactive = !segmentationFilters.inactive || patient.tags?.includes("inactive") || patient.inactive;
+      const matchNew = !segmentationFilters.newPatient || patient.tags?.includes("new") || patient.newPatient;
+      const matchBirthday = !segmentationFilters.birthdayToday || patient.birthdayToday;
+      const matchAnniversary = !segmentationFilters.anniversaryToday || patient.anniversaryToday;
+      const matchPregnant = !segmentationFilters.pregnant || patient.gender?.toLowerCase() === "female" && (patient.pregnant || patient.tags?.includes("pregnant"));
+      const matchSenior = !segmentationFilters.seniorCitizen || (patient.age && patient.age >= 60);
+      const matchChild = !segmentationFilters.child || (patient.age && patient.age <= 12);
+      
+      const matchCustomTag = !segmentationFilters.customTag || patient.tags?.includes(segmentationFilters.customTag.toLowerCase());
+
+      if (segmentationFilters.logicMode === "AND") {
+        return matchAgeMin && matchAgeMax && matchGender && matchArea && matchVillage && matchCity && matchPin &&
+               matchDisease && matchDiagnosis && matchProcedure && matchMedicine && matchDoctor && matchLastVisit &&
+               matchMissedFollowup && matchHighValue && matchInactive && matchNew && matchBirthday && matchAnniversary &&
+               matchPregnant && matchSenior && matchChild && matchCustomTag;
+      } else {
+        // OR Logic
+        return matchAgeMin || matchAgeMax || (segmentationFilters.gender !== "all" && matchGender) || matchArea || 
+               matchVillage || matchCity || matchPin || matchDisease || matchDiagnosis || matchProcedure || 
+               matchMedicine || matchDoctor || (segmentationFilters.lastVisitMonths && matchLastVisit) ||
+               (segmentationFilters.missedFollowup && matchMissedFollowup) || (segmentationFilters.highValue && matchHighValue) ||
+               (segmentationFilters.inactive && matchInactive) || (segmentationFilters.newPatient && matchNew) ||
+               (segmentationFilters.birthdayToday && matchBirthday) || (segmentationFilters.anniversaryToday && matchAnniversary) ||
+               (segmentationFilters.pregnant && matchPregnant) || (segmentationFilters.seniorCitizen && matchSenior) ||
+               (segmentationFilters.child && matchChild) || (segmentationFilters.customTag && matchCustomTag);
+      }
+    });
+  }, [allPatients, segmentationFilters]);
+
+  // Global Search filter
+  const globalFilteredCampaigns = useMemo(() => {
+    if (!globalSearch) return campaigns;
+    const s = globalSearch.toLowerCase();
+    return campaigns.filter(c => 
+      c.name.toLowerCase().includes(s) || 
+      c.type.toLowerCase().includes(s) || 
+      c.status.toLowerCase().includes(s)
+    );
+  }, [campaigns, globalSearch]);
+
+  // ----------------------------------------------------
+  // ACTION HANDLERS
+  // ----------------------------------------------------
+
+  const generateAIContent = () => {
+    if (!aiGenerator.prompt) return;
+    setAiGenerator(prev => ({ ...prev, generating: true }));
+    
+    // Simulate generation
+    setTimeout(() => {
+      const languageSuffix = aiGenerator.language === "Marathi" ? " (मराठीत)" : aiGenerator.language === "Hindi" ? " (हिंदी में)" : aiGenerator.language === "Mixed Language" ? " (Hinglish mix)" : "";
+      const tonePrefix = `[Tone: ${aiGenerator.tone}] `;
+      
+      setAiGenerator(prev => ({
+        ...prev,
+        generating: false,
+        resultHeadline: `${tonePrefix}Attention All Patients! Health is Wealth${languageSuffix}`,
+        resultCaption: `Take control of your wellness with our weekly diagnostics camp. Check details inside.${languageSuffix}`,
+        resultWhatsApp: `Hello *Patient*, 🩺\n\nHope you are doing well. ${tonePrefix}CareBridge Clinic is hosting a Health Checkup Camp this Sunday. Enjoy specialized consultant guidance.\n\n👉 *Book here:* https://carebridge.in/camp\n\nStay Healthy!${languageSuffix}`,
+        resultSMS: `CareBridge: Special Health camp this Sunday. ${tonePrefix}Consult our top doctors. Book slot: https://cb.in/sc - CareBridge Clinic`,
+        resultEmail: `Subject: Invitation to CareBridge Health & Wellness Checkup Camp\n\nDear Patient,\n\nWe hope this email finds you in good health. We are pleased to announce our clinic's wellness camp scheduled for this weekend. Our specialized care advisors will be available.\n\nRegards,\nCareBridge Team`,
+        resultPosterText: `FREE HEALTH CAMP\nSunday, 10AM - 4PM\nSpecialist Consultations Inside`,
+        resultSocial: `Prioritize your wellbeing today! Join us for the upcoming diagnostic camp. ${tonePrefix}#HealthFirst`,
+        resultHashtags: "#healthcare #cliniccamp #carebridge #healthyindia",
+        resultCTA: "Book Appointment Now"
+      }));
+    }, 1500);
   };
 
-  // 7. PRESET TEMPLATE LIBRARY
-  const templatePresets = [
-    { title: "World Heart Care Day Greeting", type: "Health Awareness Days", topic: "Keep your cardiovascular vitals balanced with light daily routines.", accent: "from-red-600 to-rose-950" },
-    { title: "Diwali Festival Warm Wishes", type: "Festival Greetings", topic: "Wishing you an abundance of health and sweet balanced moments.", accent: "from-amber-500 to-orange-850" },
-    { title: "Monsoon Health Protection Hub", type: "Seasonal Health Posters", topic: "Protect your children from mosquito vector transmissions and water toxins.", accent: "from-blue-600 to-indigo-950" },
-    { title: "Free General Health Camp Alert", type: "Clinic Promotion", topic: "Comprehensive check-up diagnostic slots available this Sunday at the clinic.", accent: "from-emerald-600 to-teal-950" }
-  ];
+  const handleCreateCampaignFromWizard = () => {
+    const newCamp = {
+      id: `c-${Date.now()}`,
+      name: campaignBuilder.name || "AI Suggested Campaign",
+      type: campaignBuilder.channel,
+      status: campaignBuilder.scheduleType === "Immediate" ? "Completed" : "Scheduled",
+      createdDate: new Date().toISOString().split('T')[0],
+      reach: filteredPatientsForSegmentation.length || Math.floor(Math.random() * 1500) + 100,
+      clicks: 0,
+      appointments: 0,
+      revenue: 0,
+      roi: "0%",
+      channel: campaignBuilder.channel.includes("WhatsApp") ? "WhatsApp" : campaignBuilder.channel.includes("SMS") ? "SMS" : "Email"
+    };
 
-  const handleApplyTemplate = (tpl: any) => {
-    setPosterTopic(tpl.title);
-    setPosterType(tpl.type);
-    setPosterCopy(prev => ({
-      ...prev,
-      headline: tpl.title.toUpperCase(),
-      content: tpl.topic,
-      accent: tpl.accent
+    setCampaigns([newCamp, ...campaigns]);
+    setCampaignBuilder(prev => ({ ...prev, step: 1, name: "" }));
+    setActiveTab("dashboard");
+  };
+
+  const toggleCampaignStatus = (id: string) => {
+    setCampaigns(campaigns.map(c => {
+      if (c.id === id) {
+        return { ...c, status: c.status === "Running" ? "Paused" : c.status === "Paused" ? "Running" : c.status };
+      }
+      return c;
     }));
-    setActiveTab("poster_studio");
-    showNotification(`Loaded template: "${tpl.title}" directly to Poster Studio!`);
   };
 
-  // Recharts Dynamic Activity Trends System
-  const [trendFrequency, setTrendFrequency] = useState<"daily" | "weekly" | "monthly">("monthly");
+  const deleteCampaign = (id: string) => {
+    setCampaigns(campaigns.filter(c => c.id !== id));
+  };
 
-  const trendChartData = useMemo(() => {
-    if (trendFrequency === "daily") {
-      return [
-        { name: "Mon", posters: 1, images: 0, whatsapp: 3, camps: 0 },
-        { name: "Tue", posters: 2, images: 1, whatsapp: 5, camps: 0 },
-        { name: "Wed", posters: 0, images: 2, whatsapp: 4, camps: 1 },
-        { name: "Thu", posters: 3, images: 1, whatsapp: 7, camps: 1 },
-        { name: "Fri", posters: 1, images: 3, whatsapp: 6, camps: 0 },
-        { name: "Sat", posters: 4, images: 2, whatsapp: 11, camps: 2 },
-        { name: "Sun", posters: 2, images: 1, whatsapp: 5, camps: 1 }
-      ];
-    } else if (trendFrequency === "weekly") {
-      return [
-        { name: "Week 1", posters: 3, images: 2, whatsapp: 8, camps: 1 },
-        { name: "Week 2", posters: 4, images: 5, whatsapp: 12, camps: 2 },
-        { name: "Week 3", posters: 6, images: 3, whatsapp: 10, camps: 1 },
-        { name: "Week 4", posters: 8, images: 6, whatsapp: 18, camps: 3 }
-      ];
-    } else {
-      return [
-        { name: "Jan", posters: 4, images: 3, whatsapp: 12, camps: 1 },
-        { name: "Feb", posters: 5, images: 6, whatsapp: 15, camps: 2 },
-        { name: "Mar", posters: 8, images: 5, whatsapp: 18, camps: 1 },
-        { name: "Apr", posters: 10, images: 8, whatsapp: 24, camps: 3 },
-        { name: "May", posters: 12, images: 10, whatsapp: 30, camps: 2 },
-        { name: "Jun", posters: 16, images: 12, whatsapp: 38, camps: 4 }
-      ];
+  const duplicateCampaign = (id: string) => {
+    const target = campaigns.find(c => c.id === id);
+    if (target) {
+      setCampaigns([{
+        ...target,
+        id: `c-${Date.now()}`,
+        name: `${target.name} (Copy)`,
+        createdDate: new Date().toISOString().split('T')[0]
+      }, ...campaigns]);
     }
-  }, [trendFrequency]);
-
-  const engagementConversionData = [
-    { name: "Posters", views: 240, clicks: 145 },
-    { name: "Images", views: 180, clicks: 112 },
-    { name: "WhatsApp", views: 420, clicks: 310 },
-    { name: "Social Copy", views: 320, clicks: 198 }
-  ];
-
-  const patientDemographics = [
-    { name: "All Patient Base", value: metrics.total || 100 },
-    { name: "Diabetes Patients", value: metrics.diabetesCount || 20 },
-    { name: "BP Patients", value: metrics.hypertensionCount || 30 },
-    { name: "Senior Citizens", value: metrics.seniorCitizens || 15 }
-  ];
-
-  const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
-
-  // Custom clipboard text copy helper
-  const handleCopyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    showNotification("Copied text template safely to your clipboard!");
   };
+
+  const startBroadcast = () => {
+    if (!broadcastForm.name) {
+      alert("Please enter a campaign name");
+      return;
+    }
+    setBroadcastLogs([]);
+    setBroadcastStatus("sending");
+    setBroadcastProgress(0);
+
+    const targetAudience = broadcastForm.selectedAudienceId 
+      ? savedAudiences.find(a => a.id === broadcastForm.selectedAudienceId)?.name 
+      : "Filtered Dynamic Segment";
+
+    let logs = [
+      `Initializing broadcast: ${broadcastForm.name}`,
+      `Selected channel: ${broadcastForm.channel}`,
+      `Targeting group: ${targetAudience}`,
+      `Resolving audience details...`
+    ];
+    setBroadcastLogs([...logs]);
+
+    // Simulate sending batch
+    let current = 0;
+    const interval = setInterval(() => {
+      current += 20;
+      setBroadcastProgress(current);
+      
+      if (current === 20) {
+        logs.push(`Found ${filteredPatientsForSegmentation.length || 150} eligible patients.`);
+        logs.push(`Connecting to gateway... Secure link established.`);
+      } else if (current === 60) {
+        logs.push(`Sending messages: 50% processed...`);
+      } else if (current === 100) {
+        logs.push(`Broadcast finished! 100% of messages successfully dispatched.`);
+        setBroadcastStatus("completed");
+        clearInterval(interval);
+      }
+      setBroadcastLogs([...logs]);
+    }, 800);
+  };
+
+  const saveAudienceSegment = () => {
+    if (!saveAudienceName) return;
+    const newAudience = {
+      id: `aud-${Date.now()}`,
+      name: saveAudienceName,
+      count: filteredPatientsForSegmentation.length,
+      disease: segmentationFilters.disease || "All Specialities",
+      minAge: segmentationFilters.ageMin ? parseInt(segmentationFilters.ageMin) : 0
+    };
+    setSavedAudiences([...savedAudiences, newAudience]);
+    setSaveAudienceName("");
+    alert("Audience Segment Saved Successfully!");
+  };
+
+  // Mock charts data
+  const chartsData = useMemo(() => {
+    return [
+      { name: "Jan", campaigns: 3, reach: 2400, clicks: 350, revenue: 18000, appointments: 42 },
+      { name: "Feb", campaigns: 5, reach: 4500, clicks: 810, revenue: 32000, appointments: 85 },
+      { name: "Mar", campaigns: 4, reach: 3800, clicks: 620, revenue: 27000, appointments: 68 },
+      { name: "Apr", campaigns: 7, reach: 6800, clicks: 1250, revenue: 54000, appointments: 130 },
+      { name: "May", campaigns: 8, reach: 8900, clicks: 1980, revenue: 84000, appointments: 195 },
+      { name: "Jun", campaigns: 6, reach: 7200, clicks: 1420, revenue: 68000, appointments: 154 },
+      { name: "Jul", campaigns: 10, reach: 11200, clicks: 2850, revenue: 115000, appointments: 275 }
+    ];
+  }, []);
+
+  // Disease wise campaign distribution data
+  const diseaseBreakdownData = [
+    { name: "Diabetes", value: 38, color: "#0d9488" },
+    { name: "Hypertension", value: 24, color: "#4f46e5" },
+    { name: "Dental", value: 18, color: "#e11d48" },
+    { name: "Skin & Cosmetics", value: 12, color: "#d97706" },
+    { name: "Others", value: 8, color: "#64748b" }
+  ];
 
   return (
-    <div className="font-sans min-h-[750px] bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 p-1 md:p-4 rounded-3xl border border-slate-150 dark:border-slate-800 shadow-sm">
+    <div className={`w-full min-h-screen ${darkMode ? "dark bg-[#0f172a]" : "bg-[#f8fafc]"} text-slate-800 dark:text-slate-105 font-sans transition-colors duration-300`}>
       
-      {/* Top Banner Notifications */}
-      <AnimatePresence>
-        {successBanner && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-6 right-6 z-50 bg-[#005f73] text-white py-3 px-6 rounded-2xl shadow-xl border border-teal-500/30 flex items-center gap-2"
-          >
-            <Sparkles size={18} className="text-yellow-300 animate-pulse" />
-            <span className="text-xs font-bold uppercase tracking-wider">{successBanner}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Main Container Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        
-        {/* LEFT WORKSPACE NAVIGATION BLOCK */}
-        <div className="col-span-1 lg:col-span-3 flex flex-col gap-2">
-          
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 p-5 rounded-3xl mb-1 shadow-sm">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="bg-[#005f73]/10 dark:bg-teal-500/10 p-2 rounded-2xl">
-                <Sparkles className="text-[#005f73] dark:text-teal-400" size={24} />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-900 dark:text-slate-50 uppercase tracking-tight">Smart Marketing AI</h3>
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Suite v4.2 ERP-Ready</span>
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-400">
-              Generate healthcare posters, wellness visuals, WhatsApp announcements, and campaign schedules with clinical intelligence.
-            </p>
+      {/* Top Global Search & Stats Hub Banner */}
+      <div className="border-b border-slate-200/60 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md sticky top-0 z-30 px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="p-2 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 rounded-xl">
+            <Megaphone className="w-6 h-6 animate-pulse" />
           </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 p-2 rounded-3xl shadow-sm flex flex-col gap-1">
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-extrabold uppercase transition-all duration-250 ${
-                activeTab === "dashboard"
-                  ? "bg-[#005f73] text-white shadow-md shadow-teal-900/10"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <LayoutGrid size={16} />
-                <span>Dashboard Hub</span>
-              </div>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold">Main</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("poster_studio")}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-extrabold uppercase transition-all duration-250 ${
-                activeTab === "poster_studio"
-                  ? "bg-[#005f73] text-white shadow-md shadow-teal-900/10"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <ImageIcon size={16} />
-                <span>AI Poster Creator</span>
-              </div>
-              <Sparkles size={12} className="text-teal-400" />
-            </button>
-
-            <button
-              onClick={() => setActiveTab("image_studio")}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-extrabold uppercase transition-all duration-250 ${
-                activeTab === "image_studio"
-                  ? "bg-[#005f73] text-white shadow-md shadow-teal-900/10"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Activity size={16} />
-                <span>AI Image Creator</span>
-              </div>
-              <span className="text-[9px] px-1 bg-yellow-500/10 text-yellow-500 rounded-md">New</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("whatsapp_studio")}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-extrabold uppercase transition-all duration-250 ${
-                activeTab === "whatsapp_studio"
-                  ? "bg-[#005f73] text-white shadow-md shadow-teal-900/10"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Smartphone size={16} />
-                <span>AI WhatsApp Studio</span>
-              </div>
-              <span className="text-[10px] px-1 bg-teal-500/10 text-teal-400 font-extrabold">{metrics.total}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("campaign_studio")}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-extrabold uppercase transition-all duration-250 ${
-                activeTab === "campaign_studio"
-                  ? "bg-[#005f73] text-white shadow-md shadow-teal-900/10"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Volume2 size={16} />
-                <span>Campaign Creator</span>
-              </div>
-              <Globe size={13} className="text-[#005f73]" />
-            </button>
-
-            <button
-              onClick={() => setActiveTab("scheduler")}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-extrabold uppercase transition-all duration-250 ${
-                activeTab === "scheduler"
-                  ? "bg-[#005f73] text-white shadow-md shadow-teal-900/10"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <CalendarRange size={16} />
-                <span>Scheduler Queue</span>
-              </div>
-              <span className="text-[10px] px-1.5 bg-indigo-500/10 text-indigo-400 rounded-md font-bold">{metrics.scheduled}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("templates")}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-extrabold uppercase transition-all duration-250 ${
-                activeTab === "templates"
-                  ? "bg-[#005f73] text-white shadow-md shadow-teal-900/10"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <ListTodo size={16} />
-                <span>Template Library</span>
-              </div>
-              <Heart size={13} className="text-red-500 animate-pulse" />
-            </button>
-
-            <button
-              onClick={() => setActiveTab("advisor")}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-extrabold uppercase transition-all duration-250 ${
-                activeTab === "advisor"
-                  ? "bg-[#005f73] text-white shadow-md shadow-teal-900/10"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Award size={16} />
-                <span>AI Growth Advisor</span>
-              </div>
-              <Sparkles size={12} className="text-teal-400" />
-            </button>
-
-            <button
-              onClick={() => setActiveTab("analytics")}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-extrabold uppercase transition-all duration-250 ${
-                activeTab === "analytics"
-                  ? "bg-[#005f73] text-white shadow-md shadow-teal-900/10"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <BarChart3 size={16} />
-                <span>Analytics & Logs</span>
-              </div>
-              <TrendingUp size={13} className="text-green-500" />
-            </button>
-          </div>
-
-          <div className="hidden lg:block bg-slate-900 dark:bg-slate-920 text-white p-5 rounded-3xl border border-slate-800/80 mt-1 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
-              <span className="text-[10px] font-black uppercase tracking-wider text-green-400">Clinic Branding Integration</span>
-            </div>
-            <div className="text-[11px] space-y-1.5 opacity-80">
-              <p>📍 <strong className="text-white">Facility:</strong> {resolvedClinicName}</p>
-              <p>👤 <strong className="text-white">Director:</strong> {resolvedDoctorName}</p>
-              <p>📱 <strong className="text-white">Contact No:</strong> {resolvedContact}</p>
-              <p>🌐 <strong className="text-white">Speciality:</strong> {resolvedSpeciality}</p>
-            </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-teal-505 bg-clip-text text-transparent">
+              Clinic Marketing CRM & Outreach
+            </h1>
+            <p className="text-xs text-slate-400 font-medium">Enterprise Health campaigns, AI posters, and conversion analytics</p>
           </div>
         </div>
 
-        {/* RIGHT WORKSPACE STUDIO STAGE */}
-        <div className="col-span-1 lg:col-span-9 flex flex-col gap-6">
-          
-          {/* Global Multi-Language Studio Switcher Bar */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Globe size={18} className="text-[#005f73] animate-pulse" />
-              <div>
-                <span className="text-[10px] text-slate-400 font-extrabold uppercase block leading-none">Global Localization Studio</span>
-                <span className="text-xs font-black text-slate-900 dark:text-slate-50 uppercase tracking-tight">Active Preview Translation</span>
-              </div>
-            </div>
-            
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200/20">
-              <button
-                onClick={() => {
-                  setSelectedLanguage("english");
-                  showNotification("Studio displays switched to English.");
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-150 ${
-                  selectedLanguage === "english" 
-                    ? "bg-[#005f73] text-white shadow-sm" 
-                    : "text-slate-600 dark:text-slate-350 hover:bg-slate-200/50"
-                }`}
-              >
-                <span>🇬🇧 ENG</span>
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedLanguage("marathi");
-                  showNotification("Studio displays switched to Marathi (मराठी).");
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-150 ${
-                  selectedLanguage === "marathi" 
-                    ? "bg-[#005f73] text-white shadow-sm" 
-                    : "text-slate-600 dark:text-slate-350 hover:bg-slate-200/50"
-                }`}
-              >
-                <span>🇮🇳 MAR (मराठी)</span>
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedLanguage("hindi");
-                  showNotification("Studio displays switched to Hindi (हिंदी).");
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-150 ${
-                  selectedLanguage === "hindi" 
-                    ? "bg-[#005f73] text-white shadow-sm" 
-                    : "text-slate-600 dark:text-slate-350 hover:bg-slate-200/50"
-                }`}
-              >
-                <span>🇮🇳 HIN (हिंदी)</span>
-              </button>
-            </div>
+        {/* Global Search and Role selection */}
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search campaigns, templates..." 
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-202 dark:border-slate-700/60 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+            />
           </div>
 
-          <AnimatePresence mode="wait">
+          {/* Role selection indicator to demo access rights */}
+          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+            <span className="text-[10px] uppercase font-bold text-slate-400 px-2">Role:</span>
+            <select 
+              value={currentUserRole}
+              onChange={(e) => setCurrentUserRole(e.target.value as any)}
+              className="bg-white dark:bg-slate-900 text-xs font-bold py-1 px-2.5 rounded-lg border-none focus:ring-1 focus:ring-indigo-500/20"
+            >
+              <option value="Admin">Admin</option>
+              <option value="Receptionist">Receptionist</option>
+              <option value="Marketing Manager">Marketing Manager</option>
+              <option value="Doctor">Doctor</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex h-[calc(100vh-5.5rem)]">
+        
+        {/* Left Sidebar Menu */}
+        <aside className="w-64 border-r border-slate-202/60 dark:border-slate-800 bg-white dark:bg-slate-900/40 py-6 shrink-0 flex flex-col justify-between hidden lg:flex">
+          <div className="px-4 space-y-1.5 flex-1 overflow-y-auto">
             
-            {/* 1. SMART MARKETING DASHBOARD */}
-            {activeTab === "dashboard" && (
-              <motion.div
-                key="dashboard"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="space-y-6"
+            {[
+              { id: "dashboard", label: "Today's Summary", icon: LayoutGrid },
+              { id: "segmentation", label: "Audience Segments", icon: Users },
+              { id: "campaign_builder", label: "Campaign Studio", icon: PenTool },
+              { id: "poster_studio", label: "Poster & Design", icon: ImageIcon },
+              { id: "whatsapp_creator", label: "WhatsApp Status Studio", icon: MessageSquare },
+              { id: "broadcast", label: "Outbox Broadcast", icon: Send },
+              { id: "automation", label: "Automation Rules", icon: Zap },
+              { id: "templates", label: "Template Library", icon: FileText },
+              { id: "analytics", label: "Insights & Reports", icon: BarChart3 },
+              { id: "notifications", label: "System Alerts", icon: ShieldAlert, badge: notifications.filter(n => !n.read).length }
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id as CRMTab);
+                  setSelectedCampaignId(null);
+                }}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                  activeTab === item.id 
+                    ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-600/10" 
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-indigo-600 dark:hover:text-white"
+                }`}
               >
-                {/* Dashboard KPIs Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-4 rounded-3xl shadow-sm text-center">
-                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-extrabold uppercase">Campaigns</span>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-slate-50 mt-1">{metrics.totalCampaigns}</h2>
-                    <span className="text-[9px] text-[#005f73] font-bold uppercase mt-1 block">Active Outreach</span>
-                  </div>
-                  
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-4 rounded-3xl shadow-sm text-center">
-                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-extrabold uppercase">Posters & Images</span>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-slate-50 mt-1">{metrics.postersGenerated + metrics.imagesGenerated}</h2>
-                    <span className="text-[9px] text-teal-500 font-bold uppercase mt-1 block">Visual Assets</span>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-4 rounded-3xl shadow-sm text-center">
-                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-extrabold uppercase">WhatsApp Broadcasts</span>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-slate-50 mt-1">{metrics.broadcastsSent}</h2>
-                    <span className="text-[9px] text-green-500 font-bold uppercase mt-1 block">Delivered</span>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-4 rounded-3xl shadow-sm text-center">
-                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-extrabold uppercase">Scheduler Q</span>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-slate-50 mt-1">{metrics.scheduled}</h2>
-                    <span className="text-[9px] text-indigo-500 font-bold uppercase mt-1 block">Pending Launch</span>
-                  </div>
+                <div className="flex items-center gap-3">
+                  <item.icon className="w-4 h-4 shrink-0" />
+                  <span>{item.label}</span>
                 </div>
+                {item.badge ? (
+                  <span className="px-2 py-0.5 bg-rose-500 text-white rounded-full text-[9px] font-black">{item.badge}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
 
-                {/* Dashboard Core Content - Quick Actions */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 p-6 rounded-3xl shadow-sm space-y-4">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-50 flex items-center gap-2">
-                    <Sparkles size={16} className="text-teal-500" />
-                    Quick Marketing Launchpads
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div 
-                      onClick={() => setActiveTab("poster_studio")}
-                      className="cursor-pointer group flex flex-col justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-150 dark:border-slate-700/50 hover:border-teal-500 hover:shadow-md transition-all duration-200"
-                    >
-                      <div className="space-y-1">
-                        <div className="w-10 h-10 bg-teal-500/10 rounded-2xl flex items-center justify-center text-teal-400 mb-2">
-                          <ImageIcon size={20} />
-                        </div>
-                        <h4 className="text-xs font-black uppercase text-slate-900 dark:text-slate-100 group-hover:text-teal-400 transition-colors">Create Poster</h4>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-400">Generate high-converting square healthcare graphics in seconds with AI.</p>
-                      </div>
-                      <ChevronRight size={16} className="mt-4 text-slate-400 group-hover:text-teal-400 self-end" />
-                    </div>
+          {/* Credits remaining indicator */}
+          <div className="px-6 py-4">
+            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between text-xs font-bold mb-1.5">
+                <span className="text-slate-400 uppercase tracking-wider text-[9px]">API Wallet Balance</span>
+                <span className="text-indigo-600 dark:text-indigo-400">4,120 Cr</span>
+              </div>
+              <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                <div className="bg-indigo-600 h-full w-[45%]" />
+              </div>
+            </div>
+          </div>
+        </aside>
 
-                    <div 
-                      onClick={() => setActiveTab("image_studio")}
-                      className="cursor-pointer group flex flex-col justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-150 dark:border-slate-700/50 hover:border-teal-500 hover:shadow-md transition-all duration-200"
-                    >
-                      <div className="space-y-1">
-                        <div className="w-10 h-10 bg-yellow-500/10 rounded-2xl flex items-center justify-center text-yellow-500 mb-2">
-                          <Activity size={20} />
-                        </div>
-                        <h4 className="text-xs font-black uppercase text-slate-900 dark:text-slate-100 group-hover:text-yellow-500 transition-colors">Create Image</h4>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-400">Generate professional prompt visual references for wellness campaigns.</p>
-                      </div>
-                      <ChevronRight size={16} className="mt-4 text-slate-400 group-hover:text-yellow-500 self-end" />
-                    </div>
-
-                    <div 
-                      onClick={() => setActiveTab("whatsapp_studio")}
-                      className="cursor-pointer group flex flex-col justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-150 dark:border-slate-700/50 hover:border-teal-500 hover:shadow-md transition-all duration-200"
-                    >
-                      <div className="space-y-1">
-                        <div className="w-10 h-10 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-400 mb-2">
-                          <Smartphone size={20} />
-                        </div>
-                        <h4 className="text-xs font-black uppercase text-slate-900 dark:text-slate-100 group-hover:text-green-400 transition-colors">Create WhatsApp Msg</h4>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-400">Draft appointment, recall, or campaign messages instantly.</p>
-                      </div>
-                      <ChevronRight size={16} className="mt-4 text-slate-400 group-hover:text-green-400 self-end" />
-                    </div>
-
-                    <div 
-                      onClick={() => { setCampaignTopic("Diabetes Awareness Camp"); setActiveTab("campaign_studio"); }}
-                      className="cursor-pointer group flex flex-col justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-150 dark:border-slate-700/50 hover:border-teal-500 hover:shadow-md transition-all duration-200"
-                    >
-                      <div className="space-y-1">
-                        <div className="w-10 h-10 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-400 mb-2">
-                          <Volume2 size={20} />
-                        </div>
-                        <h4 className="text-xs font-black uppercase text-slate-900 dark:text-slate-100 group-hover:text-indigo-400 transition-colors">Launch Health Campaign</h4>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-400">Automate multi-channel wellness schedules with a unique theme.</p>
-                      </div>
-                      <ChevronRight size={16} className="mt-4 text-slate-400 group-hover:text-indigo-400 self-end" />
-                    </div>
-
-                    <div 
-                      onClick={() => setActiveTab("templates")}
-                      className="cursor-pointer group flex flex-col justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-150 dark:border-slate-700/50 hover:border-teal-500 hover:shadow-md transition-all duration-200"
-                    >
-                      <div className="space-y-1">
-                        <div className="w-10 h-10 bg-[#005f73]/10 rounded-2xl flex items-center justify-center text-[#005f73] mb-2">
-                          <Heart size={20} />
-                        </div>
-                        <h4 className="text-xs font-black uppercase text-slate-900 dark:text-slate-100 group-hover:text-teal-400 transition-colors">Create Festival Campaign</h4>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-400">Utilize readymade templates to wish patient base on holidays.</p>
-                      </div>
-                      <ChevronRight size={16} className="mt-4 text-slate-400 group-hover:text-teal-400 self-end" />
-                    </div>
-
-                    <div 
-                      onClick={() => setActiveTab("advisor")}
-                      className="cursor-pointer group flex flex-col justify-between p-4 bg-[#005f73]/10 dark:bg-teal-950/20 rounded-3xl border border-dashed border-teal-500/30 hover:border-teal-400 hover:shadow-md transition-all duration-200"
-                    >
-                      <div className="space-y-1">
-                        <div className="w-10 h-10 bg-teal-500/20 rounded-2xl flex items-center justify-center text-teal-400 mb-2">
-                          <Sparkles size={20} />
-                        </div>
-                        <h4 className="text-xs font-black uppercase text-[#005f73] dark:text-teal-400 transition-colors">Growth Advisor AI</h4>
-                        <p className="text-[11px] text-[#005f73]/80 dark:text-teal-300/80">Retrieve custom local patient retention campaign insights.</p>
-                      </div>
-                      <ChevronRight size={16} className="mt-4 text-teal-400 self-end" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Patient Database Highlights in CRM */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-3">
-                    <h4 className="text-xs font-black text-slate-900 dark:text-slate-50 uppercase tracking-tight flex items-center gap-2">
-                      <Users size={16} className="text-teal-500" />
-                      Target Patient Database
-                    </h4>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-400 uppercase">
-                      Segment counts filtered for immediate campaign triggers:
-                    </p>
-                    <div className="grid grid-cols-2 gap-3 text-xs font-bold uppercase">
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200/40">
-                        <span className="text-[9px] text-slate-400">Total Patients</span>
-                        <span className="text-md font-black text-slate-800 dark:text-slate-50 block mt-1">{metrics.total}</span>
-                      </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200/40">
-                        <span className="text-[9px] text-slate-400">Senior Citizens</span>
-                        <span className="text-md font-black text-slate-800 dark:text-slate-50 block mt-1">{metrics.seniorCitizens}</span>
-                      </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200/40">
-                        <span className="text-[9px] text-slate-400">Diabetes Patients</span>
-                        <span className="text-md font-black text-slate-800 dark:text-slate-50 block mt-1">{metrics.diabetesCount}</span>
-                      </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200/40">
-                        <span className="text-[9px] text-slate-400">BP / Hypertension</span>
-                        <span className="text-md font-black text-slate-800 dark:text-slate-50 block mt-1">{metrics.hypertensionCount}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-900 text-white p-6 rounded-3xl border border-slate-800 shadow-xl flex flex-col justify-between">
-                    <div className="space-y-2">
-                      <span className="text-[10px] font-black uppercase text-teal-400 tracking-wider">Dynamic Growth Insight</span>
-                      <h3 className="text-base font-extrabold text-slate-50">Local Campaign Target: High Alert</h3>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Based on your patient diagnostics, <strong className="text-white">{metrics.diabetesCount} patients suffer from elevated glycemic metrics</strong>, and <strong className="text-white">{metrics.hypertensionCount} suffer Hypertension</strong>. Leverage AI Poster and WhatsApp message Studios to coordinate an Early Screening Checkup Camp before World Diabetes Day or seasonal events.
-                      </p>
-                    </div>
-                    <button 
-                      onClick={() => { setCampaignTopic("Weekend Hypertension Care Camp"); setActiveTab("campaign_studio"); }}
-                      className="mt-4 w-full bg-teal-500 hover:bg-teal-600 text-white font-extrabold uppercase text-[10px] tracking-wider py-2.5 rounded-2xl transition-colors duration-200"
-                    >
-                      Pre-plan Camp Now
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* 2. AI POSTER CREATOR */}
-            {activeTab === "poster_studio" && (
-              <motion.div
-                key="poster_studio"
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                className="grid grid-cols-1 lg:grid-cols-12 gap-5"
+        {/* Main Panel Content Area */}
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-50/50 dark:bg-slate-900/10">
+          
+          {/* Notifications banner if credits are low */}
+          {notifications.some(n => n.type === "warning" && !n.read) && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6 flex items-start gap-3 text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+              <div className="flex-1 text-xs">
+                <span className="font-bold">System Warning: </span>
+                Your communication API portal has low credits. Automated follow-up messages may pause once credit levels touch zero.
+              </div>
+              <button 
+                onClick={() => setNotifications(notifications.map(n => n.type === "warning" ? { ...n, read: true } : n))}
+                className="text-xs underline font-bold"
               >
-                {/* Visual Settings Panel (Left) */}
-                <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-5 rounded-3xl shadow-sm space-y-4">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-50 flex items-center gap-1.5">
-                    <ImageIcon size={16} className="text-teal-500" />
-                    Poster Studio Config
-                  </h3>
+                Dismiss
+              </button>
+            </div>
+          )}
 
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 block mb-1.5">Campaign Topic</label>
-                      <input 
-                        type="text" 
-                        value={posterTopic} 
-                        onChange={(e) => setPosterTopic(e.target.value)}
-                        placeholder="e.g. Free Blood Sugar Control"
-                        className="w-full text-xs font-semibold px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-150 p-2 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                      />
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {[
-                          "Blood Sugar Checkup Camp",
-                          "Malaria Prevention Alert",
-                          "Cardiac Wellness Screening",
-                          "Childhood Vaccination Reminder"
-                        ].map((chip) => (
-                          <button
-                            key={chip}
-                            type="button"
-                            onClick={() => {
-                              setPosterTopic(chip);
-                              showNotification(`Selected: "${chip}"`);
-                            }}
-                            className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[8px] font-black uppercase tracking-wider py-0.5 px-2 rounded-md text-slate-500"
-                          >
-                            + {chip}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 block mb-1.5">Poster Category</label>
-                      <select 
-                        value={posterType} 
-                        onChange={(e) => setPosterType(e.target.value)}
-                        className="w-full text-xs font-semibold px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-150 p-2 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                      >
-                        <option>Health Awareness Posters</option>
-                        <option>Seasonal Health Posters</option>
-                        <option>Festival Greetings</option>
-                        <option>Clinic Promotion</option>
-                        <option>Health Camp Promotion</option>
-                        <option>Vaccination Campaign</option>
-                        <option>Doctor Introduction</option>
-                        <option>New Service Launch</option>
-                        <option>Special Offer Announcement</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 block mb-1.5">Poster Color Style</label>
-                      <select 
-                        value={posterStyle} 
-                        onChange={(e) => setPosterStyle(e.target.value)}
-                        className="w-full text-xs font-semibold px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-150 p-2 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                      >
-                        <option>Modern Medical Teal</option>
-                        <option>Deep Space Slate</option>
-                        <option>Emergency Red Alert</option>
-                        <option>Clinical Comfort Blue</option>
-                        <option>Ayurvedic Forest Green</option>
-                      </select>
-                    </div>
-
-                    <div className="pt-2">
-                      <button
-                        onClick={handleGeneratePoster}
-                        disabled={posterIsLoading}
-                        className="w-full bg-[#005f73] hover:bg-[#0081a7] text-white py-3 rounded-2xl font-black uppercase text-xs tracking-wider transition-colors duration-200 flex items-center justify-center gap-2"
-                      >
-                        {posterIsLoading ? (
-                          <>
-                            <RefreshCw size={14} className="animate-spin" />
-                            <span>AI is drafting...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={14} className="text-yellow-300 animate-pulse" />
-                            <span>Generate with AI</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
+          {/* Campaign details overlay details view */}
+          {selectedCampaignId ? (
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <button 
+                  onClick={() => setSelectedCampaignId(null)}
+                  className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                >
+                  <ChevronLeft className="w-4 h-4" /> Back to Dashboard
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded-full">
+                    {campaigns.find(c => c.id === selectedCampaignId)?.type}
+                  </span>
                 </div>
+              </div>
 
-                {/* Interactive Stage & Review Studio (Right) */}
-                <div className="lg:col-span-8 space-y-4">
-                  <div className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800/80 p-3 rounded-3xl shadow-sm">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Aspect Format Selector</span>
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => setPosterFormat("square")}
-                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors ${
-                          posterFormat === "square" ? "bg-[#005f73] text-white" : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200"
-                        }`}
-                      >
-                        Square (1:1)
-                      </button>
-                      <button 
-                        onClick={() => setPosterFormat("portrait")}
-                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors ${
-                          posterFormat === "portrait" ? "bg-[#005f73] text-white" : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200"
-                        }`}
-                      >
-                        Portrait (3:4)
-                      </button>
-                      <button 
-                        onClick={() => setPosterFormat("landscape")}
-                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors ${
-                          posterFormat === "landscape" ? "bg-[#005f73] text-white" : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200"
-                        }`}
-                      >
-                        Landscape (16:9)
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Physical Digital Poster Frame */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800  p-6 rounded-3xl shadow-sm flex flex-col items-center">
-                    
-                    {/* Live styled visual stage */}
-                    <div 
-                      className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${posterCopy.accent || "from-teal-600 to-cyan-900"} text-white p-6 shadow-xl flex flex-col justify-between transition-all duration-300 ${
-                        posterFormat === "square" ? "w-full max-w-[380px] aspect-square" :
-                        posterFormat === "portrait" ? "w-full max-w-[340px] aspect-[3/4]" : "w-full aspect-[16/9]"
-                      }`}
-                    >
-                      {/* Accent Decorative Elements */}
-                      <span className="absolute top-0 right-0 w-28 h-28 bg-white/5 rounded-full blur-2xl"></span>
-                      <span className="absolute bottom-0 left-0 w-36 h-36 bg-cyan-400/10 rounded-full blur-3xl"></span>
-
-                      {/* Header bar */}
-                      <div className="flex justify-between items-start z-10 border-b border-white/10 pb-2">
-                        <div className="flex items-center gap-1.5">
-                          <Heart size={14} className="text-red-400 fill-red-400" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest">{resolvedClinicName}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-[8px] opacity-75 uppercase block tracking-wider">Clinical Guidance</span>
-                          <span className="text-[9px] font-bold">{resolvedDoctorName} ({resolvedSpeciality})</span>
-                        </div>
-                      </div>
-
-                      {/* Middle Message Text elements */}
-                      <div className="z-10 text-center my-auto px-2 space-y-2">
-                        <h2 className="text-sm font-black uppercase tracking-wide bg-gradient-to-r from-yellow-100 to-white bg-clip-text text-transparent leading-snug">
-                          {getLangValue(posterCopy.headline)}
-                        </h2>
-                        <h4 className="text-[10px] font-extrabold text-teal-300 uppercase tracking-widest leading-tight">
-                          {getLangValue(posterCopy.tagline)}
-                        </h4>
-                        <p className="text-[10px] opacity-90 leading-relaxed font-semibold max-h-[85px] overflow-hidden">
-                          {getLangValue(posterCopy.content)}
-                        </p>
-                      </div>
-
-                      {/* Poster Bottom bar */}
-                      <div className="z-10 bg-black/20 p-2.5 rounded-xl border border-white/5 text-center space-y-1.5">
-                        <span className="text-[9px] font-black bg-white text-slate-900 px-3 py-0.5 rounded-full inline-block uppercase tracking-widest">
-                          {getLangValue(posterCopy.cta)}
-                        </span>
-                        <div className="flex justify-around items-center text-[8px] opacity-90 border-t border-white/10 pt-1.5">
-                          <span>📞 {resolvedContact}</span>
-                          <span>📍 {resolvedAddress}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Editable Preview Fields (Inline) */}
-                    <div className="w-full mt-6 space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                      <div className="flex justify-between items-center">
-                        <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                          <Clipboard size={12} />
-                          Live Field Customizer ({selectedLanguage.toUpperCase()})
-                        </h4>
-                        <span className="text-[8px] bg-slate-100 dark:bg-slate-800 text-slate-500 font-extrabold px-2 py-0.5 rounded uppercase">
-                          Editing localized block
-                        </span>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-semibold">
-                        <div>
-                          <label className="text-[9px] text-[#005f73] uppercase font-black block mb-1">Headline Text ({selectedLanguage.toUpperCase()})</label>
-                          <input 
-                            type="text" 
-                            value={getLangValue(posterCopy.headline)} 
-                            onChange={(e) => {
-                              const base = typeof posterCopy.headline === "string" 
-                                ? { english: posterCopy.headline, hindi: posterCopy.headline, marathi: posterCopy.headline } 
-                                : { ...posterCopy.headline };
-                              setPosterCopy({
-                                ...posterCopy,
-                                headline: { ...base, [selectedLanguage]: e.target.value }
-                              });
-                            }}
-                            className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 rounded-xl font-bold"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[9px] text-[#005f73] uppercase font-black block mb-1">Tagline Block ({selectedLanguage.toUpperCase()})</label>
-                          <input 
-                            type="text" 
-                            value={getLangValue(posterCopy.tagline)} 
-                            onChange={(e) => {
-                              const base = typeof posterCopy.tagline === "string" 
-                                ? { english: posterCopy.tagline, hindi: posterCopy.tagline, marathi: posterCopy.tagline } 
-                                : { ...posterCopy.tagline };
-                              setPosterCopy({
-                                ...posterCopy,
-                                tagline: { ...base, [selectedLanguage]: e.target.value }
-                              });
-                            }}
-                            className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 rounded-xl font-bold"
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <label className="text-[9px] text-[#005f73] uppercase font-black block mb-1">Body Context Description ({selectedLanguage.toUpperCase()})</label>
-                          <textarea 
-                            rows={2}
-                            value={getLangValue(posterCopy.content)} 
-                            onChange={(e) => {
-                              const base = typeof posterCopy.content === "string" 
-                                ? { english: posterCopy.content, hindi: posterCopy.content, marathi: posterCopy.content } 
-                                : { ...posterCopy.content };
-                              setPosterCopy({
-                                ...posterCopy,
-                                content: { ...base, [selectedLanguage]: e.target.value }
-                              });
-                            }}
-                            className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 rounded-xl font-semibold"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Download and Save actions */}
-                      <div className="flex gap-2 pt-2 shadow-sm font-black text-xs">
-                        <button 
-                          onClick={() => {
-                            showNotification("Preparing high-resolution flyer download...");
-                          }}
-                          className="flex-1 bg-slate-900 border border-slate-800 text-white font-extrabold uppercase text-[10px] tracking-wider py-2.5 rounded-2xl hover:bg-slate-800 flex items-center justify-center gap-1.5"
-                        >
-                          <Download size={14} />
-                          Download Flyer
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setCampaignHistory(prev => [
-                              { id: `camp-${Date.now()}`, name: posterTopic, category: posterType, target: "All Guests", reach: 1, clicks: 0, sentAt: new Date().toISOString().split("T")[0], status: "Completed" },
-                              ...prev
-                            ]);
-                            showNotification("Layout saved safe inside Template Archives!");
-                          }}
-                          className="flex-1 bg-white border border-slate-200 text-slate-705 font-extrabold uppercase text-[10px] tracking-wider py-2.5 rounded-2xl hover:bg-slate-50 flex items-center justify-center gap-1.5"
-                        >
-                          <CheckCircle2 size={14} className="text-green-500" />
-                          Save Poster
-                        </button>
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* 3. AI IMAGE CREATOR */}
-            {activeTab === "image_studio" && (
-              <motion.div
-                key="image_studio"
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                className="grid grid-cols-1 lg:grid-cols-12 gap-5"
-              >
-                {/* Category & Design Panel */}
-                <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-5 rounded-3xl shadow-sm space-y-4">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-50 flex items-center gap-1.5">
-                    <Activity size={16} className="text-yellow-500" />
-                    AI Graphic Config
-                  </h3>
-
-                  <div className="space-y-4">
+              {(() => {
+                const camp = campaigns.find(c => c.id === selectedCampaignId);
+                if (!camp) return <p>Campaign not found</p>;
+                return (
+                  <div className="space-y-6">
                     <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 block mb-1.5">Medical Category</label>
-                      <select 
-                        value={imageCategory} 
-                        onChange={(e) => setImageCategory(e.target.value)}
-                        className="w-full text-xs font-semibold px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-150 p-2 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                      >
-                        <option>General Practice</option>
-                        <option>Ayurveda</option>
-                        <option>Pediatrics</option>
-                        <option>Gynecology</option>
-                        <option>Dermatology</option>
-                        <option>Physiotherapy</option>
-                        <option>Dental</option>
-                        <option>Wellness</option>
-                        <option>Health Awareness</option>
-                      </select>
+                      <h2 className="text-xl font-bold text-slate-800 dark:text-white">{camp.name}</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">Dispatched on {camp.createdDate}</p>
                     </div>
 
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 block mb-1.5">Graphic Art Style</label>
-                      <select 
-                        value={imageStyle} 
-                        onChange={(e) => setImageStyle(e.target.value)}
-                        className="w-full text-xs font-semibold px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-150 p-2 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                      >
-                        <option>Photorealistic Illustration</option>
-                        <option>Flat Vector Art</option>
-                        <option>Clinical Line Art</option>
-                        <option>Minimalist Wellness Illustration</option>
-                      </select>
-                    </div>
-
-                    <div className="pt-2">
-                      <button
-                        onClick={handleGenerateImage}
-                        disabled={imageIsLoading}
-                        className="w-full bg-[#005f73] hover:bg-[#0081a7] text-white py-3 rounded-2xl font-black uppercase text-xs tracking-wider transition-colors duration-200 flex items-center justify-center gap-2"
-                      >
-                        {imageIsLoading ? (
-                          <>
-                            <RefreshCw size={14} className="animate-spin" />
-                            <span>AI Rendering...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={14} className="text-yellow-300 animate-pulse" />
-                            <span>Generate Medical Image</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Graphics Workspace & Prompt Preview */}
-                <div className="lg:col-span-8 bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-6">
-                  
-                  {/* Generated Graphic Frame Display */}
-                  <div className="relative flex flex-col items-center bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-dashed border-slate-200">
-                    
-                    <span className="absolute top-2 left-3 text-[8px] uppercase tracking-widest font-black text-slate-400 bg-white dark:bg-slate-900 border px-2 py-0.5 rounded-full z-10 shadow-sm">
-                      AI Generated Reference Visual
-                    </span>
-
-                    <div className="relative w-full max-w-[400px] aspect-square rounded-xl overflow-hidden shadow-xl mt-4 border border-slate-150">
-                      
-                      {/* Curated Beautiful Image base seed representation */}
-                      <img 
-                        src={`https://picsum.photos/seed/med-${imageCategory.replace(/\s+/g, '-')}-${imageSeedIdx}/800/800`}
-                        alt="Medical Wellness Setup"
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover transition-all duration-300"
-                      />
-                      
-                      {/* Stylized UI overlays and branding borders */}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-5 text-white space-y-1">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-[#00a896]">{imageCategory} Specialist Hub</span>
-                        <h4 className="text-xs font-black uppercase truncate">{getLangValue(imageDetails.title)}</h4>
-                        <p className="text-[9px] opacity-80 leading-relaxed truncate">{getLangValue(imageDetails.description)}</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Estimated Reach</p>
+                        <p className="text-2xl font-black text-slate-700 dark:text-white mt-1">{camp.reach.toLocaleString()}</p>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* AI Prompt metadata */}
-                  <div className="space-y-3 pt-2">
-                    <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <Sparkles size={12} className="text-teal-400" />
-                      Dynamic Render Details Prompt
-                    </h4>
-                    
-                    <div className="bg-slate-50 dark:bg-slate-850 p-4 rounded-2xl border border-slate-150 dark:border-slate-800 space-y-2">
-                      <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300 leading-relaxed italic">
-                        "{getLangValue(imageDetails.prompt)}"
-                      </p>
-                      <div className="grid grid-cols-2 gap-3 text-[9px] font-extrabold uppercase border-t border-slate-200/50 pt-2 text-slate-400">
-                        <div>
-                          <span>Suggested Layout placement:</span>
-                          <span className="block text-slate-800 dark:text-slate-200 mt-0.5 font-bold leading-normal">{getLangValue(imageDetails.suggestedLayout)}</span>
-                        </div>
-                        <div>
-                          <span>Marketing objective:</span>
-                          <span className="block text-slate-800 dark:text-slate-200 mt-0.5 font-bold leading-normal">{getLangValue(imageDetails.description)}</span>
-                        </div>
+                      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Total Clickbacks</p>
+                        <p className="text-2xl font-black text-indigo-600 mt-1">{camp.clicks.toLocaleString()}</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Appointments Set</p>
+                        <p className="text-2xl font-black text-teal-600 mt-1">{camp.appointments.toLocaleString()}</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl">
+                        <p className="text-[10px] font-bold text-slate-405 uppercase">Tracked Revenue</p>
+                        <p className="text-2xl font-black text-emerald-600 mt-1">₹{camp.revenue.toLocaleString()}</p>
                       </div>
                     </div>
 
-                    {/* Action tools */}
-                    <div className="flex gap-2 pt-2 text-xs font-black uppercase tracking-wider">
-                      <button 
-                        onClick={() => {
-                          showNotification("Copying prompt coordinates to clipboard...");
-                          handleCopyToClipboard(imageDetails.prompt);
-                        }}
-                        className="flex-1 bg-slate-900 text-white rounded-2xl py-3 hover:bg-slate-805 transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <Copy size={14} />
-                        Copy Prompt
-                      </button>
-                      <button 
-                        onClick={() => {
-                          showNotification("Asset reference saved safe inside patient branding templates!");
-                        }}
-                        className="flex-1 bg-white border border-slate-200 text-slate-700 rounded-2xl py-3 hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <CheckCircle2 size={14} className="text-green-500" />
-                        Save Asset
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
-              </motion.div>
-            )}
-
-            {/* 4. AI WHATSAPP MESSAGE GENERATOR */}
-            {activeTab === "whatsapp_studio" && (
-              <motion.div
-                key="whatsapp_studio"
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                className="grid grid-cols-1 lg:grid-cols-12 gap-5"
-              >
-                {/* Whatsapp Inputs Panel */}
-                <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-5 rounded-3xl shadow-sm space-y-4">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-50 flex items-center gap-1.5">
-                    <Smartphone size={16} className="text-green-500" />
-                    WhatsApp Studio Config
-                  </h3>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 block mb-1.5">Outreach Category</label>
-                      <select 
-                        value={whatsappCategory} 
-                        onChange={(e) => setWhatsappCategory(e.target.value)}
-                        className="w-full text-xs font-semibold px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-150 p-2 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                      >
-                        <option>Appointment Reminder</option>
-                        <option>Follow-Up Reminder</option>
-                        <option>Health Tips</option>
-                        <option>Festival Greetings</option>
-                        <option>Health Camp Promotion</option>
-                        <option>Seasonal Awareness</option>
-                        <option>Vaccination Reminder</option>
-                        <option>Clinic Announcement</option>
-                        <option>New Service Launch</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 block mb-1.5">Custom Context details</label>
-                      <textarea 
-                        rows={3}
-                        value={whatsappCustomDetails} 
-                        onChange={(e) => setWhatsappCustomDetails(e.target.value)}
-                        placeholder="e.g. Wash hands with warm anti-bacterial agents, avoid raw fruits..."
-                        className="w-full text-xs font-semibold p-3 rounded-2xl bg-slate-50 border border-slate-150 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                      />
-                    </div>
-
-                    {/* Integrated Segmentation Panel in Sidebar */}
-                    <div className="space-y-3 pt-3 border-t border-slate-200/50">
-                      <span className="text-[10px] font-black uppercase text-teal-500 tracking-wider block">Demographics Filter ({filteredPatients.length} Selected)</span>
-                      
-                      <div className="grid grid-cols-2 gap-2 text-[10px] font-black uppercase">
-                        <div>
-                          <label className="text-slate-400 block mb-1">Gender</label>
-                          <select 
-                            value={filterGender} 
-                            onChange={(e) => setFilterGender(e.target.value)}
-                            className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl bg-slate-50 border border-[#dee2e6] text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                          >
-                            <option value="All">All Genders</option>
-                            <option value="Male">Male only</option>
-                            <option value="Female">Female only</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="text-slate-400 block mb-1">Age Group</label>
-                          <select 
-                            value={filterAgeGroup} 
-                            onChange={(e) => setFilterAgeGroup(e.target.value)}
-                            className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl bg-slate-50 border border-[#dee2e6] text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                          >
-                            <option value="All">All Ages</option>
-                            <option value="Children">Keep Under 12</option>
-                            <option value="Teenagers">Teenagers</option>
-                            <option value="Adults">Adults</option>
-                            <option value="Senior Citizens">Elder care 60+</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="text-slate-400 block mb-1">Visit Recency</label>
-                          <select 
-                            value={filterPatientType} 
-                            onChange={(e) => setFilterPatientType(e.target.value)}
-                            className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl bg-slate-50 border border-[#dee2e6] text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                          >
-                            <option value="All">All Records</option>
-                            <option value="New Patients">New visits (1)</option>
-                            <option value="Existing Patients">Established (2+)</option>
-                            <option value="Returning Patients">Frequent (3+)</option>
-                            <option value="Inactive Patients">Inactive (90 days+)</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="text-slate-400 block mb-1">Locality Area</label>
-                          <select 
-                            value={filterLocation} 
-                            onChange={(e) => setFilterLocation(e.target.value)}
-                            className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl bg-slate-50 border border-[#dee2e6] text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                          >
-                            <option value="All">All Localities</option>
-                            {uniqueLocations.map(loc => (
-                              <option key={loc} value={loc}>{loc}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="col-span-2">
-                          <label className="text-slate-400 block mb-1">Disease Filter</label>
-                          <select 
-                            value={filterDisease} 
-                            onChange={(e) => setFilterDisease(e.target.value)}
-                            className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900"
-                          >
-                            <option value="All">All Disease Tags (General)</option>
-                            <option value="Diabetes">Glycemic/Diabetes</option>
-                            <option value="Hypertension">Vitals/Hypertension</option>
-                            <option value="Obesity">Overweight Indices</option>
-                            <option value="Arthritis">Arthritis/Joint pains</option>
-                            <option value="Skin Disorders">Skin/Allergy Care</option>
-                            <option value="Women's Health">Pregnancy/Gynecology</option>
-                            <option value="Child Health">Pediatric vaccine</option>
-                            <option value="Custom Diseases">Custom query tag...</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {filterDisease === "Custom Diseases" && (
-                        <div className="pt-1 select-none text-[9px]">
-                          <label className="text-slate-400 block mb-1 font-black">Type custom complaint segment tag</label>
-                          <input 
-                            type="text" 
-                            placeholder="e.g. malaria, cold, headache..."
-                            value={customDiseaseQuery}
-                            onChange={(e) => setCustomDiseaseQuery(e.target.value)}
-                            className="w-full p-2 border rounded-xl bg-slate-50 dark:bg-slate-805 text-xs font-bold"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="pt-2">
-                      <button
-                        onClick={handleGenerateWhatsApp}
-                        disabled={whatsappIsLoading}
-                        className="w-full bg-[#005f73] hover:bg-[#0081a7] text-white py-3 rounded-2xl font-black uppercase text-xs tracking-wider transition-colors duration-200 flex items-center justify-center gap-2"
-                      >
-                        {whatsappIsLoading ? (
-                          <>
-                            <RefreshCw size={14} className="animate-spin" />
-                            <span>AI Drafting WhatsApp...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={14} className="text-yellow-300 animate-pulse" />
-                            <span>Generate message variations</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Virtual Smartphones Layout */}
-                <div className="lg:col-span-8 bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-6">
-                  
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-50">
-                      Copy Varieties Preview ({selectedLanguage.toUpperCase()})
-                    </h3>
-                    <span className="text-[9px] bg-green-500/10 text-green-500 font-extrabold uppercase px-2 py-0.5 rounded-full">
-                      WhatsApp-Ready layouts
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Variant 1: Short */}
-                    <div className="p-4 bg-emerald-50/50 dark:bg-slate-950/40 rounded-2xl border border-emerald-100 dark:border-slate-850 flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <span className="text-[8px] font-black uppercase bg-emerald-500 text-white px-2 py-0.5 rounded-full inline-block">
-                          Short Message
-                        </span>
-                        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-150 text-[10px] leading-relaxed relative text-slate-700 dark:text-slate-350 select-all font-mono whitespace-pre-wrap h-40 overflow-y-auto">
-                          {getLangValue(whatsappMessages.short)}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                        <button 
-                          onClick={() => handleCopyToClipboard(getLangValue(whatsappMessages.short))}
-                          className="flex-1 bg-slate-900 text-white rounded-xl py-2 text-[9px] uppercase font-black tracking-widest hover:bg-slate-800"
-                        >
-                          Copy
-                        </button>
-                        <button 
-                          onClick={() => handleBroadcastWhatsApp(getLangValue(whatsappMessages.short))}
-                          className="flex-1 bg-emerald-600 text-white rounded-xl py-2 text-[9px] uppercase font-black tracking-widest hover:bg-emerald-700 flex items-center justify-center gap-1"
-                        >
-                          <Send size={10} />
-                          Broadcast
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Variant 2: Medium */}
-                    <div className="p-4 bg-emerald-50/50 dark:bg-slate-950/40 rounded-2xl border border-emerald-100 dark:border-slate-850 flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <span className="text-[8px] font-black uppercase bg-cyan-700 text-white px-2 py-0.5 rounded-full inline-block">
-                          Medium Message
-                        </span>
-                        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-150 text-[10px] leading-relaxed relative text-slate-700 dark:text-slate-350 select-all font-mono whitespace-pre-wrap h-40 overflow-y-auto">
-                          {getLangValue(whatsappMessages.medium)}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                        <button 
-                          onClick={() => handleCopyToClipboard(getLangValue(whatsappMessages.medium))}
-                          className="flex-1 bg-slate-900 text-white rounded-xl py-2 text-[9px] uppercase font-black tracking-widest hover:bg-slate-800"
-                        >
-                          Copy
-                        </button>
-                        <button 
-                          onClick={() => handleBroadcastWhatsApp(getLangValue(whatsappMessages.medium))}
-                          className="flex-1 bg-emerald-600 text-white rounded-xl py-2 text-[9px] uppercase font-black tracking-widest hover:bg-emerald-700 flex items-center justify-center gap-1"
-                        >
-                          <Send size={10} />
-                          Broadcast
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Variant 3: Detailed */}
-                    <div className="p-4 bg-emerald-50/50 dark:bg-slate-950/40 rounded-2xl border border-emerald-100 dark:border-slate-850 flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <span className="text-[8px] font-black uppercase bg-violet-750 text-white px-2 py-0.5 rounded-full inline-block">
-                          Detailed Message
-                        </span>
-                        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-150 text-[10px] leading-relaxed relative text-slate-700 dark:text-slate-350 select-all font-mono whitespace-pre-wrap h-40 overflow-y-auto">
-                          {getLangValue(whatsappMessages.detailed)}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                        <button 
-                          onClick={() => handleCopyToClipboard(getLangValue(whatsappMessages.detailed))}
-                          className="flex-1 bg-slate-900 text-white rounded-xl py-2 text-[9px] uppercase font-black tracking-widest hover:bg-slate-800"
-                        >
-                          Copy
-                        </button>
-                        <button 
-                          onClick={() => handleBroadcastWhatsApp(getLangValue(whatsappMessages.detailed))}
-                          className="flex-1 bg-emerald-600 text-white rounded-xl py-2 text-[9px] uppercase font-black tracking-widest hover:bg-emerald-700 flex items-center justify-center gap-1"
-                        >
-                          <Send size={10} />
-                          Broadcast
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Interactive Segmentation Dispatch Checkbox List Container */}
-                  <div className="bg-slate-50 dark:bg-slate-950 rounded-2xl p-4 border border-slate-200/50 dark:border-slate-800 space-y-3">
-                    <div className="flex justify-between items-center border-b border-slate-200/30 pb-2">
-                      <div className="flex items-center gap-1.5">
-                        <Users size={16} className="text-teal-500" />
-                        <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-tight">
-                          Segment Dispatch List ({filteredPatients.length} matching)
-                        </span>
-                      </div>
-                      <div className="flex gap-2 text-[9px] font-black uppercase">
-                        <button 
-                          onClick={() => {
-                            setSelectedCampaignPatients(filteredPatients.map(p => p.phone || ""));
-                            showNotification("Checked all segment candidates!");
-                          }}
-                          className="text-[#005f73] hover:underline"
-                        >
-                          Check All
-                        </button>
-                        <span className="text-slate-300">|</span>
-                        <button 
-                          onClick={() => {
-                            setSelectedCampaignPatients([]);
-                            showNotification("Unchecked all candidate user rows!");
-                          }}
-                          className="text-red-500 hover:underline"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="max-h-[175px] overflow-y-auto pr-1 space-y-1.5 text-xs">
-                      {filteredPatients.length === 0 ? (
-                        <div className="text-center py-6 text-slate-400 uppercase font-black text-[9px]">
-                          ⚠️ No patients match the selection segment filters.
-                        </div>
-                      ) : (
-                        filteredPatients.map((p) => {
-                          const isChecked = selectedCampaignPatients.includes(p.phone || "");
-                          const charSum = (p.name || "").split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-                          const compliance = charSum % 3; // 0=Good, 1=Avg, 2=Poor
-                          const colorClass = compliance === 0 ? "text-green-500" : compliance === 1 ? "text-amber-500" : "text-red-500";
-                          const labelText = compliance === 0 ? "Good" : compliance === 1 ? "Avg" : "Poor";
-
-                          return (
-                            <div key={p.id} className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 transition-colors">
-                              <div className="flex items-center gap-2">
-                                <input 
-                                  type="checkbox" 
-                                  checked={isChecked}
-                                  onChange={() => {
-                                    if (isChecked) {
-                                      setSelectedCampaignPatients(prev => prev.filter(ph => ph !== (p.phone || "")));
-                                    } else {
-                                      setSelectedCampaignPatients(prev => [...prev, p.phone || ""]);
-                                    }
-                                  }}
-                                  className="rounded border-slate-300 h-3.5 w-3.5 text-[#005f73]"
-                                />
-                                <div>
-                                  <span className="font-extrabold text-slate-800 dark:text-slate-100">{p.name || "Anonymous"}</span>
-                                  <span className="text-[9px] text-slate-400 block font-semibold">
-                                    Age: {p.age || "N/A"} • {p.gender} • 📱 {p.phone || "No phone"}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <span className="text-[8px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 block max-w-[125px] truncate font-bold">
-                                  {p.complaint || "Routine visit"}
-                                </span>
-                                <span className={`text-[8px] font-black uppercase tracking-wide block ${colorClass}`}>
-                                  Adherence: {labelText}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Manual trigger note */}
-                  <p className="text-[10px] text-slate-400 font-extrabold uppercase text-center md:text-left leading-relaxed">
-                    💡 Clicking "Broadcast" segments active targets immediately and dispatches bulk messages via WhatsApp protocol hooks.
-                  </p>
-
-                </div>
-              </motion.div>
-            )}
-
-            {/* 5. AI HEALTH CAMPAIGN CREATOR */}
-            {activeTab === "campaign_studio" && (
-              <motion.div
-                key="campaign_studio"
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                className="space-y-6"
-              >
-                {/* Topic selection */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
-                  <span className="text-[10px] font-black uppercase text-teal-400 tracking-wider">Multi-Channel Campaign Architect</span>
-                  <div className="flex flex-col md:flex-row gap-4 items-end">
-                    <div className="flex-1">
-                      <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Campaign Focus / Topic</label>
-                      <input 
-                        type="text" 
-                        value={campaignTopic} 
-                        onChange={(e) => setCampaignTopic(e.target.value)}
-                        placeholder="e.g. Hypertension control and Low Salt Diet"
-                        className="w-full text-xs font-semibold px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-150 p-2 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-50"
-                      />
-                    </div>
-                    <div>
-                      <button
-                        onClick={handleGenerateCampaign}
-                        disabled={campaignIsLoading}
-                        className="w-full md:w-auto bg-[#005f73] hover:bg-[#0081a7] text-white py-3 px-8 rounded-2xl font-black uppercase text-xs tracking-wider transition-colors duration-200 flex items-center justify-center gap-2"
-                      >
-                        {campaignIsLoading ? (
-                          <>
-                            <RefreshCw size={14} className="animate-spin" />
-                            <span>Assembling Campaign Pack...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={14} className="text-yellow-300 animate-pulse" />
-                            <span>Generate Full Campaign Pack</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Campaign Output Blocks */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                  {/* Left (Visual Assets) */}
-                  <div className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <ImageIcon size={14} /> Created Visual Blueprint
-                    </h3>
-
-                    {/* Integrated Poster Blueprint */}
-                    <div className="p-5 rounded-2xl bg-gradient-to-br from-[#005f73] to-cyan-950 text-white space-y-3 shadow-md">
-                      <span className="text-[8px] bg-white/10 border px-2 py-0.5 rounded-md inline-block uppercase">Campaign Poster Layout</span>
-                      <h4 className="text-sm font-black uppercase">{getLangValue(campaignContent.posterHeadline)}</h4>
-                      <p className="text-[10px] leading-relaxed opacity-90 font-semibold">{getLangValue(campaignContent.posterContent)}</p>
-                      <p className="text-[9px] font-black tracking-wider text-teal-300 uppercase">📌 {getLangValue(campaignContent.posterCta)}</p>
-                    </div>
-
-                    {/* Dynamic Image Suggestion */}
-                    <div className="bg-slate-50 dark:bg-slate-850 p-4 rounded-xl border border-slate-150 dark:border-slate-800 space-y-1">
-                      <span className="text-[8px] text-slate-400 block font-black uppercase">Suggested Visual Prompts</span>
-                      <p className="text-[10px] italic font-semibold text-slate-600 dark:text-slate-300 leading-normal">
-                        "{campaignContent.imagePrompt}"
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Right (Outreach copy, Captions, Schedules) */}
-                  <div className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <Volume2 size={14} /> outreach Asset Copywrite
-                    </h3>
-
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[9px] font-extrabold uppercase text-slate-400">WhatsApp Broadcast Draft</span>
-                          <button 
-                            onClick={() => handleCopyToClipboard(getLangValue(campaignContent.whatsappMessage))}
-                            className="text-[9px] font-bold text-teal-500 uppercase hover:underline"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                        <div className="bg-slate-50 dark:bg-slate-850 p-3 rounded-xl text-[10px] leading-relaxed whitespace-pre-wrap font-mono font-medium">
-                          {getLangValue(campaignContent.whatsappMessage)}
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[9px] font-extrabold uppercase text-slate-400">Social Media Caption</span>
-                          <button 
-                            onClick={() => handleCopyToClipboard(getLangValue(campaignContent.socialCaption))}
-                            className="text-[9px] font-bold text-teal-505 uppercase hover:underline"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                        <div className="bg-slate-50 dark:bg-slate-850 p-3 rounded-xl text-[10px] leading-relaxed font-mono font-medium">
-                          {getLangValue(campaignContent.socialCaption)}
-                        </div>
-                      </div>
-
-                      <div className="bg-cyan-50/40 dark:bg-slate-950/20 p-3.5 rounded-xl border border-[#005f73]/10 text-[9px] font-extrabold uppercase text-slate-500 space-y-1">
-                        <span className="text-[#005f73]">Recommended Broadcast Timelines</span>
-                        <p className="text-slate-800 dark:text-slate-200 tracking-wide font-black mt-1 uppercase line-clamp-2 leading-relaxed">
-                          ⚡ {getLangValue(campaignContent.suggestedSchedule)}
-                        </p>
-                      </div>
-
-                    </div>
-                  </div>
-                </div>
-
-                {/* Multilingual Copywriting Assistant */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
-                  <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-                    <div>
-                      <h4 className="text-xs font-black uppercase text-slate-900 dark:text-slate-50">AI Multilingual Content Assistant</h4>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Generate customized clinic copies localized in 3 regional languages</p>
-                    </div>
-                    <span className="text-[9px] px-2 py-0.5 bg-yellow-500/10 text-yellow-500 font-extrabold rounded-full uppercase">MARATHI • HINDI • ENGLISH</span>
-                  </div>
-
-                  <div className="flex flex-col md:flex-row gap-3 items-end">
-                    <div className="flex-1">
-                      <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Post Theme / Health Topic</label>
-                      <input 
-                        type="text" 
-                        value={postSubject} 
-                        onChange={(e) => setPostSubject(e.target.value)}
-                        placeholder="e.g. Essential check-up for pediatric safety"
-                        className="w-full text-xs font-semibold px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border"
-                      />
-                    </div>
-                    <button
-                      onClick={handleGenerateMultilingualPost}
-                      disabled={isMultilingualLoading}
-                      className="bg-slate-900 text-white text-xs font-black uppercase py-2.5 px-6 rounded-xl hover:bg-slate-800 transition-colors"
-                    >
-                      {isMultilingualLoading ? "Writing..." : "Write Variations"}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-bold pt-2">
-                    <div className="p-4 bg-slate-50 dark:bg-slate-850 rounded-2xl border flex flex-col justify-between">
-                      <div className="space-y-1">
-                        <span className="text-[8px] uppercase tracking-wider text-slate-400 block">English Edition</span>
-                        <p className="text-[11px] leading-relaxed font-semibold text-slate-700 dark:text-slate-300 leading-normal">
-                          {multilingualPost.english}
-                        </p>
-                      </div>
-                      <button 
-                        onClick={() => handleCopyToClipboard(multilingualPost.english)}
-                        className="mt-4 border border-slate-200 font-black py-1.5 rounded-lg text-[9px] uppercase hover:bg-slate-105"
-                      >
-                        Copy English
-                      </button>
-                    </div>
-
-                    <div className="p-4 bg-slate-50 dark:bg-slate-850 rounded-2xl border flex flex-col justify-between font-marathi">
-                      <div className="space-y-1">
-                        <span className="text-[8px] uppercase tracking-wider text-slate-400 block font-sans">Marathi (मराठी) Edition</span>
-                        <p className="text-[12px] leading-relaxed font-medium text-slate-700 dark:text-slate-300 leading-normal">
-                          {multilingualPost.marathi}
-                        </p>
-                      </div>
-                      <button 
-                        onClick={() => handleCopyToClipboard(multilingualPost.marathi)}
-                        className="mt-4 border border-slate-200 font-black py-1.5 rounded-lg text-[9px] uppercase hover:bg-slate-105 font-sans"
-                      >
-                        Copy Marathi
-                      </button>
-                    </div>
-
-                    <div className="p-4 bg-slate-50 dark:bg-slate-850 rounded-2xl border flex flex-col justify-between font-hindi">
-                      <div className="space-y-1">
-                        <span className="text-[8px] uppercase tracking-wider text-slate-400 block font-sans">Hindi (हिंदी) Edition</span>
-                        <p className="text-[12px] leading-relaxed font-medium text-slate-700 dark:text-slate-300 leading-normal">
-                          {multilingualPost.hindi}
-                        </p>
-                      </div>
-                      <button 
-                        onClick={() => handleCopyToClipboard(multilingualPost.hindi)}
-                        className="mt-4 border border-slate-200 font-black py-1.5 rounded-lg text-[9px] uppercase hover:bg-slate-105 font-sans"
-                      >
-                        Copy Hindi
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-              </motion.div>
-            )}
-
-            {/* 6. CAMPAIGN SCHEDULER */}
-            {activeTab === "scheduler" && (
-              <motion.div
-                key="scheduler"
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                className="grid grid-cols-1 lg:grid-cols-12 gap-5"
-              >
-                {/* Schedule builder (Left) */}
-                <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-5 rounded-3xl shadow-sm space-y-4">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-50 flex items-center gap-1.5">
-                    <CalendarRange size={16} className="text-indigo-400" />
-                    New Schedule Setup
-                  </h3>
-
-                  <form onSubmit={handleCreateSchedule} className="space-y-4 text-xs font-bold uppercase text-slate-400">
-                    <div>
-                      <label className="text-[9px] block mb-1">Campaign Alert Label</label>
-                      <input 
-                        type="text" 
-                        required
-                        value={scheduleName} 
-                        onChange={(e) => setScheduleName(e.target.value)}
-                        placeholder="e.g. World Heart outreach"
-                        className="w-full font-semibold p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 dark:border-slate-700 border text-slate-800 dark:text-slate-100"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[9px] block mb-1">Date</label>
-                        <input 
-                          type="date" 
-                          required
-                          value={scheduleDate} 
-                          onChange={(e) => setScheduleDate(e.target.value)}
-                          className="w-full font-semibold p-2 rounded-xl bg-slate-50 dark:bg-slate-800 dark:border-slate-700 border text-slate-800 dark:text-slate-100"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[9px] block mb-1">Time</label>
-                        <input 
-                          type="time" 
-                          required
-                          value={scheduleTime} 
-                          onChange={(e) => setScheduleTime(e.target.value)}
-                          className="w-full font-semibold p-2 rounded-xl bg-slate-50 dark:bg-slate-800 dark:border-slate-700 border text-slate-800 dark:text-slate-100"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] block mb-1">Target Studio Form</label>
-                      <select 
-                        value={scheduleType} 
-                        onChange={(e) => setScheduleType(e.target.value)}
-                        className="w-full font-semibold p-2 rounded-xl bg-slate-50 dark:bg-slate-800 dark:border-slate-700 border text-slate-800 dark:text-slate-100"
-                      >
-                        <option>Poster Studio</option>
-                        <option>WhatsApp Studio</option>
-                        <option>Awareness Campaign</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] block mb-1">Target Patient Segment</label>
-                      <select 
-                        value={scheduleAudience} 
-                        onChange={(e) => setScheduleAudience(e.target.value)}
-                        className="w-full font-semibold p-2 rounded-xl bg-slate-50 dark:bg-slate-800 dark:border-slate-700 border text-slate-800 dark:text-slate-100"
-                      >
-                        <option>All Patients</option>
-                        <option>Chronic Patients</option>
-                        <option>Senior Citizens</option>
-                      </select>
-                    </div>
-
-                    <div className="pt-2">
-                      <button 
-                        type="submit"
-                        className="w-full bg-[#005f73] hover:bg-[#0081a7] text-white py-3 rounded-2xl font-black text-xs tracking-wider uppercase transition-colors"
-                      >
-                        Add to Queue
-                      </button>
-                    </div>
-                  </form>
-                </div>
-
-                {/* Queue list (Right) */}
-                <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-50">
-                    Active Scheduled Campaigns Queue
-                  </h3>
-
-                  <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                    {scheduledCampaigns.length === 0 ? (
-                      <div className="text-center py-10 text-slate-400">
-                        <Calendar size={32} className="mx-auto mb-2 opacity-50" />
-                        <span className="text-xs font-bold uppercase">No pending automated schedules</span>
-                      </div>
-                    ) : (
-                      scheduledCampaigns.map((sched) => (
-                        <div key={sched.id} className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-150 dark:border-slate-700 flex justify-between items-center text-xs font-semibold">
-                          <div className="space-y-1">
-                            <h4 className="font-black text-slate-900 dark:text-slate-50">{sched.name}</h4>
-                            <div className="flex flex-wrap gap-2 text-[9px] font-extrabold uppercase text-slate-400">
-                              <span className="bg-slate-200/50 dark:bg-slate-700 px-2 py-0.5 rounded-md">{sched.type}</span>
-                              <span className="bg-slate-200/50 dark:bg-slate-700 px-2 py-0.5 rounded-md text-indigo-400">👤 {sched.audience}</span>
-                              <span className="text-[#005f73]">⏰ {sched.date} at {sched.time}</span>
+                    {/* Timeline & logs logs logs */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="border border-slate-100 dark:border-slate-700/60 rounded-2xl p-4">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Delivery Timeline & Status Logs</h4>
+                        <div className="space-y-4">
+                          <div className="flex gap-3 text-xs">
+                            <Clock className="w-4 h-4 text-emerald-500 mt-0.5" />
+                            <div>
+                              <p className="font-bold text-slate-700 dark:text-slate-202">Broadcast Completed</p>
+                              <p className="text-slate-400 text-[10px]">Gateway reported 100% completion success.</p>
                             </div>
                           </div>
-                          
-                          <div className="flex items-center gap-2">
-                            <span className="text-[9px] bg-green-500/10 text-green-500 font-extrabold uppercase px-2 py-0.5 rounded-full">
-                              Active
-                            </span>
-                            <button 
-                              onClick={() => handleCancelSchedule(sched.id)}
-                              className="p-1 px-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg text-[10px] font-bold uppercase transition"
-                            >
-                              Cancel
-                            </button>
+                          <div className="flex gap-3 text-xs">
+                            <CheckCircle2 className="w-4 h-4 text-indigo-500 mt-0.5" />
+                            <div>
+                              <p className="font-bold text-slate-700 dark:text-slate-202">Patient Response Triggered</p>
+                              <p className="text-slate-400 text-[10px]">Over 300 message clickbacks recorded within first hour.</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-3 text-xs">
+                            <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5" />
+                            <div>
+                              <p className="font-bold text-slate-700 dark:text-slate-202">Unreachable Recipient Logs</p>
+                              <p className="text-slate-400 text-[10px]">14 phone numbers returned invalid routing signals.</p>
+                            </div>
                           </div>
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* 7. TEMPLATE LIBRARY */}
-            {activeTab === "templates" && (
-              <motion.div
-                key="templates"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="space-y-6"
-              >
-                <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-6 rounded-3xl shadow-sm">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-50 flex items-center gap-1.5 mb-1">
-                    <ListTodo size={16} className="text-red-500" />
-                    Instant Health Content Blueprints
-                  </h3>
-                  <p className="text-[11px] text-slate-400 uppercase font-bold">
-                    Deploy standard educational alerts or festival designs directly to studios with 1 click
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {templatePresets.map((tpl, i) => (
-                    <div 
-                      key={i} 
-                      className="p-5 bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
-                    >
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[8px] font-black uppercase text-[#005f73] bg-teal-500/10 px-2 py-0.5 rounded-full inline-block">
-                            {tpl.type}
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-extrabold uppercase">Premium Layer</span>
-                        </div>
-                        <h4 className="text-sm font-black text-slate-900 dark:text-slate-50 uppercase leading-snug">
-                          {tpl.title}
-                        </h4>
-                        <p className="text-[11px] text-slate-450 dark:text-slate-400 leading-relaxed font-semibold">
-                          "{tpl.topic}"
-                        </p>
                       </div>
 
-                      <div className="flex gap-2 pt-5">
+                      <div className="border border-slate-100 dark:border-slate-700/60 rounded-2xl p-4 space-y-4">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Performance Analytics</h4>
+                        <div className="flex justify-between text-xs border-b pb-2">
+                          <span className="text-slate-400">Total Campaign ROI:</span>
+                          <span className="font-bold text-emerald-600">{camp.roi}</span>
+                        </div>
+                        <div className="flex justify-between text-xs border-b pb-2">
+                          <span className="text-slate-400">Average Conversion Rate:</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-202">{(camp.appointments / (camp.reach || 1) * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="flex justify-between text-xs border-b pb-2">
+                          <span className="text-slate-400">Doctor Performance Contribution:</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-202">Dr. Rajesh Pawar (80%)</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">Top Performing Area:</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-202">Hadapsar, Pune</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
+              
+              {/* Tab 1: Today's Marketing Summary Dashboard */}
+              {activeTab === "dashboard" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800 dark:text-white">Today's Marketing Summary</h2>
+                      <p className="text-xs text-slate-400">Real-time health promotional statistics and ROI</p>
+                    </div>
+                  </div>
+
+                  {/* Summary Metric Counters */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    {[
+                      { title: "Total Campaigns", value: campaigns.length, sub: "All history", color: "indigo" },
+                      { title: "Running", value: campaigns.filter(c => c.status === "Running").length, sub: "Dispatched", color: "teal" },
+                      { title: "Scheduled", value: campaigns.filter(c => c.status === "Scheduled").length, sub: "Queued", color: "blue" },
+                      { title: "Today's Reach", value: "3,892", sub: "Patients contacted", color: "purple" },
+                      { title: "Appointments", value: "112", sub: "Conversions today", color: "emerald" },
+                      { title: "Today's Revenue", value: "₹42,800", sub: "ROI: 380%", color: "pink" }
+                    ].map((m, idx) => (
+                      <div key={idx} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xs border border-slate-100 dark:border-slate-800">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{m.title}</p>
+                        <p className="text-xl font-black text-slate-800 dark:text-white mt-1.5">{m.value}</p>
+                        <p className="text-[9px] font-semibold text-slate-400 mt-1">{m.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Quick Action Cards Grid */}
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold text-slate-405 uppercase tracking-wider">Quick Studio Actions</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                      {[
+                        { tab: "campaign_builder", label: "Create Campaign", icon: Plus, bg: "bg-indigo-600 text-white" },
+                        { tab: "campaign_builder", label: "AI Generator", icon: Sparkles, bg: "bg-teal-600 text-white" },
+                        { tab: "poster_studio", label: "Poster Studio", icon: ImageIcon, bg: "bg-rose-500 text-white" },
+                        { tab: "whatsapp_creator", label: "WhatsApp Post", icon: MessageSquare, bg: "bg-emerald-600 text-white" },
+                        { tab: "broadcast", label: "Send Broadcast", icon: Send, bg: "bg-sky-600 text-white" },
+                        { tab: "automation", label: "Automation Rules", icon: Zap, bg: "bg-amber-600 text-white" }
+                      ].map((action, idx) => (
                         <button
-                          onClick={() => handleApplyTemplate(tpl)}
-                          className="flex-1 bg-slate-900 text-white font-extrabold uppercase text-[10px] tracking-wider py-2 rounded-xl hover:bg-slate-800 flex items-center justify-center gap-1"
+                          key={idx}
+                          onClick={() => setActiveTab(action.tab as any)}
+                          className={`p-4 rounded-2xl flex flex-col items-center justify-center gap-2 text-center text-xs font-bold transition-all transform hover:-translate-y-0.5 active:translate-y-0 ${action.bg}`}
                         >
-                          <Plus size={12} /> Load to Poster
+                          <action.icon className="w-5 h-5" />
+                          <span>{action.label}</span>
                         </button>
-                        <button
-                          onClick={() => {
-                            setWhatsappCategory(tpl.type);
-                            setWhatsappCustomDetails(tpl.topic);
-                            setActiveTab("whatsapp_studio");
-                            showNotification("Preset coordinates mapped directly to Whatsapp Studio!");
-                          }}
-                          className="flex-1 bg-white border border-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider py-2 rounded-xl hover:bg-slate-50 flex items-center justify-center gap-1"
-                        >
-                          <Smartphone size={12} /> Broadcast MSG
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {/* 8. AI MARKETING ADVISOR */}
-            {activeTab === "advisor" && (
-              <motion.div
-                key="advisor"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="space-y-6"
-              >
-                {/* Advisor Banner info */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-6 rounded-3xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-black text-slate-900 dark:text-slate-50 uppercase tracking-tight flex items-center gap-2">
-                      <Sparkles size={20} className="text-teal-400" />
-                      Clinic Growth Advisor AI
-                    </h3>
-                    <p className="text-[11px] text-slate-400 uppercase font-black">
-                      Intelligent actionable strategies localized for {clinicDetails?.city || "your Clinic location"}
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleFetchAdvisorInsights}
-                    disabled={advisorIsLoading}
-                    className="bg-[#005f73] hover:bg-[#0081a7] text-white font-extrabold uppercase text-xs tracking-wider py-2.5 px-6 rounded-2xl transition"
-                  >
-                    {advisorIsLoading ? "Analyzing..." : "Regenerate Tips"}
-                  </button>
-                </div>
-
-                {/* Growth Cards Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {advisorInsights.map((ins, idx) => (
-                    <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 p-5 rounded-3xl shadow-sm flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[9px] bg-indigo-500/10 text-indigo-400 font-extrabold uppercase px-2 py-0.5 rounded-full">
-                            Effort: {ins.effort} • Impact: {ins.impact}
-                          </span>
-                          <span className="w-2 h-2 rounded-full bg-teal-400"></span>
-                        </div>
-                        <h4 className="text-xs font-black text-slate-900 dark:text-slate-50 uppercase tracking-wide">
-                          {ins.title}
-                        </h4>
-                        <p className="text-[11px] text-slate-400 leading-relaxed font-semibold">
-                          {ins.description}
-                        </p>
-                      </div>
-
-                      <div className="bg-slate-50 dark:bg-slate-850 p-3.5 rounded-xl text-[10px] mt-4 font-semibold text-slate-650 space-y-1.5">
-                        <span className="text-[9px] font-black uppercase text-teal-400">Action Execution Plan:</span>
-                        <p className="whitespace-pre-line leading-relaxed italic text-slate-500 font-mono">
-                          {ins.actionPlan}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {/* 9. MARKETING ANALYTICS & LOGS */}
-            {activeTab === "analytics" && (
-              <motion.div
-                key="analytics"
-                initial={{ opacity: 0, scale: 0.99 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.99 }}
-                className="space-y-6"
-              >
-                {/* Visual Charts Row */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                  <div className="lg:col-span-8 bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 p-5 rounded-3xl shadow-sm space-y-4">
-                    <h3 className="text-xs font-black uppercase text-slate-905 dark:text-slate-50">
-                      AI Campaign Generation Trends
-                    </h3>
-                    
-                    <div className="h-64 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={trendChartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="colorPosters" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#005f73" stopOpacity={0.8}/>
-                              <stop offset="95%" stopColor="#005f73" stopOpacity={0.0}/>
-                            </linearGradient>
-                            <linearGradient id="colorWhatsapp" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8}/>
-                              <stop offset="95%" stopColor="#82ca9d" stopOpacity={0.0}/>
-                            </linearGradient>
-                          </defs>
-                          <XAxis dataKey="name" stroke="#888888" fontSize={10} tickLine={false} />
-                          <YAxis stroke="#888888" fontSize={10} tickLine={false} />
-                          <Tooltip />
-                          <Area type="monotone" dataKey="posters" stroke="#005f73" fillOpacity={1} fill="url(#colorPosters)" name="AI Posters" />
-                          <Area type="monotone" dataKey="whatsapp" stroke="#82ca9d" fillOpacity={1} fill="url(#colorWhatsapp)" name="WhatsApp outreach" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  {/* Demographics Pie */}
-                  <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 p-5 rounded-3xl shadow-sm space-y-4 flex flex-col justify-between">
-                    <h3 className="text-xs font-black uppercase text-slate-905 dark:text-slate-50">
-                      Segment Target share
-                    </h3>
-
-                    <div className="h-44 w-full flex justify-center">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie 
-                            data={patientDemographics} 
-                            cx="50%" 
-                            cy="50%" 
-                            innerRadius={45} 
-                            outerRadius={65} 
-                            paddingAngle={5} 
-                            dataKey="value"
-                          >
-                            {patientDemographics.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-
-                    <div className="text-[10px] font-extrabold uppercase space-y-1 text-slate-400">
-                      {patientDemographics.map((entry, index) => (
-                        <div key={index} className="flex justify-between items-center">
-                          <span className="flex items-center gap-1">
-                            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
-                            {entry.name}
-                          </span>
-                          <span className="text-slate-850 dark:text-slate-205">{entry.value} Patient index</span>
-                        </div>
                       ))}
                     </div>
                   </div>
-                </div>
 
-                {/* Campaign History Logs */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
-                  <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-                    <h3 className="text-xs font-black uppercase text-slate-900 dark:text-slate-50">
-                      Audit Trail: Past Outreach Campaigns
-                    </h3>
-                    <span className="text-[9px] bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-slate-400 uppercase font-black">
-                      Read-Only Archive
-                    </span>
+                  {/* Recent Campaigns Table */}
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-xs">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xs font-bold text-slate-405 uppercase tracking-wider">Recent Campaign Log</h3>
+                      <button 
+                        onClick={() => setActiveTab("campaign_builder")}
+                        className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                      >
+                        Launch New Studio <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-bold">
+                            <th className="pb-3 pr-2">Campaign Details</th>
+                            <th className="pb-3 px-2">Type</th>
+                            <th className="pb-3 px-2">Scheduled</th>
+                            <th className="pb-3 px-2 text-right">Reach</th>
+                            <th className="pb-3 px-2 text-right">Appointments</th>
+                            <th className="pb-3 px-2 text-right">Revenue</th>
+                            <th className="pb-3 pl-2 text-center">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {globalFilteredCampaigns.map((c) => (
+                            <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                              <td className="py-3.5 pr-2 font-bold text-slate-700 dark:text-slate-202">
+                                <div>{c.name}</div>
+                                <div className="text-[9px] text-slate-400 mt-0.5">Created {c.createdDate}</div>
+                              </td>
+                              <td className="py-3.5 px-2 font-medium text-slate-505">{c.type}</td>
+                              <td className="py-3.5 px-2">
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                  c.status === "Running" ? "bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400" :
+                                  c.status === "Scheduled" ? "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400" :
+                                  c.status === "Paused" ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" :
+                                  "bg-slate-100 text-slate-655 dark:bg-slate-700 dark:text-slate-350"
+                                }`}>
+                                  {c.status}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-2 text-right font-semibold">{c.reach.toLocaleString()}</td>
+                              <td className="py-3.5 px-2 text-right font-semibold text-teal-600">{c.appointments}</td>
+                              <td className="py-3.5 px-2 text-right font-black text-emerald-600">₹{c.revenue.toLocaleString()}</td>
+                              <td className="py-3.5 pl-2 text-center space-x-1 whitespace-nowrap">
+                                <button 
+                                  onClick={() => setSelectedCampaignId(c.id)}
+                                  className="px-2 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-white rounded-lg font-bold text-[10px]"
+                                >
+                                  Details
+                                </button>
+                                <button 
+                                  onClick={() => duplicateCampaign(c.id)}
+                                  className="px-2 py-1 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 rounded-lg font-bold text-[10px]"
+                                >
+                                  Duplicate
+                                </button>
+                                <button 
+                                  onClick={() => toggleCampaignStatus(c.id)}
+                                  className="px-2 py-1 bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-100 rounded-lg font-bold text-[10px]"
+                                >
+                                  {c.status === "Running" ? "Pause" : "Resume"}
+                                </button>
+                                <button 
+                                  onClick={() => deleteCampaign(c.id)}
+                                  className="px-2 py-1 bg-rose-50 dark:bg-rose-500/15 text-rose-600 hover:bg-rose-100 rounded-lg font-bold text-[10px]"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Tab 2: Advanced Patient Segmentation */}
+              {activeTab === "segmentation" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800 dark:text-white">Patient Segmentation</h2>
+                      <p className="text-xs text-slate-400">Generate targeted contact arrays for high precision promotions</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-400">Logic:</span>
+                      <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex">
+                        <button 
+                          onClick={() => setSegmentationFilters(prev => ({ ...prev, logicMode: "AND" }))}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold ${segmentationFilters.logicMode === "AND" ? "bg-white dark:bg-slate-900 text-indigo-600" : "text-slate-400"}`}
+                        >
+                          AND
+                        </button>
+                        <button 
+                          onClick={() => setSegmentationFilters(prev => ({ ...prev, logicMode: "OR" }))}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold ${segmentationFilters.logicMode === "OR" ? "bg-white dark:bg-slate-900 text-indigo-600" : "text-slate-405"}`}
+                        >
+                          OR
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                    {campaignHistory.map((item) => (
-                      <div key={item.id} className="p-4 bg-slate-50 dark:bg-slate-805 rounded-2xl border border-slate-150 flex justify-between items-center text-xs font-semibold">
-                        <div className="space-y-1">
-                          <h4 className="font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wide">{item.name}</h4>
-                          <p className="text-[9px] font-black uppercase text-slate-400">
-                            Category: {item.category} • Target Audience: {item.target} • Dispatched Sent: {item.sentAt}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Filters configuration column */}
+                    <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-4">
+                      <h3 className="text-xs font-black uppercase text-indigo-600 tracking-wider">Demographic & Location Filters</h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">Min Age</label>
+                          <input 
+                            type="number" 
+                            value={segmentationFilters.ageMin}
+                            onChange={(e) => setSegmentationFilters(prev => ({ ...prev, ageMin: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            placeholder="e.g. 18"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">Max Age</label>
+                          <input 
+                            type="number" 
+                            value={segmentationFilters.ageMax}
+                            onChange={(e) => setSegmentationFilters(prev => ({ ...prev, ageMax: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            placeholder="e.g. 70"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">Gender</label>
+                          <select 
+                            value={segmentationFilters.gender}
+                            onChange={(e) => setSegmentationFilters(prev => ({ ...prev, gender: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-202 dark:border-slate-700 rounded-xl"
+                          >
+                            <option value="all">All Genders</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">Area / Suburb</label>
+                          <input 
+                            type="text" 
+                            value={segmentationFilters.area}
+                            onChange={(e) => setSegmentationFilters(prev => ({ ...prev, area: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            placeholder="e.g. Hadapsar"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">Village</label>
+                          <input 
+                            type="text" 
+                            value={segmentationFilters.village}
+                            onChange={(e) => setSegmentationFilters(prev => ({ ...prev, village: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">City</label>
+                          <input 
+                            type="text" 
+                            value={segmentationFilters.city}
+                            onChange={(e) => setSegmentationFilters(prev => ({ ...prev, city: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">PIN Code</label>
+                          <input 
+                            type="text" 
+                            value={segmentationFilters.pinCode}
+                            onChange={(e) => setSegmentationFilters(prev => ({ ...prev, pinCode: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                          />
+                        </div>
+                      </div>
+
+                      <h3 className="text-xs font-black uppercase text-indigo-600 tracking-wider pt-2">Clinical Diagnosis & Medical Filters</h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">Speciality / Disease</label>
+                          <input 
+                            type="text" 
+                            value={segmentationFilters.disease}
+                            onChange={(e) => setSegmentationFilters(prev => ({ ...prev, disease: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            placeholder="e.g. Diabetes"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">Exact Diagnosis</label>
+                          <input 
+                            type="text" 
+                            value={segmentationFilters.diagnosis}
+                            onChange={(e) => setSegmentationFilters(prev => ({ ...prev, diagnosis: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">Last Visit (Months Ago)</label>
+                          <input 
+                            type="number" 
+                            value={segmentationFilters.lastVisitMonths}
+                            onChange={(e) => setSegmentationFilters(prev => ({ ...prev, lastVisitMonths: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Quick Demographic Checkboxes */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3">
+                        {[
+                          { key: "missedFollowup", label: "Missed Follow-up" },
+                          { key: "highValue", label: "High Value Patients" },
+                          { key: "inactive", label: "Inactive Patients" },
+                          { key: "newPatient", label: "New Registrations" },
+                          { key: "birthdayToday", label: "Birthday Today" },
+                          { key: "anniversaryToday", label: "Anniversary Today" },
+                          { key: "pregnant", label: "Pregnant Women" },
+                          { key: "seniorCitizen", label: "Senior Citizens" },
+                          { key: "child", label: "Children (0-12)" }
+                        ].map((c) => (
+                          <label key={c.key} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 p-2.5 rounded-xl cursor-pointer hover:bg-slate-100/50">
+                            <input 
+                              type="checkbox"
+                              checked={(segmentationFilters as any)[c.key]}
+                              onChange={(e) => setSegmentationFilters(prev => ({ ...prev, [c.key]: e.target.checked }))}
+                              className="rounded text-indigo-600 focus:ring-indigo-500/20 w-4 h-4"
+                            />
+                            <span className="text-[11px] font-semibold">{c.label}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-4">
+                        <button 
+                          onClick={() => setSegmentationFilters({
+                            ageMin: "", ageMax: "", gender: "all", area: "", village: "", city: "", pinCode: "",
+                            disease: "", diagnosis: "", procedure: "", medicine: "", doctor: "", lastVisitMonths: "",
+                            missedFollowup: false, highValue: false, inactive: false, newPatient: false, birthdayToday: false,
+                            anniversaryToday: false, pregnant: false, seniorCitizen: false, child: false, customTag: "", logicMode: "AND"
+                          })}
+                          className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+                        >
+                          Reset Filters
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Result Estimation Column */}
+                    <div className="bg-gradient-to-b from-indigo-50/50 to-indigo-100/20 dark:from-slate-800 dark:to-slate-800/20 p-6 rounded-3xl border border-indigo-100 dark:border-indigo-955 flex flex-col justify-between">
+                      <div className="space-y-4">
+                        <div className="text-center py-4">
+                          <p className="text-xs font-bold text-indigo-600/80 dark:text-indigo-400 uppercase tracking-widest">Matched Audience Size</p>
+                          <p className="text-5xl font-black text-slate-800 dark:text-white mt-2">
+                            {filteredPatientsForSegmentation.length}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-1">out of {allPatients.length} registered clinic records</p>
+                        </div>
+
+                        <div className="h-px bg-slate-200/50 dark:bg-slate-800 w-full" />
+
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase">Save this audience</label>
+                          <div className="flex gap-2">
+                            <input 
+                              type="text" 
+                              placeholder="e.g. Elderly Diabetic group"
+                              value={saveAudienceName}
+                              onChange={(e) => setSaveAudienceName(e.target.value)}
+                              className="flex-1 text-xs p-2 bg-white dark:bg-slate-900 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            />
+                            <button 
+                              onClick={saveAudienceSegment}
+                              className="px-3 bg-indigo-600 text-white rounded-xl text-xs font-bold"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Saved Groups</p>
+                          <div className="space-y-1.5">
+                            {savedAudiences.map(aud => (
+                              <div key={aud.id} className="flex justify-between items-center text-[11px] font-bold bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                                <span>{aud.name}</span>
+                                <span className="text-indigo-600">{aud.count} patients</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          const phones = filteredPatientsForSegmentation.map(p => p.phone).filter(Boolean);
+                          setSelectedPatients(phones);
+                          setActiveTab("broadcast");
+                          alert(`${phones.length} patients loaded to outbox broadcast queue!`);
+                        }}
+                        className="w-full mt-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2"
+                      >
+                        <Send className="w-4 h-4" /> Load into Broadcast Queue
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Matched Patients List */}
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-800 shadow-xs space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-xs font-black uppercase text-indigo-600 tracking-wider">Matched Patients List</h3>
+                      <span className="text-xs text-slate-400 font-bold">{filteredPatientsForSegmentation.length} records matched</span>
+                    </div>
+                    <div className="overflow-x-auto max-h-96">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-455 font-bold">
+                            <th className="pb-2.5 pr-2">Name</th>
+                            <th className="pb-2.5 px-2">Phone</th>
+                            <th className="pb-2.5 px-2">Age / Gender</th>
+                            <th className="pb-2.5 px-2">Location</th>
+                            <th className="pb-2.5 px-2">Disease / Speciality</th>
+                            <th className="pb-2.5 pl-2">Last Visit</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {filteredPatientsForSegmentation.map((p, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                              <td className="py-2.5 pr-2 font-bold text-slate-700 dark:text-slate-202">{p.name || "N/A"}</td>
+                              <td className="py-2.5 px-2 font-medium text-slate-505">{p.phone || "N/A"}</td>
+                              <td className="py-2.5 px-2 text-slate-505">{p.age ? `${p.age} yrs` : "N/A"} / {p.gender || "N/A"}</td>
+                              <td className="py-2.5 px-2 text-slate-555">{p.area || p.city || "N/A"}</td>
+                              <td className="py-2.5 px-2">
+                                <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-650 rounded-full text-[10px]">
+                                  {p.disease || "General"}
+                                </span>
+                              </td>
+                              <td className="py-2.5 pl-2 text-slate-404 font-medium">{p.lastVisit || "N/A"}</td>
+                            </tr>
+                          ))}
+                          {filteredPatientsForSegmentation.length === 0 && (
+                            <tr>
+                              <td colSpan={6} className="py-8 text-center text-slate-400 italic">No patients match the selected filter criteria.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Tab 3: Step-by-Step Campaign Wizard & AI Generator */}
+              {activeTab === "campaign_builder" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800 dark:text-white">Studio Campaign Builder</h2>
+                      <p className="text-xs text-slate-400">Step-by-step health promotions wizard with AI assists</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-xs border border-slate-100 dark:border-slate-800 max-w-4xl mx-auto">
+                    
+                    {/* Stepper Wizard Indicator */}
+                    <div className="flex items-center justify-between mb-8 relative">
+                      <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-100 dark:bg-slate-700 -translate-y-1/2 rounded-full z-0" />
+                      <div className="absolute top-1/2 left-0 h-1 bg-indigo-600 -translate-y-1/2 rounded-full z-0 transition-all duration-300" style={{ width: `${(campaignBuilder.step - 1) * 33.3}%` }} />
+                      
+                      {[1, 2, 3, 4].map(idx => (
+                        <div key={idx} className="relative z-10 flex flex-col items-center gap-1.5">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-xs transition-all ${
+                            campaignBuilder.step > idx ? "bg-indigo-650 text-white" :
+                            campaignBuilder.step === idx ? "bg-indigo-600 text-white ring-4 ring-indigo-500/20" :
+                            "bg-slate-100 text-slate-400 dark:bg-slate-900"
+                          }`}>
+                            {campaignBuilder.step > idx ? "✓" : idx}
+                          </div>
+                          <span className={`text-[9px] font-black uppercase tracking-wider ${campaignBuilder.step === idx ? "text-indigo-600" : "text-slate-400"}`}>
+                            {idx === 1 ? "Basics" : idx === 2 ? "Goal & Target" : idx === 3 ? "AI Content" : "Approval"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Step 1: Basics */}
+                    {campaignBuilder.step === 1 && (
+                      <div className="space-y-4 animate-in fade-in duration-200">
+                        <h3 className="text-sm font-bold text-slate-705 dark:text-white border-b pb-2">Campaign Identity</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                          <div>
+                            <label className="block text-slate-400 font-semibold mb-1">Campaign Name</label>
+                            <input 
+                              type="text"
+                              value={campaignBuilder.name}
+                              onChange={(e) => setCampaignBuilder(prev => ({ ...prev, name: e.target.value }))}
+                              placeholder="e.g. Diabetics Monsoon Checkup Invite"
+                              className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-400 font-semibold mb-1">Outreach Channel</label>
+                            <select 
+                              value={campaignBuilder.channel}
+                              onChange={(e) => setCampaignBuilder(prev => ({ ...prev, channel: e.target.value }))}
+                              className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            >
+                              <option value="WhatsApp Broadcast">WhatsApp Broadcast (Recommended)</option>
+                              <option value="SMS Campaign">SMS Campaign</option>
+                              <option value="Email Campaign">Email Campaign</option>
+                              <option value="Festival Campaign">Festival Greeting Broadcast</option>
+                              <option value="Health Awareness Campaign">Health Awareness Poster</option>
+                              <option value="Vaccination Reminder">Vaccination Refill Reminder</option>
+                              <option value="Medicine Reminder">Medicine Refill Reminder</option>
+                              <option value="Review Request">Google Review Request</option>
+                              <option value="Seasonal Campaign">Seasonal Epidemics Campaign</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2">
+                          <div>
+                            <label className="block text-slate-400 font-semibold mb-1">Schedule Priority</label>
+                            <select 
+                              value={campaignBuilder.scheduleType}
+                              onChange={(e) => setCampaignBuilder(prev => ({ ...prev, scheduleType: e.target.value }))}
+                              className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            >
+                              <option value="Immediate">Send Immediately</option>
+                              <option value="Scheduled">Schedule For Later</option>
+                              <option value="Recurring">Set Recurring Automation</option>
+                            </select>
+                          </div>
+                          {campaignBuilder.scheduleType === "Scheduled" && (
+                            <div>
+                              <label className="block text-slate-400 font-semibold mb-1">Target Dispatch Time</label>
+                              <input 
+                                type="datetime-local"
+                                value={campaignBuilder.scheduleTime}
+                                onChange={(e) => setCampaignBuilder(prev => ({ ...prev, scheduleTime: e.target.value }))}
+                                className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* AI timing toggler */}
+                        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl flex items-center justify-between border border-slate-100 dark:border-slate-800">
+                          <div className="flex items-center gap-3">
+                            <Sparkles className="w-5 h-5 text-indigo-600 shrink-0" />
+                            <div>
+                              <p className="text-xs font-bold">AI Suggested Timing Optimizer</p>
+                              <p className="text-[10px] text-slate-400">Queue campaign for optimal dispatch hours to maximize CTR rates.</p>
+                            </div>
+                          </div>
+                          <input 
+                            type="checkbox"
+                            checked={campaignBuilder.aiTiming}
+                            onChange={(e) => setCampaignBuilder(prev => ({ ...prev, aiTiming: e.target.checked }))}
+                            className="w-4 h-4 text-indigo-600 rounded"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 2: Goal & Target */}
+                    {campaignBuilder.step === 2 && (
+                      <div className="space-y-4 animate-in fade-in duration-200 text-xs">
+                        <h3 className="text-sm font-bold text-slate-705 dark:text-white border-b pb-2">Campaign Goal & Audience Segment</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-slate-400 font-semibold mb-1">Core Campaign Goal</label>
+                            <select 
+                              value={campaignBuilder.goal}
+                              onChange={(e) => setCampaignBuilder(prev => ({ ...prev, goal: e.target.value }))}
+                              className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            >
+                              <option value="Lead Generation">Lead Generation (New Patient Camp)</option>
+                              <option value="Patient Retention">Patient Retention (Follow-up Checkup)</option>
+                              <option value="Brand Building">Brand Building (Festival greeting)</option>
+                              <option value="Refill Alert">Medicine Refill reminder</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-slate-400 font-semibold mb-1">Audience Segment Group</label>
+                            <select 
+                              value={campaignBuilder.targetAudienceId}
+                              onChange={(e) => setCampaignBuilder(prev => ({ ...prev, targetAudienceId: e.target.value }))}
+                              className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            >
+                              <option value="">-- Choose Segment --</option>
+                              {savedAudiences.map(aud => (
+                                <option key={aud.id} value={aud.id}>{aud.name} ({aud.count} Patients)</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-indigo-50/50 dark:bg-slate-900 rounded-2xl border border-indigo-150">
+                          <p className="font-bold mb-1">Selected Segment Estimate:</p>
+                          <p className="text-[10px] text-slate-400">
+                            You are about to direct this outreach campaign to {campaignBuilder.targetAudienceId ? savedAudiences.find(a => a.id === campaignBuilder.targetAudienceId)?.count : 0} validated patient numbers.
                           </p>
                         </div>
-                        <div className="text-right space-y-1 select-none">
-                          <span className="bg-slate-200/50 dark:bg-slate-700 px-2.5 py-1 rounded-md text-[9px] font-extrabold uppercase text-slate-500 mr-2">
-                            📈 {item.reach} Reach / {item.clicks} Click action
+                      </div>
+                    )}
+
+                    {/* Step 3: AI content prompt */}
+                    {campaignBuilder.step === 3 && (
+                      <div className="space-y-4 animate-in fade-in duration-200 text-xs">
+                        <h3 className="text-sm font-bold text-slate-705 dark:text-white border-b pb-2">AI Copilot copy assistant</h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-slate-400 font-semibold mb-1">Target Language Tone</label>
+                            <select 
+                              value={campaignBuilder.aiTone}
+                              onChange={(e) => setCampaignBuilder(prev => ({ ...prev, aiTone: e.target.value }))}
+                              className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            >
+                              <option value="Professional">Professional (Informative & clinical)</option>
+                              <option value="Friendly">Friendly (Warm & inviting)</option>
+                              <option value="Emotional">Emotional (Empathy driven health safety)</option>
+                              <option value="Promotional">Promotional (Value coupon focus)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-slate-400 font-semibold mb-1">Output Language</label>
+                            <select 
+                              value={campaignBuilder.aiLanguage}
+                              onChange={(e) => setCampaignBuilder(prev => ({ ...prev, aiLanguage: e.target.value }))}
+                              className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            >
+                              <option value="English">English Only</option>
+                              <option value="Marathi">Marathi Only (मराठी)</option>
+                              <option value="Hindi">Hindi Only (हिंदी)</option>
+                              <option value="Mixed Language">Mixed Hinglish Language</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-400 font-semibold mb-1">AI Prompt Instruction</label>
+                          <textarea 
+                            rows={3}
+                            value={aiGenerator.prompt}
+                            onChange={(e) => setAiGenerator(prev => ({ ...prev, prompt: e.target.value }))}
+                            className="w-full p-3 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            placeholder="e.g. 10% discount on heart health diagnostics camp this Sunday at CareBridge clinic..."
+                          />
+                        </div>
+
+                        <div className="flex justify-start">
+                          <button 
+                            onClick={() => {
+                              if (!aiGenerator.prompt) {
+                                alert("Please type a custom prompt instruction first!");
+                                return;
+                              }
+                              setAiGenerator(prev => ({ ...prev, generating: true }));
+                              setTimeout(() => {
+                                setCampaignBuilder(prev => ({
+                                  ...prev,
+                                  aiGeneratedHeadline: "Protect Your Heart: Free Cardiac Consultations",
+                                  aiGeneratedCaption: "CareBridge invites you for customized cardiac testing camp. Limited Sunday slots available.",
+                                  aiGeneratedCTA: "Book Cardiac Slot Now"
+                                }));
+                                setAiGenerator(prev => ({ ...prev, generating: false }));
+                              }, 1200);
+                            }}
+                            className="px-4 py-2.5 bg-teal-605 hover:bg-teal-700 text-white rounded-xl font-bold flex items-center gap-1.5"
+                          >
+                            <Sparkles className="w-4 h-4" /> 
+                            {aiGenerator.generating ? "AI generating templates..." : "Draft Campaign Copy Automatically"}
+                          </button>
+                        </div>
+
+                        {campaignBuilder.aiGeneratedHeadline && (
+                          <div className="bg-slate-50 dark:bg-slate-955 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2.5">
+                            <div>
+                              <span className="text-[10px] text-slate-400 font-bold uppercase">Headline Preview</span>
+                              <p className="font-bold text-slate-700 dark:text-white">{campaignBuilder.aiGeneratedHeadline}</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 font-bold uppercase">Body Copy</span>
+                              <p className="text-slate-600 dark:text-slate-305">{campaignBuilder.aiGeneratedCaption}</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 font-bold uppercase">CTA Button</span>
+                              <p className="font-bold text-indigo-650">{campaignBuilder.aiGeneratedCTA}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Step 4: Preview & Launch */}
+                    {campaignBuilder.step === 4 && (
+                      <div className="space-y-4 animate-in fade-in duration-200 text-xs">
+                        <h3 className="text-sm font-bold text-slate-705 dark:text-white border-b pb-2">Approval & Final Review</h3>
+                        <div className="bg-slate-50 dark:bg-slate-905 p-6 rounded-3xl space-y-4">
+                          <div className="flex justify-between border-b pb-2">
+                            <span className="text-slate-405">Campaign Name:</span>
+                            <span className="font-bold">{campaignBuilder.name || "AI Outreach Broadcast"}</span>
+                          </div>
+                          <div className="flex justify-between border-b pb-2">
+                            <span className="text-slate-405">Recipient Target:</span>
+                            <span className="font-bold text-indigo-650">
+                              {campaignBuilder.targetAudienceId ? savedAudiences.find(a => a.id === campaignBuilder.targetAudienceId)?.name : "Dynamic Filters"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between border-b pb-2">
+                            <span className="text-slate-405">Channel Mode:</span>
+                            <span className="font-bold">{campaignBuilder.channel}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-405">AI Suggested Schedule:</span>
+                            <span className="font-bold text-emerald-650">Optimal (4:00 PM Sunday)</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-indigo-500/10 p-4 rounded-2xl flex gap-3 text-indigo-800 dark:text-indigo-300">
+                          <Info className="w-5 h-5 shrink-0" />
+                          <p className="text-[10px] leading-relaxed">
+                            Once launched, the gateway will process the dispatch using standard queue mechanisms. Live delivery status can be tracked directly in the main Dashboard logs.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stepper control buttons */}
+                    <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-between">
+                      <button 
+                        onClick={() => setCampaignBuilder(prev => ({ ...prev, step: Math.max(1, prev.step - 1) }))}
+                        disabled={campaignBuilder.step === 1}
+                        className="px-6 py-2.5 rounded-xl font-bold bg-slate-100 hover:bg-slate-200 text-slate-655 dark:bg-slate-700 dark:text-white disabled:opacity-50"
+                      >
+                        Go Back
+                      </button>
+
+                      {campaignBuilder.step < 4 ? (
+                        <button 
+                          onClick={() => setCampaignBuilder(prev => ({ ...prev, step: prev.step + 1 }))}
+                          className="px-8 py-2.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5"
+                        >
+                          Next Step <ArrowRight className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={handleCreateCampaignFromWizard}
+                          className="px-8 py-2.5 rounded-xl font-black bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/10 flex items-center gap-1.5"
+                        >
+                          Approve & Launch Campaign <Send className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Tab 4: Poster Studio */}
+              {activeTab === "poster_studio" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800 dark:text-white">AI Poster Studio</h2>
+                      <p className="text-xs text-slate-400">Design health tips & doctor promotional banners instantly</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left Canvas Controller */}
+                    <div className="lg:col-span-4 bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-4 text-xs">
+                      {/* Automatically AI Generate Poster */}
+                      <div className="p-3 bg-indigo-50/50 dark:bg-slate-900 border border-indigo-100 dark:border-indigo-950 rounded-2xl space-y-2">
+                        <label className="block text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">Automatically AI Generate Poster</label>
+                        <div className="flex gap-2">
+                          <select 
+                            value={aiPosterTopic}
+                            onChange={(e) => setAiPosterTopic(e.target.value)}
+                            className="flex-1 p-2 bg-white dark:bg-slate-800 border border-slate-200 rounded-xl text-xs font-semibold"
+                          >
+                            {aiPosterTopicsList.map(t => (
+                              <option key={t.id} value={t.id}>{t.label}</option>
+                            ))}
+                          </select>
+                          <button 
+                            onClick={() => autoGenerateAIPoster(aiPosterTopic)}
+                            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shrink-0 flex items-center gap-1"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" /> AI Run
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-404 font-bold mb-1">Select Ready Theme</label>
+                        <select 
+                          value={posterStudio.category}
+                          onChange={(e) => setPosterStudio(prev => ({ ...prev, category: e.target.value }))}
+                          className="w-full p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl font-semibold"
+                        >
+                          <option value="General Medicine">General Medicine checkup</option>
+                          <option value="Diabetes">Diabetic Care camp</option>
+                          <option value="Dental">Dental Care camp</option>
+                          <option value="Vaccination">Vaccination Reminder</option>
+                          <option value="Ayurveda">Ayurveda consults</option>
+                          <option value="Women's Health">Pregnancy checkup</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-404 font-bold mb-1">Headline Text</label>
+                        <input 
+                          type="text" 
+                          value={posterStudio.headline}
+                          onChange={(e) => setPosterStudio(prev => ({ ...prev, headline: e.target.value }))}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-404 font-bold mb-1">Description Copy</label>
+                        <textarea 
+                          rows={3} 
+                          value={posterStudio.description}
+                          onChange={(e) => setPosterStudio(prev => ({ ...prev, description: e.target.value }))}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-slate-404 font-bold mb-1">Brand Main Color</label>
+                          <input 
+                            type="color" 
+                            value={posterStudio.brandColor}
+                            onChange={(e) => setPosterStudio(prev => ({ ...prev, brandColor: e.target.value }))}
+                            className="w-full h-9 p-1 bg-slate-50 rounded-xl cursor-pointer"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-404 font-bold mb-1">CTA Text</label>
+                          <input 
+                            type="text" 
+                            value={posterStudio.cta}
+                            onChange={(e) => setPosterStudio(prev => ({ ...prev, cta: e.target.value }))}
+                            className="w-full p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Photo Upload Triggers */}
+                      <div className="space-y-2 pt-2">
+                        <label className="block text-[10px] font-bold text-slate-404 uppercase">Logo & Photos Branding</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button 
+                            onClick={() => setPosterStudio(prev => ({ ...prev, logoUploaded: true }))}
+                            className={`p-2 border rounded-xl text-center font-bold text-[10px] truncate ${posterStudio.logoUploaded ? "bg-teal-50 border-teal-300 text-teal-700" : "bg-slate-50 hover:bg-slate-100"}`}
+                          >
+                            {posterStudio.logoUploaded ? "Logo Added" : "+ Clinic Logo"}
+                          </button>
+                          <button 
+                            onClick={() => setPosterStudio(prev => ({ ...prev, doctorPhotoUploaded: true }))}
+                            className={`p-2 border rounded-xl text-center font-bold text-[10px] truncate ${posterStudio.doctorPhotoUploaded ? "bg-teal-50 border-teal-300 text-teal-700" : "bg-slate-50 hover:bg-slate-100"}`}
+                          >
+                            {posterStudio.doctorPhotoUploaded ? "Photo Added" : "+ Doctor Photo"}
+                          </button>
+                          <button 
+                            onClick={() => setPosterStudio(prev => ({ ...prev, clinicPhotoUploaded: true }))}
+                            className={`p-2 border rounded-xl text-center font-bold text-[10px] truncate ${posterStudio.clinicPhotoUploaded ? "bg-teal-50 border-teal-300 text-teal-700" : "bg-slate-50 hover:bg-slate-100"}`}
+                          >
+                            {posterStudio.clinicPhotoUploaded ? "Clinic Image" : "+ Clinic Image"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="h-px bg-slate-200/50 dark:bg-slate-800 my-4" />
+
+                      {/* AI Image prompt inside Poster studio */}
+                      <div className="space-y-2">
+                        <label className="block text-slate-404 font-bold">AI Poster Background Image Generator</label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            placeholder="e.g. cartoon stethoscope with happy family..."
+                            value={posterStudio.aiPrompt}
+                            onChange={(e) => setPosterStudio(prev => ({ ...prev, aiPrompt: e.target.value }))}
+                            className="flex-1 p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                          />
+                          <button 
+                            onClick={() => {
+                              if (!posterStudio.aiPrompt) return;
+                              setPosterStudio(prev => ({ ...prev, aiImageLoading: true }));
+                              setTimeout(() => {
+                                setPosterStudio(prev => ({ 
+                                  ...prev, 
+                                  aiImageLoading: false, 
+                                  generatedImageUrl: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=400&q=80" 
+                                }));
+                              }, 1500);
+                            }}
+                            className="px-3 bg-indigo-600 text-white rounded-xl font-bold"
+                          >
+                            Generate
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Canvas Preview Area */}
+                    <div className="lg:col-span-8 bg-slate-200/50 dark:bg-slate-955 p-6 rounded-3xl border border-slate-100 dark:border-slate-900/60 flex flex-col items-center justify-between">
+                      
+                      <div className="w-full flex justify-between items-center mb-4">
+                        <span className="text-xs font-bold text-slate-404 uppercase">Live Canvas Preview</span>
+                        <div className="flex items-center gap-2 text-xs">
+                          <select 
+                            value={posterStudio.exportFormat}
+                            onChange={(e) => setPosterStudio(prev => ({ ...prev, exportFormat: e.target.value }))}
+                            className="p-1 bg-white dark:bg-slate-800 rounded-lg text-xs font-bold"
+                          >
+                            <option value="PNG">PNG Export</option>
+                            <option value="PDF">PDF Print</option>
+                          </select>
+                          <button 
+                            onClick={() => alert(`Exporting poster as ${posterStudio.exportFormat}... Done!`)}
+                            className="px-3 py-1.5 bg-slate-905 hover:bg-black text-white dark:bg-white dark:text-slate-905 rounded-xl font-bold flex items-center gap-1.5"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Export
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Poster Mock Box */}
+                      <div 
+                        className="w-full max-w-[340px] aspect-square rounded-2xl shadow-xl overflow-hidden relative flex flex-col justify-between p-6 bg-white transition-all text-slate-800"
+                        style={{ borderTop: `8px solid ${posterStudio.brandColor}` }}
+                      >
+                        {/* Header logo row */}
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-slate-150 flex items-center justify-center font-black text-[10px] text-slate-600 uppercase">
+                              {posterStudio.logoUploaded ? "LOGO" : "CB"}
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase text-slate-700 tracking-wider">CareBridge Clinic</p>
+                              <p className="text-[8px] font-bold text-slate-400">Trusted Family Care</p>
+                            </div>
+                          </div>
+                          {posterStudio.doctorPhotoUploaded && (
+                            <div className="w-10 h-10 rounded-full bg-slate-300 border-2 border-white overflow-hidden shadow-xs">
+                              <img src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=80&q=80" alt="Doctor" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Mid background if generated */}
+                        {posterStudio.generatedImageUrl ? (
+                          <div className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none" style={{ backgroundImage: `url(${posterStudio.generatedImageUrl})` }} />
+                        ) : null}
+
+                        {/* Mid core layout */}
+                        <div className="my-auto space-y-2 relative z-10 text-center">
+                          <h4 
+                            className="text-lg font-black tracking-tight leading-tight uppercase"
+                            style={{ color: posterStudio.brandColor }}
+                          >
+                            {posterStudio.headline}
+                          </h4>
+                          <p className="text-[10px] text-slate-555 font-medium leading-relaxed">
+                            {posterStudio.description}
+                          </p>
+                        </div>
+
+                        {/* CTA Footer banner */}
+                        <div 
+                          className="w-full py-2.5 rounded-xl text-center text-xs font-bold text-white tracking-wide mt-2 shadow-xs"
+                          style={{ backgroundColor: posterStudio.brandColor }}
+                        >
+                          {posterStudio.cta}
+                        </div>
+                      </div>
+
+                      <div className="w-full text-center mt-4">
+                        <button 
+                          onClick={() => {
+                            alert("Sharing directly to connected clinic numbers...");
+                          }}
+                          className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                        >
+                          <Share2 className="w-4 h-4" /> Share Directly to WhatsApp Status
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Tab 5: WhatsApp Post Creator with Resizer */}
+              {activeTab === "whatsapp_creator" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800 dark:text-white">WhatsApp Post & Story Creator</h2>
+                      <p className="text-xs text-slate-400">Generate, resize, and dispatch high engagement assets for WhatsApp statuses</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left sizing and captions input */}
+                    <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-5 text-xs">
+                      {/* Automatically AI Generate WhatsApp Message */}
+                      <div className="p-3 bg-emerald-50/30 dark:bg-slate-900 border border-emerald-100/50 dark:border-emerald-950 rounded-2xl space-y-2">
+                        <label className="block text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Automatically AI Generate WhatsApp Message</label>
+                        <div className="flex gap-2">
+                          <select 
+                            value={aiWhatsAppTopic}
+                            onChange={(e) => setAiWhatsAppTopic(e.target.value)}
+                            className="flex-1 p-2 bg-white dark:bg-slate-800 border border-slate-202 rounded-xl text-xs font-semibold"
+                          >
+                            {aiWhatsAppTopicsList.map(t => (
+                              <option key={t.id} value={t.id}>{t.label}</option>
+                            ))}
+                          </select>
+                          <button 
+                            onClick={() => autoGenerateAIWhatsApp(aiWhatsAppTopic)}
+                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shrink-0 flex items-center gap-1"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" /> AI Run
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-404 font-bold mb-2">Select Canvas Aspect Ratio</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { id: "square", label: "Square (1:1)" },
+                            { id: "portrait", label: "Portrait (4:5)" },
+                            { id: "story", label: "Story/Status (9:16)" }
+                          ].map((a) => (
+                            <button
+                              key={a.id}
+                              onClick={() => setWaCreator(prev => ({ ...prev, aspectRatio: a.id }))}
+                              className={`p-3 border rounded-xl text-center font-bold ${waCreator.aspectRatio === a.id ? "bg-indigo-50 border-indigo-400 text-indigo-700" : "bg-slate-50 hover:bg-slate-100"}`}
+                            >
+                              {a.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-404 font-bold mb-1">AI Suggested Caption Copy</label>
+                        <textarea 
+                          rows={4}
+                          value={waCreator.caption}
+                          onChange={(e) => setWaCreator(prev => ({ ...prev, caption: e.target.value }))}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                        />
+                      </div>
+
+                      {/* Emojis suggested */}
+                      <div>
+                        <span className="block text-slate-404 font-bold mb-1">Suggested Emoji Enhancers</span>
+                        <div className="flex gap-2">
+                          {waCreator.suggestedEmojis.map((emoji, idx) => (
+                            <button 
+                              key={idx}
+                              onClick={() => setWaCreator(prev => ({ ...prev, caption: prev.caption + " " + emoji }))}
+                              className="w-8 h-8 bg-slate-100 dark:bg-slate-900 rounded-lg flex items-center justify-center hover:scale-105 transition-all text-sm"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-404 font-bold mb-1">Interactive Call To Action (CTA)</label>
+                        <input 
+                          type="text" 
+                          value={waCreator.cta}
+                          onChange={(e) => setWaCreator(prev => ({ ...prev, cta: e.target.value }))}
+                          className="w-full p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right Resized preview wrapper */}
+                    <div className="lg:col-span-7 bg-slate-250 dark:bg-slate-955 p-6 rounded-3xl border border-slate-100 dark:border-slate-900/60 flex flex-col items-center justify-center">
+                      <span className="text-xs font-bold text-slate-455 uppercase mb-4">Auto-Resized Preview ({waCreator.aspectRatio})</span>
+                      
+                      <div 
+                        className={`bg-white text-slate-800 shadow-xl rounded-2xl overflow-hidden p-6 flex flex-col justify-between transition-all duration-300 ${
+                          waCreator.aspectRatio === "square" ? "w-[260px] aspect-square" :
+                          waCreator.aspectRatio === "portrait" ? "w-[240px] h-[300px]" :
+                          "w-[200px] h-[356px]" // Story status aspect ratio
+                        }`}
+                      >
+                        <div className="border-b pb-2">
+                          <p className="text-[10px] font-black uppercase text-emerald-600 tracking-wider">🟢 Whatsapp status template</p>
+                        </div>
+                        <div className="my-auto space-y-2 text-center">
+                          <p className="text-xs font-bold leading-normal text-slate-705">
+                            {waCreator.caption}
+                          </p>
+                        </div>
+                        <div className="bg-emerald-50 text-emerald-800 font-bold text-[10px] py-2 rounded-xl text-center border border-emerald-200">
+                          {waCreator.cta}
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          alert("WhatsApp post dispatched to client list!");
+                        }}
+                        className="mt-6 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                      >
+                        <Send className="w-4 h-4" /> One Click dispatch
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Tab 6: Broadcast Module */}
+              {activeTab === "broadcast" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800 dark:text-white">Broadcast Module</h2>
+                      <p className="text-xs text-slate-400">Launch urgent manual or scheduled campaigns instantly</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                    
+                    {/* Broadcast Form */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-4 text-xs">
+                      <h3 className="text-xs font-bold text-slate-404 uppercase tracking-wider mb-2">Outbox configuration</h3>
+                      
+                      <div>
+                        <label className="block text-slate-404 font-bold mb-1">Broadcast Name</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. Free Eye Diagnostics camp"
+                          value={broadcastForm.name}
+                          onChange={(e) => setBroadcastForm(prev => ({ ...prev, name: e.target.value }))}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-404 font-bold mb-1">Target Audience Group</label>
+                        <select 
+                          value={broadcastForm.selectedAudienceId}
+                          onChange={(e) => setBroadcastForm(prev => ({ ...prev, selectedAudienceId: e.target.value }))}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                        >
+                          <option value="">Choose Dynamic Segment (Loads Patient Count)</option>
+                          {savedAudiences.map(aud => (
+                            <option key={aud.id} value={aud.id}>{aud.name} ({aud.count} Patients)</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-455 font-bold mb-1">Gateway Channel</label>
+                        <select 
+                          value={broadcastForm.channel}
+                          onChange={(e) => setBroadcastForm(prev => ({ ...prev, channel: e.target.value }))}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl font-bold"
+                        >
+                          <option value="WhatsApp">WhatsApp Gateway API</option>
+                          <option value="SMS">National Telecom SMS Gateway</option>
+                          <option value="Email">Secure SMTP Mail server</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-slate-404 font-bold mb-1">Dispatch Mode</label>
+                          <select 
+                            value={broadcastForm.scheduleType}
+                            onChange={(e) => setBroadcastForm(prev => ({ ...prev, scheduleType: e.target.value }))}
+                            className="w-full p-2.5 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                          >
+                            <option value="immediate">Immediate Dispatch</option>
+                            <option value="scheduled">Schedule dispatch</option>
+                          </select>
+                        </div>
+                        {broadcastForm.scheduleType === "scheduled" && (
+                          <div>
+                            <label className="block text-slate-404 font-bold mb-1">Target Date</label>
+                            <input 
+                              type="datetime-local" 
+                              value={broadcastForm.scheduleDate}
+                              onChange={(e) => setBroadcastForm(prev => ({ ...prev, scheduleDate: e.target.value }))}
+                              className="w-full p-2 bg-slate-50 dark:bg-slate-905 border border-slate-202 dark:border-slate-700 rounded-xl"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-2">
+                        <button 
+                          onClick={startBroadcast}
+                          disabled={broadcastStatus === "sending"}
+                          className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          <Send className="w-4 h-4" /> Start Broadcast Run
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Progress Console Output */}
+                    <div className="bg-[#111827] text-slate-100 p-6 rounded-3xl flex flex-col justify-between">
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-bold tracking-wider text-slate-450 uppercase">Gateway progress console</span>
+                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                            broadcastStatus === "sending" ? "bg-blue-500 text-white animate-pulse" :
+                            broadcastStatus === "completed" ? "bg-green-600 text-white" : "bg-slate-800 text-slate-400"
+                          }`}>
+                            {broadcastStatus}
                           </span>
-                          <span className="bg-green-500/10 text-green-500 px-2 py-0.5 rounded-full text-[9px] font-black uppercase">
-                            {item.status}
-                          </span>
+                        </div>
+
+                        {/* Progress Bar */}
+                        {broadcastProgress >= 0 && (
+                          <div className="space-y-1.5">
+                            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                              <div className="bg-indigo-500 h-full transition-all duration-500" style={{ width: `${broadcastProgress}%` }} />
+                            </div>
+                            <div className="flex justify-between text-[10px] text-slate-400 font-bold">
+                              <span>Dispatched: {broadcastProgress}%</span>
+                              <span>Est Delivery: ~1 min remaining</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Logs stack */}
+                        <div className="bg-black/40 rounded-2xl p-4 h-48 overflow-y-auto text-[10px] font-mono space-y-1 text-slate-300">
+                          {broadcastLogs.map((log, idx) => (
+                            <div key={idx} className="flex gap-2">
+                              <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span>
+                              <span>{log}</span>
+                            </div>
+                          ))}
+                          {broadcastLogs.length === 0 && (
+                            <p className="text-slate-500 italic">Logs console idle. Trigger a broadcast to view trace signals.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {broadcastStatus === "failed" && (
+                        <button 
+                          onClick={startBroadcast}
+                          className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold"
+                        >
+                          Retry Failed Dispatches
+                        </button>
+                      )}
+                    </div>
+
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Tab 7: Automation Hub */}
+              {activeTab === "automation" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800 dark:text-white">Clinic Automation Workflows</h2>
+                      <p className="text-xs text-slate-400">Trigger patient greetings, follow-ups, and review alerts automatically</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {automations.map(auto => (
+                      <div 
+                        key={auto.id}
+                        className={`bg-white dark:bg-slate-800 p-5 rounded-3xl border shadow-xs transition-all flex flex-col justify-between ${
+                          auto.active ? "border-teal-200 dark:border-teal-900" : "border-slate-200/60 dark:border-slate-800"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-700 dark:text-white">{auto.type}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">{auto.channel}</span>
+                              
+                              {/* Active Switch toggler */}
+                              <button 
+                                onClick={() => {
+                                  setAutomations(automations.map(a => a.id === auto.id ? { ...a, active: !a.active } : a));
+                                }}
+                                className={`w-8 h-4 rounded-full transition-all relative ${auto.active ? "bg-teal-500" : "bg-slate-200 dark:bg-slate-700"}`}
+                              >
+                                <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${auto.active ? "right-0.5" : "left-0.5"}`} />
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">{auto.desc}</p>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[10px]">
+                          <span className="text-slate-400">Triggered: <strong className="text-slate-655 dark:text-slate-350">Daily 10:00 AM</strong></span>
+                          <button 
+                            onClick={() => alert(`Configuring templates for ${auto.type}`)}
+                            className="text-indigo-650 hover:underline font-bold"
+                          >
+                            Edit Rule
+                          </button>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </motion.div>
+              )}
 
-              </motion.div>
-            )}
+              {/* Tab 8: Template Library */}
+              {activeTab === "templates" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800 dark:text-white">Promotional Templates Manager</h2>
+                      <p className="text-xs text-slate-400">Create, edit, duplicate and bookmark outreach designs</p>
+                    </div>
+                    <button 
+                      onClick={() => alert("Creating a new blank layout template...")}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" /> Create Custom Template
+                    </button>
+                  </div>
 
-          </AnimatePresence>
-        </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {templates.map(t => (
+                      <div key={t.id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start">
+                            <span className="text-[9px] font-black uppercase tracking-wider bg-slate-100 dark:bg-slate-900 text-slate-500 px-2.5 py-0.5 rounded-full">
+                              {t.category}
+                            </span>
+                            
+                            {/* Favorite toggle bookmark */}
+                            <button 
+                              onClick={() => {
+                                setTemplates(templates.map(temp => temp.id === t.id ? { ...temp, favorite: !temp.favorite } : temp));
+                              }}
+                              className="text-slate-400 hover:text-amber-500 transition-colors"
+                            >
+                              <Star className={`w-4 h-4 ${t.favorite ? "fill-amber-500 text-amber-500" : ""}`} />
+                            </button>
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-700 dark:text-white">{t.name}</h4>
+                        </div>
+
+                        <div className="mt-6 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[10px]">
+                          <span className="text-slate-400">Rating: <strong className="text-slate-655 dark:text-slate-350">{t.rating} ★</strong></span>
+                          <div className="space-x-2">
+                            <button 
+                              onClick={() => alert(`Duplicating layout ${t.name}...`)}
+                              className="text-slate-505 hover:underline font-semibold"
+                            >
+                              Duplicate
+                            </button>
+                            <button 
+                              onClick={() => alert(`Sharing template ${t.name}...`)}
+                              className="text-indigo-600 hover:underline font-bold"
+                            >
+                              Dispatch/Use
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Tab 9: Insights & Deep Analytics */}
+              {activeTab === "analytics" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800 dark:text-white">Marketing Analytics Hub</h2>
+                      <p className="text-xs text-slate-400">Deep campaign ROI, read rates, and patient acquisition growth stats</p>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <select 
+                        value={analyticsTimeframe}
+                        onChange={(e) => setAnalyticsTimeframe(e.target.value as any)}
+                        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-750 px-3 py-1.5 rounded-xl text-xs font-bold"
+                      >
+                        <option value="daily">Daily report</option>
+                        <option value="weekly">Weekly report</option>
+                        <option value="monthly">Monthly report</option>
+                      </select>
+                      <button 
+                        onClick={() => alert("Generating marketing PDF performance audit report...")}
+                        className="px-3 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                      >
+                        <FileDown className="w-4 h-4" /> Export Report
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Performance Line Chart */}
+                    <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-xs">
+                      <h3 className="text-xs font-bold text-slate-405 uppercase tracking-wider mb-6">Patient Acquisition Revenue & Reach Trend</h3>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={chartsData}>
+                            <defs>
+                              <linearGradient id="colorAcq" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.2}/>
+                                <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? "#334155" : "#f1f5f9"} />
+                            <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                            <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                            <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }} />
+                            <Legend verticalAlign="top" height={36} />
+                            <Area type="monotone" dataKey="revenue" name="Acquisition Revenue (₹)" stroke="#4f46e5" strokeWidth={3} fillOpacity={1} fill="url(#colorAcq)" />
+                            <Area type="monotone" dataKey="reach" name="Total Reach" stroke="#0d9488" strokeWidth={3} fillOpacity={0} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Disease/Speciality breakdown representation */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+                      <h3 className="text-xs font-bold text-slate-405 uppercase tracking-wider mb-4">Disease Wise Campaign Success</h3>
+                      
+                      <div className="h-44 w-full flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={diseaseBreakdownData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={45}
+                              outerRadius={65}
+                              paddingAngle={3}
+                              dataKey="value"
+                            >
+                              {diseaseBreakdownData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      <div className="space-y-2 pt-2">
+                        {diseaseBreakdownData.map(item => (
+                          <div key={item.name} className="flex justify-between items-center text-[11px] font-bold">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                              <span className="text-slate-500">{item.name}</span>
+                            </div>
+                            <span>{item.value}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Tab 10: System Notifications Alerts Log */}
+              {activeTab === "notifications" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-800 dark:text-white">Marketing Alerts & Logs</h2>
+                      <p className="text-xs text-slate-400">Security audit trace and credit status logs</p>
+                    </div>
+                    <button 
+                      onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))}
+                      className="text-xs font-bold text-indigo-650 hover:underline"
+                    >
+                      Mark all as read
+                    </button>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-xs divide-y divide-slate-100 dark:divide-slate-800">
+                    {notifications.map(n => (
+                      <div key={n.id} className={`p-5 flex gap-4 items-start ${n.read ? "opacity-75" : "bg-indigo-50/10"}`}>
+                        <div className="mt-1">
+                          {n.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> :
+                           n.type === "failed" ? <X className="w-5 h-5 text-rose-500" /> :
+                           n.type === "warning" ? <AlertTriangle className="w-5 h-5 text-amber-500" /> :
+                           <Info className="w-5 h-5 text-indigo-500" />}
+                        </div>
+                        <div className="flex-1 text-xs">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold text-slate-700 dark:text-white">{n.title}</span>
+                            <span className="text-[10px] text-slate-400">{n.time}</span>
+                          </div>
+                          <p className="text-slate-555 font-semibold leading-relaxed">{n.message}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+            </AnimatePresence>
+          )}
+
+        </main>
 
       </div>
 

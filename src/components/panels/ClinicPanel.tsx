@@ -95,6 +95,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import React from "react";
+import PremiumSubscriptionCard from "../subscription/PremiumSubscriptionCard";
 import { motion, AnimatePresence } from "framer-motion";
 import ConfirmationModal from "../common/ConfirmationModal";
 import {
@@ -136,7 +137,17 @@ import {
 } from "recharts";
 
 import PatientAvatar from "../common/PatientAvatar";
-import HealthcareCRM from "./HealthcareCRM";
+import MarketingOutreach from "./MarketingOutreach";
+
+const previewChartData = [
+  { day: "Mon", billing: 4000 },
+  { day: "Tue", billing: 3000 },
+  { day: "Wed", billing: 5500 },
+  { day: "Thu", billing: 4500 },
+  { day: "Fri", billing: 6000 },
+  { day: "Sat", billing: 7000 },
+  { day: "Sun", billing: 6500 },
+];
 
 const compressImage = (
   file: File,
@@ -219,6 +230,7 @@ export default function ClinicPanel({
 }: ClinicPanelProps) {
   const currentTime = useLiveClock();
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [expandedAdmissions, setExpandedAdmissions] = useState<string[]>([]);
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -234,6 +246,7 @@ export default function ClinicPanel({
   const [loading, setLoading] = useState(true);
   const [filterLocation, setFilterLocation] = useState("all");
   const [filterDept, setFilterDept] = useState("all");
+  const [filterHospitalName, setFilterHospitalName] = useState("");
   const [selectedHospital, setSelectedHospital] = useState<any>(null);
   const [selectedHospitalDoctors, setSelectedHospitalDoctors] = useState<any[]>(
     [],
@@ -257,6 +270,7 @@ export default function ClinicPanel({
     note: "",
   });
   const [isReferralSubmitting, setIsReferralSubmitting] = useState(false);
+  const [isOpdSubmitting, setIsOpdSubmitting] = useState(false);
   const [referralPatientSearch, setReferralPatientSearch] = useState("");
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -341,7 +355,7 @@ export default function ClinicPanel({
   const [creditRecords, setCreditRecords] = useState<any[]>([]);
   const [creditSearch, setCreditSearch] = useState("");
   const [creditView, setCreditView] = useState<"dashboard" | "tracker" | "report" | "billing_history" | "manual_billing">("dashboard");
-  
+
   const [manualBill, setManualBill] = useState<any>({
     patientName: "",
     patientPhone: "",
@@ -353,7 +367,7 @@ export default function ClinicPanel({
     paymentMode: "cash",
     note: ""
   });
-  
+
   // Manual Invoicing States
   const [manualBillForm, setManualBillForm] = useState({
     patientName: "",
@@ -378,7 +392,7 @@ export default function ClinicPanel({
 
   // Edit Bill States
   const [editingBill, setEditingBill] = useState<any | null>(null);
-  
+
   // Credit Language Reminder Selected
   const [selectedReminderLanguage, setSelectedReminderLanguage] = useState<Record<string, "en" | "mr" | "hi">>({});
   const [financeSubTab, setFinanceSubTab] = useState<"dashboard" | "transactions" | "credit_reminders">("dashboard");
@@ -417,6 +431,7 @@ export default function ClinicPanel({
     status: "waiting",
     token: 0,
     priorityClass: "Regular",
+    visitOption: "1st Visit",
   });
 
 
@@ -426,6 +441,7 @@ export default function ClinicPanel({
   const [billingProcedureFee, setBillingProcedureFee] = useState("");
   const [billingLabFee, setBillingLabFee] = useState("");
   const [billingOtherFee, setBillingOtherFee] = useState("");
+  const [announcementLanguage, setAnnouncementLanguage] = useState<"en" | "hi" | "mr">("en");
   const [historySubTab, setHistorySubTab] = useState<"opd" | "billing" | "credit" | "appointment">("opd");
   const [selectedQueuePatientId, setSelectedQueuePatientId] = useState<string | null>(null);
   const [billingItems, setBillingItems] = useState<{
@@ -777,7 +793,7 @@ export default function ClinicPanel({
 
       if (!creditLedgerSearch) return true;
       const q = creditLedgerSearch.toLowerCase();
-      
+
       const nameMatch = (r.patientName || "").toLowerCase().includes(q);
       const phoneMatch = (r.patientPhone || "").toLowerCase().includes(q);
       const addressMatch = (r.patientAddress || r.patientArea || "").toLowerCase().includes(q);
@@ -810,10 +826,10 @@ export default function ClinicPanel({
     const clinicName = user.name || "आमचे क्लिनिक";
     const patientName = debtor.patientName;
     const totalCredit = debtor.totalCredit;
-    
+
     // Marathi template
     const msg = `🏥 *${clinicName}* 🏥\n\nप्रिय *${patientName}*,\n\nआपल्या उपचारांचे एकूण प्रलंबित बिल *₹${totalCredit}* अजून येणे बाकी आहे.\n\nकृपया आपल्या सोयीनुसार लवकरात लवकर वरील प्रलंबित रक्कमेचा भरणा करावा ही विनंती.\n\nधन्यवाद!\n*${clinicName}*`;
-    
+
     openWhatsAppPreview(debtor.patientPhone, msg, "Credit Payment Recall", debtor.patientName, "credit_recall");
   };
 
@@ -913,15 +929,24 @@ export default function ClinicPanel({
   ];
 
   const scrollToAndFocus = (id: string) => {
-    const el = document.getElementById(`section-${id}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-      // Short delay for scroll to finish
-      setTimeout(() => {
+    // Switch to the correct tab. "followup" lives inside the "advice" tab.
+    const targetTab = id === "followup" ? "advice" : id;
+    setConsultationSubTab(targetTab as any);
+
+    if (targetTab !== "timeline" && targetTab !== "vitals") {
+      setActiveSearchType(targetTab === "medicines" ? "medicine" : targetTab as any);
+    }
+
+    // Fallback scroll if any specific section exists
+    setTimeout(() => {
+      const elId = id === "followup" ? "section-followup" : `section-${id}`;
+      const el = document.getElementById(elId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
         const input = el.querySelector("input, textarea");
         if (input) (input as HTMLElement).focus();
-      }, 500);
-    }
+      }
+    }, 150);
   };
 
   // Medicine Database (Expanded to ~150+ entries for realism)
@@ -1446,7 +1471,7 @@ export default function ClinicPanel({
       const selPhone = String(selectedPatientForPrescription.patientPhone || "").replace(/[^0-9]/g, "");
       const pName = String(p.patientName || "").toLowerCase().trim();
       const selName = String(selectedPatientForPrescription.patientName || "").toLowerCase().trim();
-      
+
       return (
         (selId && pId === selId) ||
         (selPhone && pPhone && pPhone === selPhone) ||
@@ -1482,7 +1507,7 @@ export default function ClinicPanel({
     lastFiredTime: "Never",
     rawDocs: [],
   });
-  const [showDebugPanel, setShowDebugPanel] = useState(true);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [appointmentSearch, setAppointmentSearch] = useState("");
   const opdTrendData = useMemo(() => {
     const last10Days: any[] = [];
@@ -1530,19 +1555,35 @@ export default function ClinicPanel({
     }
   };
 
-  const announceSpeakToken = (patient: any) => {
+  const announceSpeakToken = (patient: any, lang: "en" | "hi" | "mr" = announcementLanguage) => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel(); // Cancel any ongoing speech first
       const speech = new SpeechSynthesisUtterance();
-      speech.text = `Token number ${patient.token || ""}, ${patient.patientName || ""}, please proceed to the doctor chamber.`;
+
+      let text = `Token number ${patient.token || ""}, ${patient.patientName || ""}, please proceed to the doctor chamber.`;
+      let voiceLang = "en-IN";
+
+      if (lang === "hi") {
+        text = `टोकन नंबर ${patient.token || ""}, ${patient.patientName || ""}, कृपया डॉक्टर के केबिन में जाएं।`;
+        voiceLang = "hi-IN";
+      } else if (lang === "mr") {
+        text = `टोकन क्रमांक ${patient.token || ""}, ${patient.patientName || ""}, कृपया डॉक्टरांच्या केबिनमध्ये जा.`;
+        voiceLang = "mr-IN";
+      }
+
+      speech.text = text;
       speech.volume = 1;
       speech.rate = 0.85;
       speech.pitch = 1;
 
       const voices = window.speechSynthesis.getVoices();
-      const indVoice = voices.find(v => v.lang.includes("en-IN") || v.lang.includes("en-US"));
-      if (indVoice) {
-        speech.voice = indVoice;
+      const specificVoice = voices.find(v => v.lang.includes(voiceLang));
+      const fallbackVoice = voices.find(v => v.lang.includes("en-IN") || v.lang.includes("en-US"));
+
+      if (specificVoice) {
+        speech.voice = specificVoice;
+      } else if (fallbackVoice) {
+        speech.voice = fallbackVoice;
       }
       window.speechSynthesis.speak(speech);
     }
@@ -1674,16 +1715,16 @@ export default function ClinicPanel({
     title: "",
     message: "",
     type: "info",
-    onConfirm: () => {},
+    onConfirm: () => { },
   });
 
-  const fetchOnDemandDataRef = useRef<() => Promise<void>>(async () => {});
+  const fetchOnDemandDataRef = useRef<() => Promise<void>>(async () => { });
   const fetchOnDemandData = async () => {
     if (!user?.id) return;
     try {
       console.log("[ClinicPanel] Fetching static/historical collections on-demand...");
       const clinicIdFilter = [{ field: "clinicId", operator: "==", value: String(user.id) }];
-      
+
       const [
         hospitalsData,
         patientsData,
@@ -1985,7 +2026,7 @@ export default function ClinicPanel({
             contactNo: details.contact_no || user.phone || "",
           }));
         }
-        
+
         // Fetch remaining on-demand collections safely
         await fetchOnDemandData();
         setLoading(false);
@@ -2208,7 +2249,9 @@ export default function ClinicPanel({
     if (!file) return;
 
     try {
-      const compressedBase64 = await compressImage(file, 1200, 1200, 0.7);
+      const maxWidth = type === "logo" ? 256 : 800;
+      const maxHeight = type === "logo" ? 256 : 800;
+      const compressedBase64 = await compressImage(file, maxWidth, maxHeight, 0.6);
       setProfileForm((prev) => ({ ...prev, [type]: compressedBase64 }));
     } catch (err) {
       console.error(
@@ -2234,27 +2277,31 @@ export default function ClinicPanel({
         userId: String(user.id),
       };
 
+      const cleanedDetailsData = JSON.parse(JSON.stringify(detailsData));
+
       if (clinicDetails?.id) {
         await firebaseService.updateDocument(
           "clinic_details",
           clinicDetails.id,
-          detailsData,
+          cleanedDetailsData,
         );
       } else {
-        await firebaseService.addDocument("clinic_details", detailsData);
+        await firebaseService.addDocument("clinic_details", cleanedDetailsData);
       }
 
       // Also update user name if changed
-      await firebaseService.updateDocument("users", String(user.id), {
-        name: profileForm.name,
-      });
+      if (user?.id) {
+        await firebaseService.updateDocument("users", String(user.id), {
+          name: profileForm.name || "",
+        });
+      }
 
       setConfirmModal({
         isOpen: true,
         title: "Success",
         message: "Profile updated successfully!",
         type: "info",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
       setIsEditingProfile(false);
     } catch (err) {
@@ -2262,9 +2309,9 @@ export default function ClinicPanel({
       setConfirmModal({
         isOpen: true,
         title: "Error",
-        message: "Error saving profile. Please try again.",
+        message: `Error saving profile: ${err instanceof Error ? err.message : safeStringify(err)}`,
         type: "danger",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
     }
   };
@@ -2539,6 +2586,8 @@ export default function ClinicPanel({
 
   const handleOPDSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isOpdSubmitting) return;
+    setIsOpdSubmitting(true);
     try {
       const nextToken = isTokenSystemEnabled
         ? opdQueue.length > 0
@@ -2665,6 +2714,7 @@ export default function ClinicPanel({
         status: "waiting",
         token: 0,
         priorityClass: "Regular",
+        visitOption: "1st Visit",
       });
       setPatientSearchQuery("");
 
@@ -2672,7 +2722,7 @@ export default function ClinicPanel({
       if (sendTokenEnabled && opdForm.patientPhone && isTokenSystemEnabled) {
         const currentActiveToken = opdQueue.find((p) => p.status === "consulting")?.token || "सुरू व्हायचा आहे";
         const msg = `🏥 *Carebridge+ Professional Smart OPD Queue* 🏥\n\nDear *${opdForm.patientName}*,\n\nYour professional OPD registration has been completed successfully at *${user.name}*.\n\n⏱️ *Smart OPD Queue Insights:*\n• *Clinic Partner:* ${user.name}\n• *Assigned Token Number:* #${finalToken}\n• *Active Live Token:* #${currentActiveToken}\n• *Facility Location:* ${clinicDetails?.address || "our facility"}\n\nTo ensure comfortable and seamless consulting, please arrive 10 minutes prior to your turn.\n\nSincerely,\n*Clinical Operations Desk*`;
-        
+
         openWhatsAppPreview(opdForm.patientPhone, msg, "OPD Token Priority", opdForm.patientName, "token", {
           clinicName: user.name,
           clinicAddress: clinicDetails?.address || "our facility",
@@ -2686,7 +2736,7 @@ export default function ClinicPanel({
         title: "Success",
         message: "Patient added/updated in OPD queue successfully!",
         type: "info",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
     } catch (err) {
       console.error("Error adding to OPD queue:", err);
@@ -2695,8 +2745,10 @@ export default function ClinicPanel({
         title: "Error",
         message: "Failed to process patient in queue. Please try again.",
         type: "danger",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
+    } finally {
+      setIsOpdSubmitting(false);
     }
   };
 
@@ -2733,6 +2785,7 @@ export default function ClinicPanel({
         status: "registration", // Stays in registration queue until offline registration form is filled & submitted with fees!
         token: 0,
         priorityClass: "Regular",
+        visitOption: "1st Visit",
       });
 
       // Track that we are processing this appointment
@@ -2945,6 +2998,7 @@ export default function ClinicPanel({
       status: "waiting",
       token: 0,
       priorityClass: "Regular",
+      visitOption: "1st Visit",
     });
   };
 
@@ -2974,6 +3028,7 @@ export default function ClinicPanel({
       status: "waiting", // Advance them to waiting list after completing registration
       token: patient.token || 0,
       priorityClass: patient.priorityClass || "Regular",
+      visitOption: patient.visitOption || "1st Visit",
     });
 
     // 4. Open OPD form
@@ -3362,36 +3417,99 @@ export default function ClinicPanel({
   const handleFetchAISuggestions = async (complaintsOverride?: string[]) => {
     if (!isAiAssistantEnabled) return;
     const complaintsToUse = complaintsOverride || prescriptionForm.complaints;
-    if (complaintsToUse.length === 0) return;
+    const chronicConditions = prescriptionForm.chronicConditions || [];
+
+    // If absolutely no info is available, return early
+    if (complaintsToUse.length === 0 && chronicConditions.length === 0) {
+      setAiRecommendations({
+        diagnosis: ["General Consultation"],
+        advice: ["Maintain a healthy diet", "Stay hydrated"],
+        investigations: [],
+        medicines: [{ name: "Multivitamin", dose: "1-0-0", frequency: "Once a day", duration: "10 Days", notes: "After breakfast", type: "Tablet", route: "Oral", quantity: "10" }],
+      });
+      return;
+    }
 
     setAiLoading(true);
     try {
-      const response = await fetch("/api/ai/prescription-suggestions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          complaints: complaintsToUse,
-          vitals: prescriptionForm.vitals,
-        }),
-      });
+      // Simulate network delay for AI processing
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      if (!response.ok) throw new Error("AI service error");
-      const parsed = await response.json();
+      // Analyze complaints and conditions to generate mock suggestions
+      const isCardiac = complaintsToUse.some(c => c.toLowerCase().includes('chest') || c.toLowerCase().includes('breathless') || c.toLowerCase().includes('palpitation') || c.toLowerCase().includes('heart'));
+      const isFever = complaintsToUse.some(c => c.toLowerCase().includes('fever') || c.toLowerCase().includes('temp'));
+      const isCough = complaintsToUse.some(c => c.toLowerCase().includes('cough') || c.toLowerCase().includes('cold') || c.toLowerCase().includes('throat'));
+      // Only treat as simple pain if it's not a cardiac symptom
+      const isPain = !isCardiac && complaintsToUse.some(c => c.toLowerCase().includes('pain') || c.toLowerCase().includes('ache'));
+
+      const hasHypertension = chronicConditions.some(c => c.toLowerCase().includes('hypertension'));
+      const hasDiabetes = chronicConditions.some(c => c.toLowerCase().includes('diabetes'));
+      const hasAsthma = chronicConditions.some(c => c.toLowerCase().includes('asthma') || c.toLowerCase().includes('copd'));
+
+      const suggestedDiagnosis = [];
+      const suggestedMedicines = [];
+      const suggestedAdvice = [];
+      const suggestedInvestigations = [];
+
+      if (isCardiac) {
+        suggestedDiagnosis.push("Ischemic Heart Disease / Angina Pectoris (Suspected)");
+        suggestedMedicines.push({ name: "Aspirin 75mg", dose: "1-0-0", frequency: "Once a day", duration: "15 Days", notes: "After food", type: "Tablet", route: "Oral", quantity: "15" });
+        suggestedMedicines.push({ name: "Atorvastatin 40mg", dose: "0-0-1", frequency: "Once a day", duration: "15 Days", notes: "At night", type: "Tablet", route: "Oral", quantity: "15" });
+        suggestedMedicines.push({ name: "Sorbitrate 5mg", dose: "SOS", frequency: "SOS", duration: "SOS", notes: "Sublingual for acute chest pain", type: "Tablet", route: "Sublingual", quantity: "5" });
+        suggestedAdvice.push("Strict bed rest", "Avoid physical exertion", "Immediate Cardiology Consultation if pain persists");
+        suggestedInvestigations.push("ECG (Urgent)", "Troponin-I (STAT)", "2D Echo");
+      }
+      if (isFever) {
+        suggestedDiagnosis.push("Viral Pyrexia");
+        suggestedMedicines.push({ name: "Paracetamol 500mg", dose: "1-0-1", frequency: "Twice a day", duration: "5 Days", notes: "After food", type: "Tablet", route: "Oral", quantity: "10" });
+        suggestedAdvice.push("Drink plenty of warm fluids", "Take rest");
+        suggestedInvestigations.push("CBC", "Dengue NS1 Antigen");
+      }
+      if (isCough) {
+        suggestedDiagnosis.push("Upper Respiratory Tract Infection");
+        suggestedMedicines.push({ name: "Amoxicillin 625mg", dose: "1-0-1", frequency: "Twice a day", duration: "5 Days", notes: "After food", type: "Tablet", route: "Oral", quantity: "10" });
+        suggestedMedicines.push({ name: "Cetirizine 10mg", dose: "0-0-1", frequency: "Once a day", duration: "5 Days", notes: "At night", type: "Tablet", route: "Oral", quantity: "5" });
+        suggestedAdvice.push("Gargle with warm salt water");
+      }
+      if (isPain) {
+        suggestedDiagnosis.push("Myalgia");
+        suggestedMedicines.push({ name: "Aceclofenac + Paracetamol", dose: "1-0-1", frequency: "Twice a day", duration: "3 Days", notes: "After food", type: "Tablet", route: "Oral", quantity: "6" });
+        suggestedAdvice.push("Apply hot compress to the affected area");
+      }
+
+      if (hasHypertension) {
+        suggestedDiagnosis.push("Essential Hypertension (Follow-up)");
+        suggestedMedicines.push({ name: "Telmisartan 40mg", dose: "1-0-0", frequency: "Once a day", duration: "30 Days", notes: "Morning after breakfast", type: "Tablet", route: "Oral", quantity: "30" });
+        suggestedAdvice.push("Low salt diet", "Regular exercise");
+      }
+      if (hasDiabetes) {
+        suggestedDiagnosis.push("Type 2 Diabetes Mellitus (Follow-up)");
+        suggestedMedicines.push({ name: "Metformin 500mg (SR)", dose: "1-0-1", frequency: "Twice a day", duration: "30 Days", notes: "After meals", type: "Tablet", route: "Oral", quantity: "60" });
+        suggestedAdvice.push("Diabetic diet", "Avoid sweets and sugar");
+        suggestedInvestigations.push("HbA1c", "Fasting Blood Sugar");
+      }
+      if (hasAsthma) {
+        suggestedDiagnosis.push("Asthma/COPD Management");
+        suggestedMedicines.push({ name: "Budesonide + Formoterol Inhaler", dose: "2 Puffs", frequency: "Twice a day", duration: "30 Days", notes: "Rinse mouth after use", type: "Inhaler", route: "Inhalation", quantity: "1" });
+        suggestedAdvice.push("Avoid dust and allergens");
+      }
+
+      if (suggestedDiagnosis.length === 0) {
+        suggestedDiagnosis.push("General Checkup");
+        suggestedMedicines.push({ name: "Multivitamin", dose: "1-0-0", frequency: "Once a day", duration: "10 Days", notes: "After breakfast", type: "Tablet", route: "Oral", quantity: "10" });
+        suggestedAdvice.push("Maintain a healthy lifestyle");
+      }
 
       setAiRecommendations({
-        diagnosis: parsed.suggestedDiagnosis || [],
-        advice: parsed.suggestedAdvice || [],
-        investigations: parsed.suggestedInvestigations || [],
-        medicines: (parsed.suggestedMedicines || []).map((m: any) => ({
-          ...m,
-          route: m.route || "Oral",
-          quantity: m.quantity || "10",
-        })),
+        diagnosis: suggestedDiagnosis,
+        advice: suggestedAdvice,
+        investigations: suggestedInvestigations,
+        medicines: suggestedMedicines,
       });
 
       setAiLoading(false);
     } catch (err) {
-      console.error("Error fetching AI suggestions:", safeStringify(err));
+      console.error("Error generating AI suggestions:", safeStringify(err));
       setAiLoading(false);
     }
   };
@@ -3537,7 +3655,7 @@ export default function ClinicPanel({
         title: "Consultation Completed 🎉",
         message: `Case records for ${selectedPatientForPrescription.patientName} submitted! Patient has been advanced to Step 4 (Billing Desk) for fee processing. WhatsApp notification initiated.`,
         type: "info",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
 
       // Prep payment form with existing registered fees if any
@@ -3545,7 +3663,7 @@ export default function ClinicPanel({
         totalAmount: String(selectedPatientForPrescription.paymentAmount || ""),
         paidAmount: String(
           (Number(selectedPatientForPrescription.cashAmount) || 0) +
-            (Number(selectedPatientForPrescription.phonePeAmount) || 0),
+          (Number(selectedPatientForPrescription.phonePeAmount) || 0),
         ),
         balance: Number(selectedPatientForPrescription.creditAmount) || 0,
         paymentMode: "cash",
@@ -3730,7 +3848,7 @@ export default function ClinicPanel({
     const restoreEverything = () => {
       window.getComputedStyle = originalGetComputedStyle;
       CSSStyleDeclaration.prototype.getPropertyValue = originalGetPropertyValue;
-      
+
       if (typeof CSSStyleRule !== "undefined" && originalStyleRuleDesc) {
         Object.defineProperty(CSSStyleRule.prototype, "style", originalStyleRuleDesc);
       }
@@ -3830,13 +3948,13 @@ export default function ClinicPanel({
                   sanitizeCSSColors(inlineStyle)
                 );
               }
-            } catch (e) {}
+            } catch (e) { }
           }
 
           // 3. Monkeypatch iframe's window objects to lazily intercept any computed styles html2canvas queries
           if (clonedDoc.defaultView) {
             const iframeWin = clonedDoc.defaultView;
-            
+
             // 3a. computed styles
             const originalIframeGetComputedStyle = iframeWin.getComputedStyle;
             iframeWin.getComputedStyle = function (el, pseudoElt) {
@@ -3847,7 +3965,7 @@ export default function ClinicPanel({
             // 3b. getPropertyValue
             const iframeCSSProto = iframeWin.CSSStyleDeclaration.prototype;
             const originalIframeGetPropertyValue = iframeCSSProto.getPropertyValue;
-            iframeCSSProto.getPropertyValue = function(propertyName) {
+            iframeCSSProto.getPropertyValue = function (propertyName) {
               const val = originalIframeGetPropertyValue.call(this, propertyName);
               return typeof val === "string" ? sanitizeCSSColors(val) : val;
             };
@@ -3981,7 +4099,11 @@ export default function ClinicPanel({
     Note: Scanned copies are valid. Consult physician for dosage changes.`;
 
     const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
-    window.open(url, "_blank");
+    const newWindow = window.open(url, "_blank");
+    if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') {
+      // Popup blocked, fallback to same window
+      window.location.href = url;
+    }
   };
 
   const fetchPrescriptionHistory = async () => {
@@ -4003,7 +4125,7 @@ export default function ClinicPanel({
       console.log(`[Firestore Query Path: prescriptions] UID: ${currentUid}, Role: ${currentRole}, Filters Applied:`, JSON.stringify(filters));
 
       const data = await firebaseService.getCollection("prescriptions", filters);
-      
+
       // Sort by creation date safely
       const sortedData = (data || []).sort((a: any, b: any) => {
         const dateA = a.createdAt?.seconds
@@ -4113,8 +4235,8 @@ export default function ClinicPanel({
         if (
           isOpdPatient &&
           paid ===
-            (Number(selectedCreditPatient.cashAmount) || 0) +
-              (Number(selectedCreditPatient.phonePeAmount) || 0)
+          (Number(selectedCreditPatient.cashAmount) || 0) +
+          (Number(selectedCreditPatient.phonePeAmount) || 0)
         ) {
           // Record split payments from OPD form
           if (Number(selectedCreditPatient.cashAmount) > 0) {
@@ -4205,7 +4327,7 @@ export default function ClinicPanel({
       const phoneNum = selectedCreditPatient.patientPhone;
       const existingCreditAcc = creditAccounts.find(c => c.patientPhone === phoneNum);
       const currentDueAmt = existingCreditAcc ? Number(existingCreditAcc.dueAmount || 0) : 0;
-      
+
       // Reduce outstanding due
       const newDueAmt = Math.max(0, currentDueAmt - paid);
       const creditHistory = existingCreditAcc?.paymentHistory || [];
@@ -4234,7 +4356,7 @@ export default function ClinicPanel({
       // Log transaction transactionId, billingId, patientName, patientPhone, amount, paymentBreakdown, type, date, clinicId, createdAt
       if (paid > 0) {
         await firebaseService.addDocument("transactions", {
-          transactionId: `TXN-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+          transactionId: `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           billingId: selectedCreditPatient.id || "CREDIT_RECOVERY",
           patientName: selectedCreditPatient.patientName,
           patientPhone: phoneNum,
@@ -4290,7 +4412,7 @@ export default function ClinicPanel({
         totalUPI: paymentForm.paymentMode === "phonepe" ? dUPI + paid : dUPI,
         totalCard: paymentForm.paymentMode === "card" ? dCard + paid : dCard,
         totalCredit: dCredit,
-        totalRevenue: dRevenue, 
+        totalRevenue: dRevenue,
         pendingCredits: Math.max(0, dPendCredits - paid),
         completedBills: dCompleted,
         updatedAt: new Date()
@@ -4342,7 +4464,7 @@ export default function ClinicPanel({
           ? "Credit cleared and history automatically deleted!"
           : "Payment record saved successfully!",
         type: "info",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
     } catch (err) {
       setConfirmModal({
@@ -4378,7 +4500,7 @@ export default function ClinicPanel({
 
       // Check if billing record already exists in our master billings collection
       const existingBill = billings.find(b => b.billingId === activeQueuePatient.id);
-      
+
       let oldCredit = 0;
       let diffTotal = total;
       let diffCash = cashPaid;
@@ -4390,7 +4512,7 @@ export default function ClinicPanel({
       if (existingBill) {
         isEdit = true;
         oldCredit = existingBill.remainingAmount || 0;
-        
+
         // Subtract old values and add updated values to maintain correct accounting totals
         diffTotal = total - (existingBill.totalAmount || 0);
         diffCash = cashPaid - (existingBill.paymentBreakdown?.cash || 0);
@@ -4402,7 +4524,7 @@ export default function ClinicPanel({
       // 1. Log to Transactions collection (financial ledger) if any payment occurred
       if (paid > 0) {
         await firebaseService.addDocument("transactions", {
-          transactionId: `TXN-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+          transactionId: `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           billingId: activeQueuePatient.id,
           patientName: activeQueuePatient.patientName,
           patientPhone: activeQueuePatient.patientPhone,
@@ -4464,14 +4586,14 @@ export default function ClinicPanel({
       const investigationFee = (Number(billingLabFee) || 0) + billingItems.filter(item => item.section === "Lab Charges" || item.section === "Investigation Charges" || item.section === "Investigation Fee").reduce((sum, item) => sum + (item.price * item.qty), 0);
       const medicineFee = billingItems.filter(item => item.section === "Medicine Charges" || item.section === "Medicine Fee").reduce((sum, item) => sum + (item.price * item.qty), 0);
       const additionalFee = (Number(billingOtherFee) || 0) + billingItems.filter(item => {
-        return item.section !== "Registration Fee" && 
-               item.section !== "Consultation Fee" && 
-               item.section !== "Procedure Charges" && 
-               item.section !== "Lab Charges" && 
-               item.section !== "Investigation Charges" && 
-               item.section !== "Investigation Fee" && 
-               item.section !== "Medicine Charges" && 
-               item.section !== "Medicine Fee";
+        return item.section !== "Registration Fee" &&
+          item.section !== "Consultation Fee" &&
+          item.section !== "Procedure Charges" &&
+          item.section !== "Lab Charges" &&
+          item.section !== "Investigation Charges" &&
+          item.section !== "Investigation Fee" &&
+          item.section !== "Medicine Charges" &&
+          item.section !== "Medicine Fee";
       }).reduce((sum, item) => sum + (item.price * item.qty), 0);
 
       // 4. Log/Update Billings (Master Billing Record)
@@ -4645,7 +4767,7 @@ export default function ClinicPanel({
         title: isEdit ? "Billing Updated 🏥" : "Billing Completed 🏥",
         message: `OPD Visit for ${activeQueuePatient.patientName} finalized. Total Bill: ₹${total}, Paid: ₹${paid}, Outstanding Credit: ₹${credit}. Invoice generated inside workspace!`,
         type: "info",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
     } catch (err) {
       console.error("Error finalizing ERP Billing:", err);
@@ -4654,7 +4776,7 @@ export default function ClinicPanel({
         title: "Operational Error",
         message: "Failed to save ERP billing transaction.",
         type: "danger",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
     }
   };
@@ -4662,7 +4784,7 @@ export default function ClinicPanel({
   const sendCustomWhatsAppReminder = (record: any, lang: "en" | "mr" | "hi" = "en") => {
     const amount = record.totalBalance !== undefined ? record.totalBalance : (record.balance || 0);
     const phoneNum = record.patientPhone;
-    
+
     let msg = "";
     if (lang === "mr") {
       msg = `प्रिय रुग्ण, आपल्या खात्यावर ₹${amount} थकबाकी आहे. कृपया लवकरात लवकर भरणा करावा. धन्यवाद.`;
@@ -4671,7 +4793,7 @@ export default function ClinicPanel({
     } else {
       msg = `Dear Patient, you have a pending balance of ₹${amount}. Kindly complete the payment at your earliest convenience. Thank you.`;
     }
-    
+
     const encoded = encodeURIComponent(msg);
     const phone = phoneNum.length === 10 ? `91${phoneNum}` : phoneNum;
     window.open(`https://wa.me/${phone}?text=${encoded}`, "_blank");
@@ -4693,7 +4815,7 @@ export default function ClinicPanel({
         title: "Validation Check",
         message: "Please select or enter a valid patient name and phone number.",
         type: "danger",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
       return;
     }
@@ -4907,7 +5029,7 @@ export default function ClinicPanel({
         title: "Operational Error",
         message: "Failed to generate manual clinic billing records.",
         type: "danger",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
     } finally {
       setManualBillLoading(false);
@@ -5014,7 +5136,7 @@ export default function ClinicPanel({
         const existingCreditAcc = creditAccounts.find(c => c.patientPhone === phoneNum);
         const currentDueAmt = existingCreditAcc ? Number(existingCreditAcc.dueAmount || 0) : 0;
         const newDueAmt = Math.max(0, currentDueAmt + diffCredit);
-        
+
         const creditHistory = existingCreditAcc?.paymentHistory || [];
         const updatedCreditHistory = [
           ...creditHistory,
@@ -5086,7 +5208,7 @@ export default function ClinicPanel({
         title: "Invoice Successfully Updated",
         message: "Financial metrics, patient ledger entries, credit notes, and daily revenues have been automatically synchronized.",
         type: "info",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
 
     } catch (err) {
@@ -5096,7 +5218,7 @@ export default function ClinicPanel({
         title: "Operations Error",
         message: "Failed to apply modifications to the clinic invoice standard files.",
         type: "danger",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
     }
   };
@@ -5115,7 +5237,7 @@ export default function ClinicPanel({
           const bTotal = Number(targetBill.totalAmount || 0);
           const bPaid = Number(targetBill.paidAmount || 0);
           const bCredit = Number(targetBill.remainingAmount || targetBill.creditAmount || 0);
-          
+
           const bCash = Number(targetBill.paymentBreakdown?.cash || (targetBill.paymentMode === "cash" ? bPaid : 0));
           const bUpi = Number(targetBill.paymentBreakdown?.upi || (targetBill.paymentMode === "phonepe" ? bPaid : 0));
           const bCard = Number(targetBill.paymentBreakdown?.card || (targetBill.paymentMode === "card" ? bPaid : 0));
@@ -5130,7 +5252,7 @@ export default function ClinicPanel({
             if (existingCreditAcc) {
               const currentDueAmt = Number(existingCreditAcc.dueAmount || 0);
               const newDueAmt = Math.max(0, currentDueAmt - bCredit);
-              
+
               const creditHistory = existingCreditAcc.paymentHistory || [];
               const updatedCreditHistory = [
                 ...creditHistory,
@@ -5204,7 +5326,7 @@ export default function ClinicPanel({
             title: "Bill Voided Successfully",
             message: "Revenues, outstanding client payments, and daily log registries rolled back successfully.",
             type: "info",
-            onConfirm: () => {},
+            onConfirm: () => { },
           });
 
         } catch (err) {
@@ -5216,23 +5338,23 @@ export default function ClinicPanel({
 
   const todayFinance = useMemo(() => {
     const todayStr = getISTDateString();
-    
+
     // 1. Core completed billings for today
     const activeBills = billings.filter(
       (b) => b.visitDate === todayStr && b.billingCompleted === true
     );
-    
+
     const totalPatients = activeBills.length;
     const onlinePatients = activeBills.filter((b) => b.appointmentType === "online").length;
     const offlinePatients = totalPatients - onlinePatients;
-    
+
     // Sum from today's direct OPD billing payments
     const directCash = activeBills.reduce((sum, b) => sum + (b.paymentBreakdown?.cash || 0), 0);
     const directUpi = activeBills.reduce((sum, b) => sum + (b.paymentBreakdown?.upi || 0), 0);
     const directCard = activeBills.reduce((sum, b) => sum + (b.paymentBreakdown?.card || 0), 0);
     const directCredit = activeBills.reduce((sum, b) => sum + (b.paymentBreakdown?.credit || 0), 0);
     const directRevenue = activeBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-    
+
     // 2. Payments collected today from Credit clearances (credit_payment_history)
     const creditClearances = allPaymentHistory.filter((r) => {
       const rDate = r.createdAt?.seconds
@@ -5242,19 +5364,19 @@ export default function ClinicPanel({
           : typeof r.createdAt === "string" ? r.createdAt : "";
       return rDate === todayStr && r.type !== "OPD";
     });
-    
+
     const clearanceCash = creditClearances
       .filter((r) => r.paymentMode === "cash")
       .reduce((sum, r) => sum + (Number(r.paidAmount) || 0), 0);
-      
+
     const clearanceUpi = creditClearances
       .filter((r) => r.paymentMode === "phonepe" || r.paymentMode === "upi")
       .reduce((sum, r) => sum + (Number(r.paidAmount) || 0), 0);
-      
+
     const clearanceCard = creditClearances
       .filter((r) => r.paymentMode === "card")
       .reduce((sum, r) => sum + (Number(r.paidAmount) || 0), 0);
-      
+
     // Summary
     const totalCash = directCash + clearanceCash;
     const totalPhonePe = directUpi + clearanceUpi;
@@ -5262,10 +5384,10 @@ export default function ClinicPanel({
     const totalCard = directCard + clearanceCard;
     const totalCredit = directCredit;
     const totalRevenue = directRevenue;
-    
+
     // Outstanding recovery due from overall credit tracker
     const pendingRecovery = allCreditRecords.reduce((sum, r) => sum + (r.balance || 0), 0);
-    
+
     return {
       patientCount: opdQueue.length, // keep compatible with external list sizes or queue count
       totalPatients,
@@ -5374,7 +5496,7 @@ export default function ClinicPanel({
     try {
       // Build headers
       const headers = ["Date", "Total Patients", "Cash Collection (INR)", "UPI/PhonePe Collection (INR)", "Credit Issued (INR)", "Combined Total (INR)"];
-      
+
       // Build rows
       const rows = reportFilteredData.map(summary => [
         summary.date,
@@ -5384,11 +5506,11 @@ export default function ClinicPanel({
         summary.totalCredit,
         (summary.totalCash + summary.totalPhonePe + summary.totalCredit)
       ]);
-      
+
       // Combine to CSV string
-      const csvContent = "data:text/csv;charset=utf-8," 
+      const csvContent = "data:text/csv;charset=utf-8,"
         + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-        
+
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
@@ -5396,13 +5518,13 @@ export default function ClinicPanel({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       setConfirmModal({
         isOpen: true,
         title: "Export Completed",
         message: "Your healthcare financial data has been fully formatted as a database-compliant CSV and saved to local downloads.",
         type: "info",
-        onConfirm: () => {}
+        onConfirm: () => { }
       });
     } catch (e) {
       console.error("Export error:", e);
@@ -5620,7 +5742,14 @@ export default function ClinicPanel({
               .trim(),
           );
 
-        return matchLoc && matchDept;
+
+        const nameMatch =
+          !filterHospitalName ||
+          String(h.name || "")
+            .toLowerCase()
+            .includes(filterHospitalName.toLowerCase().trim());
+
+        return matchLoc && matchDept && nameMatch;
       })
       .sort((a, b) => {
         const weights: Record<string, number> = {
@@ -5630,7 +5759,7 @@ export default function ClinicPanel({
         };
         return (weights[b.tier] || 0) - (weights[a.tier] || 0);
       });
-  }, [hospitals, hospitalDetails, filterLocation, filterDept]);
+  }, [hospitals, hospitalDetails, filterLocation, filterDept, filterHospitalName]);
 
   const availableLocations = useMemo(() => {
     const locations = new Set<string>();
@@ -5824,17 +5953,17 @@ export default function ClinicPanel({
             ...existing,
             ...(isNewer
               ? {
-                  name: p.patientName,
-                  area: p.patientArea || existing.area,
-                  age: p.patientAge || existing.age,
-                  gender: p.patientGender || existing.gender,
-                  bp: p.bp || existing.bp,
-                  sugar: p.sugar || existing.sugar,
-                  weight: p.weight || existing.weight,
-                  temp: p.temp || existing.temp,
-                  complaint: p.complaint || existing.complaint,
-                  lastVisit: visitDate,
-                }
+                name: p.patientName,
+                area: p.patientArea || existing.area,
+                age: p.patientAge || existing.age,
+                gender: p.patientGender || existing.gender,
+                bp: p.bp || existing.bp,
+                sugar: p.sugar || existing.sugar,
+                weight: p.weight || existing.weight,
+                temp: p.temp || existing.temp,
+                complaint: p.complaint || existing.complaint,
+                lastVisit: visitDate,
+              }
               : {}),
             visitCount: existing.visitCount + 1,
           });
@@ -6337,7 +6466,7 @@ export default function ClinicPanel({
         message:
           "Please select patients first from the Patient Database below.",
         type: "warning",
-        onConfirm: () => {},
+        onConfirm: () => { },
       });
       return;
     }
@@ -6397,174 +6526,55 @@ export default function ClinicPanel({
         const blob = await response.blob();
         const file = new File([blob], `${type}.jpg`, { type: "image/jpeg" });
         if (navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: type === "card" ? "Digital Card" : "Health Tip",
-              text: msg,
-            });
-            return;
-          } catch (err) {
-            if ((err as Error).name === "AbortError") return;
-            console.error("Share API failed:", err);
-          }
+          await navigator.share({
+            title: user.name || "Clinic Message",
+            text: msg,
+            files: [file],
+          });
+          return;
         }
       }
 
-      // 2. Fallback for Desktop/Bulk
-      if (isImage && !skipDownload) {
-        const link = document.createElement("a");
-        link.href = content;
-        link.download = `${type}.jpg`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-
-      const encoded = encodeURIComponent(
-        msg +
-          (isImage && !skipDownload
-            ? "\n\n(टीप: कृपया डाऊनलोड केलेली इमेज सोबत जोडा)"
-            : ""),
-      );
-      const phone = patientPhone
-        ? patientPhone.length === 10
-          ? `91${patientPhone}`
-          : patientPhone
-        : "";
-      window.open(`https://wa.me/${phone}?text=${encoded}`, "_blank");
-    } catch (err) {
-      console.error("Error in sendMarketingContent:", err);
-      const encoded = encodeURIComponent(msg);
-      const phone = patientPhone
-        ? patientPhone.length === 10
-          ? `91${patientPhone}`
-          : patientPhone
-        : "";
-      window.open(`https://wa.me/${phone}?text=${encoded}`, "_blank");
+      // WhatsApp share fallback...
+      const whatsappUrl = patientPhone
+        ? `https://wa.me/${patientPhone}?text=${encodeURIComponent(msg)}`
+        : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+      window.open(whatsappUrl, "_blank");
+    } catch (error) {
+      console.error("Error sharing:", error);
     }
   };
 
   if (showWelcomeScreen) {
-    const previewChartData = [
-      { day: "Mon", patients: 12, billing: 6500 },
-      { day: "Tue", patients: 18, billing: 9200 },
-      { day: "Wed", patients: 15, billing: 7800 },
-      { day: "Thu", patients: 24, billing: 12500 },
-      { day: "Fri", patients: 28, billing: 14800 },
-      { day: "Sat", patients: 20, billing: 10500 },
-    ];
-
     return (
-      <div className={`min-h-screen transition-colors duration-300 ${darkMode ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"} flex flex-col relative overflow-x-hidden font-sans`}>
-        {/* Decorative Ambient Vectors */}
-        <div className="absolute top-[5%] left-[15%] w-[450px] h-[450px] bg-teal-500/10 rounded-full blur-[110px] pointer-events-none -z-10" />
-        <div className="absolute bottom-[10%] right-[5%] w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[100px] pointer-events-none -z-10" />
-
-        {/* STICKY TOP HEADER WITH HIGHLIGHTED CONTINUE BUTTON */}
-        <header className={`sticky top-0 z-[120] backdrop-blur-md border-b flex justify-between items-center px-6 py-4 sm:px-10 ${
-          darkMode ? "bg-slate-950/80 border-slate-900" : "bg-white/80 border-slate-200"
-        }`}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-500 to-blue-600 flex items-center justify-center text-white shadow-sm animate-pulse">
-              <Stethoscope size={20} className="stroke-[2.5]" />
-            </div>
-            <div className="text-left">
-              <span className="font-extrabold text-sm tracking-tight bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent block">
-                CareBridgePlus
-              </span>
-              <span className="text-[8px] font-black uppercase tracking-[0.25em] text-slate-400 block -mt-0.5">
-                Clinical Workspace
-              </span>
-            </div>
-          </div>
-
-          <button
-            onClick={() => {
+      <div className={`flex flex-row min-h-screen w-full ${darkMode ? "bg-[#0b1121] text-slate-200" : "bg-slate-50 text-slate-800"}`}>
+        <div className="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-8 space-y-8 overflow-y-auto">
+          <PremiumSubscriptionCard
+            user={user}
+            accountType="clinic"
+            darkMode={darkMode}
+            onRefreshUser={() => { }}
+            onContinueToDashboard={() => {
               setShowWelcomeScreen(false);
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-teal-500 to-blue-600 hover:opacity-95 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
-          >
-            Continue to Dashboard
-            <ArrowRight size={14} className="stroke-[2.5]" />
-          </button>
-        </header>
-
-        {/* MAIN LUXURIOUS ONBOARDING INTERFACE */}
-        <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-10 sm:px-10 flex flex-col justify-start">
-          
-          {/* Header titles */}
-          <div className="mb-10 text-left">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-teal-550 to-blue-550 bg-teal-500/10 text-teal-600 dark:text-teal-400 text-[10px] font-black uppercase tracking-widest rounded-full mb-3.5 border border-teal-500/20">
-              <Sparkles size={11} className="text-teal-500 animate-pulse" />
-              Authenticated Clinical Control Room
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight uppercase leading-none mb-3">
-              Welcome Back, Doctor
-            </h1>
-            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
-              Your clinic operations are connected, organized, and ready for today’s healthcare workflow. Preview live virtual queue status, billing receipts indices, and automated CRM patient alerts below.
-            </p>
-          </div>
-
-          {/* BROAD WELCOME TO CAREBRIDGEPLUS FAMILY BANNER */}
-          <div className={`mb-10 p-6 sm:p-8 rounded-[32px] border relative overflow-hidden transition-all shadow-md ${
-            darkMode 
-              ? "bg-gradient-to-r from-teal-950/40 via-slate-900/30 to-blue-950/40 border-slate-800/80" 
-              : "bg-gradient-to-r from-teal-50/60 via-slate-50/60 to-blue-50/60 border-slate-205"
-          }`}>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
-            
-            <div className="relative z-10 space-y-5">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-teal-500/20 to-blue-500/20 border border-teal-500/20 text-teal-600 dark:text-teal-400 text-[10px] font-extrabold uppercase tracking-[0.2em] rounded-full">
-                <Sparkles size={11} className="text-teal-500 animate-pulse" style={{ animationDuration: "3s" }} />
-                Proud Member of the CareBridgePlus Family
-              </div>
-              
-              <div className="space-y-1.5 text-left">
-                <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight uppercase">
-                  Welcome to the CareBridgePlus Family!
-                </h2>
-                <p className="text-base font-bold text-slate-600 dark:text-slate-300">
-                  Respective Doctor: <span className="bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent font-black px-1">Dr. {clinicDetails?.doctor_name || user.name}</span>
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-5 border-t border-dashed border-slate-200 dark:border-slate-800 text-left">
-                <div className="space-y-0.5">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Clinic Center Name</span>
-                  <span className="text-sm font-black text-slate-800 dark:text-slate-100 block">{clinicDetails?.clinic_name || clinicDetails?.name || user.name || "CareBridge Clinical partner"}</span>
-                </div>
-                <div className="space-y-0.5">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Doctor Qualification</span>
-                  <span className="text-sm font-black text-slate-800 dark:text-slate-100 block">{clinicDetails?.qualification || "M.D. / M.B.B.S / Specialist Practitioner"}</span>
-                </div>
-                <div className="space-y-0.5">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Verified Clinic Address</span>
-                  <span className="text-sm font-black text-slate-800 dark:text-slate-100 block truncate" title={clinicDetails?.address || user.location || "Registered Clinic Location"}>{clinicDetails?.address || user.location || "Registered Clinic Location"}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          />
 
           {/* GRID OF PRESET INFORMATION PANELS */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            
+
             {/* LEFT PROFILE CARD (CLINIC DIRECTORY DATA) */}
             <div className="lg:col-span-4 space-y-6">
-              <div className={`p-6 rounded-[32px] border text-left relative overflow-hidden ${
-                darkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-205 shadow-xs"
-              }`}>
-                <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl pointer-events-none" />
-                
-                <div className="w-12 h-12 rounded-2xl bg-teal-500/10 text-teal-500 flex items-center justify-center mb-5 shrink-0 shadow-inner">
+              <div className={`p-6 rounded-[32px] border text-left relative overflow-hidden ${darkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-205 shadow-xs"
+                }`}>
+                <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-full blur-2xl pointer-events-none" />
+
+                <div className="w-12 h-12 rounded-2xl bg-[#e0f7fa] dark:bg-cyan-950/40 text-[#0077b6] dark:text-[#38bdf8] flex items-center justify-center mb-5 shrink-0 shadow-inner">
                   <UserMd size={24} />
                 </div>
 
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Clinic Practitioner Identification</p>
-                <h3 className="text-xl font-black mb-1 leading-tight text-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
+                <h3 className="text-xl font-black mb-1 leading-tight bg-gradient-to-r from-[#00b4d8] to-[#2563eb] bg-clip-text text-transparent truncate">
                   Dr. {clinicDetails?.doctor_name || user.name || "Specialist Provider"}
                 </h3>
                 <p className="text-xs font-bold text-slate-500 mb-5">
@@ -6605,9 +6615,8 @@ export default function ClinicPanel({
               </div>
 
               {/* QUICK PRACTICE INSTRUCTIONS */}
-              <div className={`p-6 rounded-[32px] border text-left ${
-                darkMode ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-205 shadow-xs"
-              }`}>
+              <div className={`p-6 rounded-[32px] border text-left ${darkMode ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-205 shadow-xs"
+                }`}>
                 <h4 className="text-xs font-black uppercase tracking-wider mb-4 flex items-center gap-2">
                   <Activity size={15} className="text-teal-500" /> Operations Protocol
                 </h4>
@@ -6633,17 +6642,16 @@ export default function ClinicPanel({
 
             {/* RIGHT SAAS OPERATIONAL STATUS PANELS */}
             <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-              
+
               {/* Virtual OPD Queue Monitor */}
-              <div className={`p-6 rounded-[32px] border text-left flex flex-col justify-between ${
-                darkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-205 shadow-xs"
-              }`}>
+              <div className={`p-6 rounded-[32px] border text-left flex flex-col justify-between ${darkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-205 shadow-xs"
+                }`}>
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">LIVE VIRTUAL QUEUE</span>
                     <span className="text-[9px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500">REALTIME SYNC</span>
                   </div>
-                  
+
                   <h4 className="text-sm font-black mb-4 flex items-center gap-2">
                     <Clock size={16} className="text-teal-500" /> Clinic OPD Token Ledger
                   </h4>
@@ -6670,13 +6678,12 @@ export default function ClinicPanel({
               </div>
 
               {/* Invoicing and Bookkeeping Summary */}
-              <div className={`p-6 rounded-[32px] border text-left flex flex-col justify-between ${
-                darkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-205 shadow-xs"
-              }`}>
+              <div className={`p-6 rounded-[32px] border text-left flex flex-col justify-between ${darkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-205 shadow-xs"
+                }`}>
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">FINANCIAL LEDGER</span>
-                     <span className="text-[9px] font-black px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500">AUTOMATIC</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">FINANCIAL LEDGER</span>
+                    <span className="text-[9px] font-black px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500">AUTOMATIC</span>
                   </div>
 
                   <h3 className="text-sm font-black mb-4 flex items-center gap-2">
@@ -6705,19 +6712,18 @@ export default function ClinicPanel({
               </div>
 
               {/* Patient CRM and Campaigns Notification Desk */}
-              <div className={`p-6 rounded-[32px] border text-left flex flex-col justify-between md:col-span-2 ${
-                darkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-205 shadow-xs"
-              }`}>
+              <div className={`p-6 rounded-[32px] border text-left flex flex-col justify-between md:col-span-2 ${darkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-205 shadow-xs"
+                }`}>
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">COMMUNITY CRM OUTREACH</span>
-                     <span className="text-[9px] font-black px-2.5 py-0.5 rounded-full bg-teal-500/10 text-teal-500">WHATSAPP API READY</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">COMMUNITY CRM OUTREACH</span>
+                    <span className="text-[9px] font-black px-2.5 py-0.5 rounded-full bg-teal-500/10 text-teal-500">WHATSAPP API READY</span>
                   </div>
 
                   <h3 className="text-sm font-black mb-3 flex items-center gap-2">
                     <Smartphone size={15} className="text-teal-500" /> Dynamic Patient Engagement Campaigns
                   </h3>
-                  
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-xs">
                     <div className="p-3.5 rounded-xl bg-slate-100/50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-850 space-y-1">
                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Active Alert Dispatch</span>
@@ -6738,9 +6744,8 @@ export default function ClinicPanel({
               </div>
 
               {/* Progress and Analytical AreaChart */}
-              <div className={`p-6 rounded-[32px] border text-left md:col-span-2 ${
-                darkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-205 shadow-xs"
-              }`}>
+              <div className={`p-6 rounded-[32px] border text-left md:col-span-2 ${darkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-205 shadow-xs"
+                }`}>
                 <div className="flex items-center justify-between mb-5">
                   <div>
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PRACTICE CHRONOLOGY</span>
@@ -6763,14 +6768,14 @@ export default function ClinicPanel({
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"} />
                       <XAxis dataKey="day" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
                       <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: darkMode ? "#0f172a" : "#ffffff", 
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: darkMode ? "#0f172a" : "#ffffff",
                           borderColor: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
-                          borderRadius: "12px", 
+                          borderRadius: "12px",
                           fontSize: "11px",
-                          fontWeight: "bold" 
-                        }} 
+                          fontWeight: "bold"
+                        }}
                       />
                       <Area type="monotone" dataKey="billing" stroke="#0ea5e9" strokeWidth={2.5} fillOpacity={1} fill="url(#widgetColorVal)" name="Invoiced Amount (₹)" />
                     </AreaChart>
@@ -6883,149 +6888,95 @@ export default function ClinicPanel({
       {/* Sidebar */}
       <aside
         style={{ height: "100dvh", display: "flex", flexDirection: "column" }}
-        className={`fixed inset-y-0 left-0 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 z-50 w-72 transition-transform duration-300 overflow-hidden ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} ${darkMode ? "bg-[#001219] border-r border-white/10" : "bg-white border-r border-gray-100"}`}
+        className={`fixed inset-y-0 left-0 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 z-50 w-72 transition-transform duration-300 overflow-hidden ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} ${darkMode ? "bg-slate-950 border-r border-slate-800/80" : "bg-white border-r border-slate-200/80"}`}
       >
-        <div className="p-6 flex-1 flex flex-col min-h-0">
-          {/* Enhanced Clinic & Doctor Header */}
-          <div className="flex flex-col items-center mb-8 shrink-0 px-2 pt-4">
-            {/* Clinic Name (Hospital Name Logo Equivalent) */}
-            <div className="mb-4 text-center">
-              <h1 className="text-xl lg:text-2xl font-black flex flex-col items-center justify-center leading-tight">
-                <span className="text-[#ee9b00] tracking-tighter uppercase">
-                  {user.name}
-                </span>
-                <span
-                  className={`text-[9px] font-black tracking-[0.2em] mt-1 ${darkMode ? "text-white/40" : "text-[#005f73]/60"}`}
-                >
-                  CLINIC PARTNER
-                </span>
-              </h1>
+        <div className="p-5 pb-24 lg:pb-5 flex-1 flex flex-col min-h-0">
+          {/* Facility & Doctor Branding Header */}
+          <div className="flex flex-col items-center mb-6 shrink-0 px-2 pt-2">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-gradient-to-br from-[#00b4d8] via-[#0077b6] to-[#2563eb] text-white shadow-lg shadow-cyan-600/25 ring-4 ring-cyan-500/15 mb-3 shrink-0">
+              <UserMd size={28} className="text-white drop-shadow-sm" />
             </div>
 
-            {/* Doctor Info */}
-            <div
-              className={`relative w-24 h-24 rounded-3xl flex items-center justify-center mb-4 shadow-xl border-4 overflow-hidden shrink-0 transition-all ${
-                darkMode
-                  ? "bg-white/5 border-white/10"
-                  : "bg-linear-to-br from-[#ee9b00] to-[#ca7d00] border-white"
-              }`}
-            >
-              <UserMd
-                size={48}
-                className={darkMode ? "text-[#ee9b00]" : "text-white"}
-              />
-              <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent pointer-events-none" />
-            </div>
+            <h1 className={`text-base lg:text-lg font-black tracking-tight uppercase truncate max-w-full text-center leading-tight ${darkMode ? "text-white" : "text-slate-900"}`}>
+              {user.name}
+            </h1>
 
-            <div className="text-center">
-              <h2
-                className={`font-black tracking-tight text-center text-sm px-5 py-2 rounded-2xl shadow-sm inline-block transition-all ${
-                  darkMode
-                    ? "bg-white/5 text-white border border-white/10"
-                    : "bg-[#005f73] text-white shadow-blue-900/10"
-                }`}
-              >
-                Dr. {clinicDetails?.doctor_name || user.name}
-              </h2>
+            <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full border mt-1.5 inline-flex items-center gap-1.5 shadow-xs ${darkMode ? "bg-cyan-950/40 text-[#38bdf8] border-cyan-800/40" : "bg-[#e0f7fa] text-[#0077b6] border-[#b2ebf2]"}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00b4d8] animate-pulse"></span>
+              CLINIC PARTNER
+            </span>
+
+            <div className={`mt-2 text-xs font-black tracking-wider uppercase px-3.5 py-1.5 rounded-xl border truncate max-w-full text-center ${darkMode ? "text-[#38bdf8] bg-slate-900 border-slate-800" : "text-[#0077b6] bg-slate-100 border-slate-200"}`}>
+              Dr. {clinicDetails?.doctor_name || user.name}
             </div>
           </div>
 
+          {/* Navigation Items */}
           <nav
             style={{ overflowY: "auto", WebkitOverflowScrolling: "touch" }}
-            className="space-y-2 flex-1 pr-1 pb-4"
+            className="space-y-1 flex-1 pr-1 pb-4 no-scrollbar"
           >
             {[
               {
                 id: "dashboard",
                 icon: LayoutDashboard,
                 label: "Dashboard",
-                gradient: "from-[#3B82F6] to-[#1D4ED8]",
-                shadow: "shadow-blue-500/10",
               },
               {
                 id: "find",
                 icon: Search,
                 label: "Search Hospital",
-                gradient: "from-[#10B981] to-[#047857]",
-                shadow: "shadow-emerald-500/10",
-              },
-              {
-                id: "referrals",
-                icon: History,
-                label: "Referral History",
-                gradient: "from-[#F59E0B] to-[#D97706]",
-                shadow: "shadow-amber-500/10",
               },
               {
                 id: "discharge",
                 icon: CheckSquare,
                 label: "Discharge List",
-                gradient: "from-[#EF4444] to-[#B91C1C]",
-                shadow: "shadow-rose-500/10",
               },
               {
                 id: "online_apt",
                 icon: Globe,
                 label: "Online Bookings",
                 badge: appointments.filter((a) => a.status === "pending").length,
-                gradient: "from-[#6366F1] to-[#4338CA]",
-                shadow: "shadow-indigo-500/10",
               },
               {
                 id: "opd",
                 icon: Activity,
                 label: "OPD Queue",
-                gradient: "from-[#EC4899] to-[#BE185D]",
-                shadow: "shadow-pink-500/10",
               },
               {
                 id: "apt_history",
                 icon: Calendar,
                 label: "Apt History",
-                gradient: "from-[#06B6D4] to-[#0891B2]",
-                shadow: "shadow-cyan-500/10",
               },
               {
                 id: "opd_report",
                 icon: BarChart3,
                 label: "OPD Analytics",
-                gradient: "from-[#8B5CF6] to-[#6D28D9]",
-                shadow: "shadow-purple-500/10",
               },
               {
                 id: "credit",
                 icon: Wallet,
                 label: "Credit Ledger",
-                gradient: "from-[#14B8A6] to-[#0D9488]",
-                shadow: "shadow-teal-500/10",
               },
               {
                 id: "marketing",
                 icon: TrendingUp,
                 label: "Marketing Outreach",
-                gradient: "from-[#F59E0B] to-[#D97706]",
-                shadow: "shadow-orange-500/10",
               },
               {
                 id: "patient_analysis",
                 icon: FileSearch,
                 label: "Clinical Records",
-                gradient: "from-[#F43F5E] to-[#E11D48]",
-                shadow: "shadow-rose-500/10",
               },
               {
                 id: "inbox",
                 icon: Inbox,
                 label: "Inbox Messages",
-                gradient: "from-[#3B82F6] to-[#1D4ED8]",
-                shadow: "shadow-blue-500/10",
               },
               {
                 id: "profile",
                 icon: UserMd,
                 label: "My Profile",
-                gradient: "from-[#64748B] to-[#475569]",
-                shadow: "shadow-slate-500/10",
               },
             ].map((item: any) => {
               const active = activeTab === item.id;
@@ -7036,69 +6987,70 @@ export default function ClinicPanel({
                     setActiveTab(item.id);
                     setIsSidebarOpen(false);
                   }}
-                  className={`w-full group flex items-center justify-between px-3 py-2.5 rounded-2xl transition-all duration-300 ${
-                    active
-                      ? darkMode
-                        ? "bg-[#0b132b] text-white shadow-xl shadow-blue-500/5 border border-white/5"
-                        : "bg-white text-slate-900 shadow-xl shadow-blue-500/5 border border-slate-200/50"
-                      : "text-slate-400 hover:text-slate-500 hover:bg-slate-500/5"
-                  }`}
+                  className={`w-full group flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all duration-200 cursor-pointer ${active
+                    ? "bg-gradient-to-r from-[#00b4d8] to-[#2563eb] text-white shadow-md shadow-cyan-500/25 font-bold text-xs tracking-wide"
+                    : (darkMode ? "text-slate-200 hover:text-[#38bdf8] hover:bg-slate-800/80 font-bold text-xs tracking-wide" : "text-slate-600 hover:text-[#0077b6] hover:bg-cyan-50/70 font-bold text-xs tracking-wide")
+                    }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <ColorfulImageIcon
-                      icon={item.icon}
-                      gradient={item.gradient}
-                      shadow={item.shadow}
-                      size={14}
-                    />
-                    <span className={`font-black text-xs tracking-tight ${active ? "text-blue-500 dark:text-blue-400" : "text-slate-650 dark:text-slate-400"}`}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${active
+                        ? "bg-white/20 text-white"
+                        : (darkMode ? "bg-slate-800/80 text-slate-300 group-hover:bg-cyan-950/60 group-hover:text-[#38bdf8]" : "bg-slate-100 text-slate-500 group-hover:bg-[#e0f7fa]/80 group-hover:text-[#0077b6]")
+                        }`}
+                    >
+                      <item.icon size={16} />
+                    </span>
+                    <span
+                      className={`truncate text-xs font-black uppercase tracking-wider ${active
+                        ? "text-white"
+                        : (darkMode ? "text-slate-300 group-hover:text-white" : "text-slate-700 group-hover:text-slate-900")
+                        }`}
+                    >
                       {item.label}
                     </span>
                   </div>
-                  {item.badge > 0 && (
-                    <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-bounce">
-                      {item.badge}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {item.badge > 0 && (
+                      <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs">
+                        {item.badge}
+                      </span>
+                    )}
+                    {active && (
+                      <span className="w-2 h-2 rounded-full bg-white shadow-xs" />
+                    )}
+                  </div>
                 </button>
               );
             })}
           </nav>
-          {/* SECTION 3 (Always Visible at Bottom) */}
-          <div className={`mt-auto pt-4 border-t shrink-0 space-y-1.5 ${darkMode ? "border-white/10" : "border-slate-100"}`}>
-            {/* Log Out button above settings */}
-            <button
-              type="button"
-              onClick={onLogout}
-              className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white font-extrabold text-sm transition-all shadow-md shadow-red-600/25"
-            >
-              <LogOut size={16} />
-              <span>Log Out</span>
-            </button>
 
+          {/* Bottom Settings & Actions */}
+          <div className={`mt-auto pt-3 border-t shrink-0 space-y-1 ${darkMode ? "border-slate-800/80" : "border-slate-200/80"}`}>
             {/* Settings button */}
             <button
               type="button"
               onClick={() => setShowSettingsModal(true)}
-              className={`w-full flex items-center gap-3 px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all duration-300 ${
-                darkMode ? "text-slate-300 hover:bg-white/5 hover:text-white" : "text-slate-600 hover:bg-slate-500/5 hover:text-slate-900"
-              }`}
+              className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer ${darkMode ? "text-slate-300 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
             >
               <Settings size={15} />
-              <span>Settings</span>
+              <span className="uppercase tracking-wider">Settings</span>
             </button>
 
             {/* Theme Toggle button */}
             <button
               type="button"
               onClick={() => setDarkMode(!darkMode)}
-              className={`w-full flex items-center justify-between px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all duration-300 ${
-                darkMode ? "text-slate-300 hover:bg-white/5 hover:text-white" : "text-[#005f73] hover:bg-slate-500/5 hover:text-[#005f73]"
-              }`}
+              className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer ${darkMode ? "text-slate-300 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
             >
               <div className="flex items-center gap-3">
                 {darkMode ? <Sun size={15} /> : <Moon size={15} />}
-                <span>{darkMode ? "Light Theme" : "Deep Dark"}</span>
+                <span className="uppercase tracking-wider">{darkMode ? "Light Mode" : "Dark Mode"}</span>
+              </div>
+              <div className={`w-8 h-4.5 rounded-full flex items-center p-0.5 transition-colors ${darkMode ? 'bg-indigo-500' : 'bg-slate-300'}`}>
+                <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${darkMode ? 'translate-x-3.5' : 'translate-x-0'}`} />
               </div>
             </button>
 
@@ -7106,153 +7058,152 @@ export default function ClinicPanel({
             <button
               type="button"
               onClick={() => setShowHelpModal(true)}
-              className={`w-full flex items-center gap-3 px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all duration-300 ${
-                darkMode ? "text-slate-300 hover:bg-white/5 hover:text-white" : "text-slate-600 hover:bg-slate-500/5 hover:text-slate-900"
-              }`}
+              className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer ${darkMode ? "text-slate-300 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
             >
               <Info size={15} />
-              <span>Help & Support</span>
+              <span className="uppercase tracking-wider">Help & Support</span>
             </button>
 
             {/* Logout button */}
             <button
               type="button"
               onClick={onLogout}
-              className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 mt-1 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white font-extrabold text-sm transition-all shadow-md shadow-red-600/25"
+              className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 mt-1 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200/80 dark:border-rose-900/30 font-black text-xs uppercase tracking-wider transition-all duration-200 shadow-xs active:scale-[0.98] cursor-pointer"
             >
-              <LogOut size={18} />
-              Log Out
+              <LogOut size={16} />
+              <span className="uppercase tracking-wider">Log Out</span>
             </button>
           </div>
         </div>
       </aside>
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Bar */}
-        <header className={`sticky top-0 z-40 h-20 transition-all duration-300 border-b shadow-md ${
-          darkMode 
-            ? "bg-[#0b0f19]/90 border-white/5 text-white" 
-            : "bg-white/95 border-slate-200/50 text-slate-800"
-        } backdrop-blur-md`}>
+        <header className={`sticky top-0 z-40 h-20 transition-all duration-300 border-b backdrop-blur-md ${darkMode
+          ? "bg-slate-950/90 border-slate-800/80 text-white"
+          : "bg-white/90 border-slate-200/80 text-slate-900"
+          } shadow-xs`}>
           <div className="h-full px-4 lg:px-6 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 lg:gap-4 shrink-0">
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className={`lg:hidden p-2 rounded-xl transition-all active:scale-95 cursor-pointer ${
-                  isSidebarOpen
-                    ? "bg-rose-500 text-white shadow-lg"
-                    : darkMode
-                      ? "bg-white/10 text-white hover:bg-white/20"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
+                className={`lg:hidden p-2.5 rounded-xl transition-all active:scale-95 cursor-pointer ${darkMode
+                  ? "bg-slate-900 border border-slate-800 text-slate-200 hover:bg-slate-850"
+                  : "bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200"
+                  }`}
               >
                 <Menu size={20} />
               </button>
-              <div className="block">
-                <h1 className="text-xl lg:text-3xl font-black flex items-center gap-0 leading-none">
-                  <span className="text-[#0a9396] dark:text-[#2dd4bf]">Care</span>
-                  <span className={darkMode ? "text-white" : "text-slate-900"}>bridge</span>
-                  <span className="text-rose-500 font-extrabold">+</span>
-                </h1>
-                <p className="text-rose-500 text-[8px] lg:text-xs font-black uppercase tracking-widest mt-0.5">
-                  Welcome to Carebridge+
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 lg:w-10 lg:h-10 shrink-0 flex items-center justify-center">
+                  <img src="/carebridge-logo.png" alt="CareBridge" className="w-full h-full object-contain drop-shadow-xs" />
+                </div>
+                <div className="flex flex-col">
+                  <h1 className={`text-lg lg:text-xl font-black tracking-tight leading-none ${darkMode ? "text-white" : "text-slate-900"}`}>
+                    CareBridge<span className="text-[#00b4d8]">Plus</span>
+                  </h1>
+                  <p className={`text-[9px] lg:text-[10px] font-black uppercase tracking-[0.25em] mt-1 ${darkMode ? "text-[#38bdf8]" : "text-[#0077b6]"}`}>
+                    CLINICAL WORKSPACE
+                  </p>
+                </div>
               </div>
             </div>
 
             {/* Middle Section for Mobile & Desktop */}
             <div className="flex flex-col items-center justify-center flex-1 text-center px-1">
-              <p className={`text-[9px] lg:text-xs font-black uppercase tracking-widest ${darkMode ? "text-white/90" : "text-slate-800"}`}>
-                Helpline: <span className="text-[#0a9396] dark:text-[#2dd4bf] font-extrabold">9022066914</span>
+              <p className={`text-[10px] lg:text-xs font-black uppercase tracking-widest ${darkMode ? "text-slate-200" : "text-slate-700"}`}>
+                Helpline: <span className={`font-black ${darkMode ? "text-[#38bdf8]" : "text-[#0077b6]"}`}>9022066914</span>
               </p>
-              <p className={`text-[8px] lg:text-[10px] font-bold ${darkMode ? "text-white/70" : "text-slate-500"}`}>
+              <p className="text-[9px] lg:text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-0.5">
                 {formatISTDate(currentTime)} | {formatISTTime(currentTime)}
               </p>
             </div>
 
-            <div className="flex items-center gap-1 lg:gap-2 shrink-0">
-              <div className="flex items-center gap-1 lg:gap-2">
-                <button
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      const aptQ = query(
-                        collection(db, "appointments"),
-                        where("clinicId", "==", String(user.id)),
-                      );
-                      const opdQ = query(
-                        collection(db, "opd_queue"),
-                        where("clinicId", "==", String(user.id)),
-                      );
-                      const [aptSnap, opdSnap] = await Promise.all([
-                        getDocs(aptQ),
-                        getDocs(opdQ),
-                      ]);
+            <div className="flex items-center gap-1.5 lg:gap-2 shrink-0">
+              <button
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    const aptQ = query(
+                      collection(db, "appointments"),
+                      where("clinicId", "==", String(user.id)),
+                    );
+                    const opdQ = query(
+                      collection(db, "opd_queue"),
+                      where("clinicId", "==", String(user.id)),
+                    );
+                    const [aptSnap, opdSnap] = await Promise.all([
+                      getDocs(aptQ),
+                      getDocs(opdQ),
+                    ]);
 
-                      const aptData = aptSnap.docs.map((d) => ({
-                        id: d.id,
-                        ...d.data(),
-                      }));
-                      const opdData = opdSnap.docs.map((d) => ({
-                        id: d.id,
-                        ...d.data(),
-                      }));
+                    const aptData = aptSnap.docs.map((d) => ({
+                      id: d.id,
+                      ...d.data(),
+                    }));
+                    const opdData = opdSnap.docs.map((d) => ({
+                      id: d.id,
+                      ...d.data(),
+                    }));
 
-                      setAppointments(
-                        aptData.sort(
-                          (a: any, b: any) =>
-                            (b.createdAt?.seconds || 0) -
-                            (a.createdAt?.seconds || 0),
-                        ),
-                      );
-                      setOpdQueue(opdData);
-                      setShowSuccessModal(true);
-                      console.log("[ClinicPanel] Dashboard synced manually.");
-                    } catch (err) {
-                      console.error("Manual refresh failed:", err);
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  className={`p-2 lg:p-2.5 rounded-xl transition-all cursor-pointer ${
-                    darkMode 
-                      ? "bg-white/10 text-white hover:bg-white/20" 
-                      : "bg-slate-100 text-slate-750 hover:bg-slate-200"
+                    setAppointments(
+                      aptData.sort(
+                        (a: any, b: any) =>
+                          (b.createdAt?.seconds || 0) -
+                          (a.createdAt?.seconds || 0),
+                      ),
+                    );
+                    setOpdQueue(opdData);
+                    setShowSuccessModal(true);
+                    console.log("[ClinicPanel] Dashboard synced manually.");
+                  } catch (err) {
+                    console.error("Manual refresh failed:", err);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className={`p-2.5 rounded-xl transition-all cursor-pointer shadow-xs ${darkMode
+                  ? "bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700"
+                  : "bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300"
                   }`}
-                  title="Sync Data"
-                >
-                  <RotateCw
-                    size={18}
-                    className="hover:rotate-180 transition-transform duration-500"
-                  />
-                </button>
-                <button
-                  onClick={() => setDarkMode(!darkMode)}
-                  className={`p-2 lg:p-2.5 rounded-xl transition-all cursor-pointer ${
-                    darkMode 
-                      ? "bg-white/10 text-amber-400 hover:bg-white/20" 
-                      : "bg-slate-100 text-amber-600 hover:bg-slate-200"
+                title="Sync Data"
+              >
+                <RotateCw
+                  size={17}
+                  className="hover:rotate-180 transition-transform duration-500"
+                />
+              </button>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className={`p-2.5 rounded-xl transition-all cursor-pointer shadow-xs ${darkMode
+                  ? "bg-slate-900 border border-slate-800 text-amber-400 hover:text-amber-300 hover:border-slate-700"
+                  : "bg-slate-100 border border-slate-200 text-amber-600 hover:text-amber-700 hover:border-slate-300"
                   }`}
-                >
-                  {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-                </button>
+                title="Toggle Theme"
+              >
+                {darkMode ? <Sun size={17} /> : <Moon size={17} />}
+              </button>
 
-                <button
-                  onClick={() => setActiveTab("inbox")}
-                  className={`p-2 lg:p-2.5 rounded-xl transition-all relative bg-white/10 text-white hover:bg-white/20`}
-                >
-                  <Bell size={18} />
-                  {unreadCount > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#ee9b00] rounded-full border-2 border-[#005f73]"></span>
-                  )}
-                </button>
-              </div>
+              <button
+                onClick={() => setActiveTab("inbox")}
+                className={`p-2.5 rounded-xl transition-all relative cursor-pointer shadow-xs ${darkMode
+                  ? "bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
+                  : "bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900"
+                  }`}
+                title="Inbox"
+              >
+                <Bell size={17} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
+                )}
+              </button>
             </div>
           </div>
         </header>
 
         {/* Mobile Bottom Nav */}
         <nav
-          className={`lg:hidden fixed bottom-0 left-0 right-0 h-16 z-50 flex items-center justify-around px-4 border-t transition-colors duration-300 ${darkMode ? "bg-[#001219] border-white/10" : "bg-white border-gray-100"}`}
+          className={`lg:hidden fixed bottom-0 left-0 right-0 h-16 z-50 flex items-center justify-around px-4 border-t backdrop-blur-md transition-colors duration-300 ${darkMode ? "bg-slate-950/95 border-slate-800/80" : "bg-white/95 border-slate-200/80"}`}
         >
           {[
             { id: "dashboard", icon: Home, label: "Home" },
@@ -7270,29 +7221,28 @@ export default function ClinicPanel({
                   setActiveTab(item.id);
                 }
               }}
-              className={`flex flex-col items-center gap-1 transition-all ${
-                activeTab === item.id || (item.id === "menu" && isSidebarOpen)
-                  ? "text-[#0a9396]"
-                  : "text-gray-400"
-              }`}
+              className={`flex flex-col items-center gap-1 transition-all ${activeTab === item.id || (item.id === "menu" && isSidebarOpen)
+                ? "text-[#0077b6] dark:text-[#38bdf8] font-black"
+                : "text-slate-400 dark:text-slate-500 font-bold"
+                }`}
             >
               <motion.div
                 whileTap={{ scale: 0.8 }}
                 animate={
                   activeTab === item.id || (item.id === "menu" && isSidebarOpen)
-                    ? { y: -4 }
+                    ? { y: -3 }
                     : { y: 0 }
                 }
               >
-                <item.icon size={22} />
+                <item.icon size={20} />
               </motion.div>
-              <span className="text-[10px] font-bold">{item.label}</span>
+              <span className="text-[10px] uppercase tracking-wider">{item.label}</span>
             </button>
           ))}
         </nav>
 
         <main
-          className={`flex-1 min-w-0 px-4 lg:px-8 transition-colors duration-300 overflow-y-auto pb-24 ${darkMode ? "bg-[#001219]" : "bg-[#F5F7FA]"}`}
+          className={`flex-1 min-w-0 px-4 lg:px-8 transition-colors duration-300 overflow-y-auto pb-24 ${darkMode ? "bg-slate-950" : "bg-slate-50"}`}
         >
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
@@ -7301,9 +7251,40 @@ export default function ClinicPanel({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="space-y-6 pb-10"
+                className="space-y-6 pb-10 relative"
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* Premium Watermark */}
+                <div className="absolute inset-0 top-20 flex items-center justify-center opacity-[0.03] dark:opacity-[0.1] pointer-events-none -z-10">
+                  <div className="w-[500px] h-[500px] border-[40px] border-slate-900 dark:border-white rounded-full flex items-center justify-center">
+                    <Heart size={200} className="text-slate-900 dark:text-white" />
+                  </div>
+                </div>
+
+                {/* Welcome Back Doctor Hero Header matching reference images */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#e0f7fa] dark:bg-cyan-950/40 text-[#0077b6] dark:text-[#38bdf8] text-[10px] font-black uppercase tracking-widest rounded-full mb-2 border border-[#b2ebf2] dark:border-cyan-800/40 shadow-xs">
+                      <Sparkles size={11} className="text-[#00b4d8] animate-pulse" />
+                      Authenticated Clinical Control Room
+                    </div>
+                    <h2 className={`text-2xl sm:text-3xl font-black tracking-tight uppercase leading-none ${darkMode ? "text-white" : "text-slate-900"}`}>
+                      Welcome Back, Doctor
+                    </h2>
+                    <p className="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
+                      Your clinic operations are connected, organized, and ready for today’s healthcare workflow.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                      <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        DISHA / ABDM Online
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 relative z-10">
                   {[
                     {
                       id: "opd",
@@ -7315,7 +7296,7 @@ export default function ClinicPanel({
                           .length,
                       icon: CalendarDays,
                       gradient: "from-[#F59E0B] to-[#D97706]",
-                      shadow: "shadow-amber-500/10",
+                      shadow: "shadow-amber-500/20",
                       textColor: "text-amber-500",
                     },
                     {
@@ -7325,7 +7306,7 @@ export default function ClinicPanel({
                         .length,
                       icon: Globe,
                       gradient: "from-[#3B82F6] to-[#1D4ED8]",
-                      shadow: "shadow-blue-500/10",
+                      shadow: "shadow-blue-500/20",
                       textColor: "text-blue-500",
                     },
                     {
@@ -7336,7 +7317,7 @@ export default function ClinicPanel({
                       ).length,
                       icon: FileSearch,
                       gradient: "from-[#8B5CF6] to-[#6D28D9]",
-                      shadow: "shadow-purple-500/10",
+                      shadow: "shadow-purple-500/20",
                       textColor: "text-purple-500",
                     },
                     {
@@ -7351,7 +7332,7 @@ export default function ClinicPanel({
                       ).length,
                       icon: History,
                       gradient: "from-[#F43F5E] to-[#E11D48]",
-                      shadow: "shadow-rose-500/10",
+                      shadow: "shadow-rose-500/20",
                       textColor: "text-rose-500",
                     },
                     {
@@ -7360,13 +7341,13 @@ export default function ClinicPanel({
                       value: `₹${creditRecords.reduce((acc, curr) => acc + (curr.balance || 0), 0)}`,
                       icon: Wallet,
                       gradient: "from-[#10B981] to-[#047857]",
-                      shadow: "shadow-emerald-500/10",
+                      shadow: "shadow-emerald-500/20",
                       textColor: "text-emerald-500",
                     },
                   ].map((stat, i) => (
                     <motion.div
                       key={i}
-                      whileHover={{ y: -5, scale: 1.02 }}
+                      whileHover={{ y: -4, scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => {
                         if (stat.label === "Booking Requests") {
@@ -7391,31 +7372,31 @@ export default function ClinicPanel({
                           }
                         }
                       }}
-                      className={`p-5 rounded-[2rem] border transition-all duration-300 cursor-pointer flex flex-col justify-between ${
-                        darkMode 
-                          ? "bg-slate-900/40 border-white/5 hover:border-slate-750 hover:bg-slate-900/60 shadow-xl" 
-                          : "bg-white border-slate-200/50 hover:border-slate-300 hover:shadow-xl shadow-md"
-                      }`}
+                      className={`p-6 rounded-[28px] border relative overflow-hidden transition-all duration-300 cursor-pointer flex flex-col justify-between group hover:-translate-y-1 ${darkMode
+                        ? "bg-slate-900/90 border-slate-800 hover:border-slate-700 hover:shadow-xl shadow-xs"
+                        : "bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-xl shadow-xs"
+                        }`}
                     >
-                      <div className="flex justify-between items-start gap-4">
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                      {/* Top rainbow gradient accent matching reference header */}
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#00b4d8] via-[#2563eb] to-[#7c3aed]" />
+                      <div className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-5 mix-blend-overlay pointer-events-none`} />
+
+                      <div className="relative z-10 flex justify-between items-start gap-4">
+                        <div className="space-y-1 text-left">
+                          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
                             {stat.label}
                           </p>
-                          <h3 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white tracking-tight">
+                          <h3 className={`text-3xl lg:text-4xl font-black tracking-tight leading-none mt-1.5 ${darkMode ? "text-white" : "text-slate-900"}`}>
                             {stat.value}
                           </h3>
                         </div>
-                        <ColorfulImageIcon
-                          icon={stat.icon}
-                          gradient={stat.gradient}
-                          shadow={stat.shadow}
-                          size={18}
-                        />
+                        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${stat.gradient} flex items-center justify-center text-white shadow-lg ${stat.shadow} shrink-0 group-hover:scale-110 transition-transform duration-500`}>
+                          <stat.icon size={20} className="stroke-[2.5] drop-shadow-sm" />
+                        </div>
                       </div>
-                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[10px] font-bold text-slate-400">
+                      <div className="relative z-10 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#0077b6] dark:text-[#38bdf8]">
                         <span>Open Panel</span>
-                        <span className={`${stat.textColor} font-black hover:translate-x-1 transition-transform`}>→</span>
+                        <span className="font-black group-hover:translate-x-1.5 transition-transform">→</span>
                       </div>
                     </motion.div>
                   ))}
@@ -7425,7 +7406,7 @@ export default function ClinicPanel({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className={`text-sm font-black uppercase tracking-widest ${darkMode ? "text-cyan-400" : "text-[#005f73]"}`}>
+                      <h3 className={`text-sm font-black uppercase tracking-widest ${darkMode ? "text-[#38bdf8]" : "text-[#0077b6]"}`}>
                         Clinical Workspaces & Services
                       </h3>
                       <p className={`text-xs ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Direct instant access to medical and financial modules</p>
@@ -7557,11 +7538,10 @@ export default function ClinicPanel({
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div
-                    className={`p-8 rounded-[2.5rem] shadow-xl border transition-all duration-300 ${
-                      darkMode 
-                        ? "bg-slate-900/40 border-white/5 hover:border-slate-800" 
-                        : "bg-white border-slate-200/50 hover:shadow-2xl shadow-blue-500/5"
-                    }`}
+                    className={`p-8 rounded-[2.5rem] shadow-xl border transition-all duration-300 ${darkMode
+                      ? "bg-slate-900/40 border-white/5 hover:border-slate-800"
+                      : "bg-white border-slate-200/50 hover:shadow-2xl shadow-blue-500/5"
+                      }`}
                   >
                     <div className="flex items-center gap-4 mb-6">
                       <ColorfulImageIcon
@@ -7637,11 +7617,10 @@ export default function ClinicPanel({
                   </div>
 
                   <div
-                    className={`p-8 rounded-[2.5rem] shadow-xl border transition-all duration-300 ${
-                      darkMode 
-                        ? "bg-slate-900/40 border-white/5 hover:border-slate-800" 
-                        : "bg-white border-slate-200/50 hover:shadow-2xl shadow-amber-500/5"
-                    }`}
+                    className={`p-8 rounded-[2.5rem] shadow-xl border transition-all duration-300 ${darkMode
+                      ? "bg-slate-900/40 border-white/5 hover:border-slate-800"
+                      : "bg-white border-slate-200/50 hover:shadow-2xl shadow-amber-500/5"
+                      }`}
                   >
                     <div className="flex items-center gap-4 mb-6">
                       <ColorfulImageIcon
@@ -7812,6 +7791,19 @@ export default function ClinicPanel({
                 <div
                   className={`${darkMode ? "bg-white/5 border-white/10 shadow-none" : "bg-white border-gray-100 shadow-sm"} p-4 rounded-2xl border space-y-4 mb-6 transition-all duration-300`}
                 >
+                  <div className="relative group">
+                    <Search
+                      className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? "text-gray-500" : "text-gray-400"} group-focus-within:text-[#005f73] transition-colors`}
+                      size={16}
+                    />
+                    <input
+                      type="text"
+                      value={filterHospitalName}
+                      onChange={(e) => setFilterHospitalName(e.target.value)}
+                      placeholder="Search Hospital by Name..."
+                      className={`w-full border-none rounded-xl pl-10 pr-4 py-3 text-sm font-black outline-hidden transition-all ${darkMode ? "bg-white/5 text-cyan-400 placeholder:text-gray-500 focus:bg-gray-800" : "bg-gray-50 text-[#005f73] placeholder:text-gray-400 focus:bg-white focus:shadow-xs"}`}
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label
@@ -7953,13 +7945,12 @@ export default function ClinicPanel({
 
                         <div className="absolute top-3 right-3 flex flex-col gap-2">
                           <span
-                            className={`px-3 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-lg backdrop-blur-md ${
-                              hosp.tier === "premium"
-                                ? "bg-linear-to-r from-[#005f73]/90 to-[#023e8a]/90 text-white"
-                                : hosp.tier === "priority"
-                                  ? "bg-linear-to-r from-[#0a9396]/90 to-[#0077b6]/90 text-white"
-                                  : "bg-linear-to-r from-[#ee9b00]/90 to-[#ca6702]/90 text-white"
-                            }`}
+                            className={`px-3 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-lg backdrop-blur-md ${hosp.tier === "premium"
+                              ? "bg-linear-to-r from-[#005f73]/90 to-[#023e8a]/90 text-white"
+                              : hosp.tier === "priority"
+                                ? "bg-linear-to-r from-[#0a9396]/90 to-[#0077b6]/90 text-white"
+                                : "bg-linear-to-r from-[#ee9b00]/90 to-[#ca6702]/90 text-white"
+                              }`}
                           >
                             {hosp.tier === "premium" && <Crown size={10} />}
                             {hosp.tier === "priority" && <Star size={10} />}
@@ -8039,11 +8030,10 @@ export default function ClinicPanel({
                               setSelectedHospital(hosp);
                               setShowProfileModal(true);
                             }}
-                            className={`py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 border ${
-                              darkMode
-                                ? "border-cyan-400 text-cyan-400 hover:bg-cyan-500/10"
-                                : "border-[#005f73] text-[#005f73] hover:bg-[#005f73] hover:text-white"
-                            }`}
+                            className={`py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 border ${darkMode
+                              ? "border-cyan-400 text-cyan-400 hover:bg-cyan-500/10"
+                              : "border-[#005f73] text-[#005f73] hover:bg-[#005f73] hover:text-white"
+                              }`}
                           >
                             <Hospital size={14} /> Profile
                           </button>
@@ -8081,37 +8071,34 @@ export default function ClinicPanel({
                 <div className="flex gap-2 mb-4">
                   <button
                     onClick={() => setReferralView("active")}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      referralView === "active"
-                        ? "bg-[#0a9396] text-white shadow-md"
-                        : darkMode
-                          ? "bg-white/5 text-gray-400"
-                          : "bg-gray-100 text-gray-500"
-                    }`}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${referralView === "active"
+                      ? "bg-[#0a9396] text-white shadow-md"
+                      : darkMode
+                        ? "bg-white/5 text-gray-400"
+                        : "bg-gray-100 text-gray-500"
+                      }`}
                   >
                     Active Referrals
                   </button>
                   <button
                     onClick={() => setReferralView("history")}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      referralView === "history"
-                        ? "bg-[#0a9396] text-white shadow-md"
-                        : darkMode
-                          ? "bg-white/5 text-gray-400"
-                          : "bg-gray-100 text-gray-500"
-                    }`}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${referralView === "history"
+                      ? "bg-[#0a9396] text-white shadow-md"
+                      : darkMode
+                        ? "bg-white/5 text-gray-400"
+                        : "bg-gray-100 text-gray-500"
+                      }`}
                   >
                     History
                   </button>
                   <button
                     onClick={() => setReferralView("discharged")}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      referralView === "discharged"
-                        ? "bg-blue-600 text-white shadow-md"
-                        : darkMode
-                          ? "bg-white/5 text-gray-400"
-                          : "bg-gray-100 text-gray-500"
-                    }`}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${referralView === "discharged"
+                      ? "bg-blue-600 text-white shadow-md"
+                      : darkMode
+                        ? "bg-white/5 text-gray-400"
+                        : "bg-gray-100 text-gray-500"
+                      }`}
                   >
                     Discharge History
                   </button>
@@ -8119,32 +8106,32 @@ export default function ClinicPanel({
 
                 {(referralView === "history" ||
                   referralView === "discharged") && (
-                  <div
-                    className={`${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-100"} p-4 rounded-2xl shadow-sm border space-y-4 mb-4`}
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <input
-                        type="text"
-                        placeholder="Search by Patient, Hospital or Status..."
-                        value={historySearch}
-                        onChange={(e) => setHistorySearch(e.target.value)}
-                        className={`border-none rounded-xl px-4 py-2 text-sm font-bold outline-hidden ${darkMode ? "bg-white/5 text-white placeholder-gray-500" : "bg-gray-50 text-gray-900"}`}
-                      />
-                      <input
-                        type="date"
-                        value={historyDateFrom}
-                        onChange={(e) => setHistoryDateFrom(e.target.value)}
-                        className={`border-none rounded-xl px-4 py-2 text-sm font-bold outline-hidden ${darkMode ? "bg-white/5 text-white" : "bg-gray-50 text-gray-900"}`}
-                      />
-                      <input
-                        type="date"
-                        value={historyDateTo}
-                        onChange={(e) => setHistoryDateTo(e.target.value)}
-                        className={`border-none rounded-xl px-4 py-2 text-sm font-bold outline-hidden ${darkMode ? "bg-white/5 text-white" : "bg-gray-50 text-gray-900"}`}
-                      />
+                    <div
+                      className={`${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-100"} p-4 rounded-2xl shadow-sm border space-y-4 mb-4`}
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input
+                          type="text"
+                          placeholder="Search by Patient, Hospital or Status..."
+                          value={historySearch}
+                          onChange={(e) => setHistorySearch(e.target.value)}
+                          className={`border-none rounded-xl px-4 py-2 text-sm font-bold outline-hidden ${darkMode ? "bg-white/5 text-white placeholder-gray-500" : "bg-gray-50 text-gray-900"}`}
+                        />
+                        <input
+                          type="date"
+                          value={historyDateFrom}
+                          onChange={(e) => setHistoryDateFrom(e.target.value)}
+                          className={`border-none rounded-xl px-4 py-2 text-sm font-bold outline-hidden ${darkMode ? "bg-white/5 text-white" : "bg-gray-50 text-gray-900"}`}
+                        />
+                        <input
+                          type="date"
+                          value={historyDateTo}
+                          onChange={(e) => setHistoryDateTo(e.target.value)}
+                          className={`border-none rounded-xl px-4 py-2 text-sm font-bold outline-hidden ${darkMode ? "bg-white/5 text-white" : "bg-gray-50 text-gray-900"}`}
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {referrals
                   .filter((ref) => {
@@ -8195,13 +8182,12 @@ export default function ClinicPanel({
                   .map((ref, index) => (
                     <div
                       key={`${ref.id}-${index}`}
-                      className={`${darkMode ? "bg-white/5 border-white/5" : "bg-white border-gray-100"} p-4 rounded-2xl shadow-sm border-l-4 transition-all duration-300 ${
-                        ref.status === "admitted"
-                          ? "border-green-500"
-                          : ref.status === "discharged"
-                            ? "border-blue-500"
-                            : "border-yellow-500"
-                      }`}
+                      className={`${darkMode ? "bg-white/5 border-white/5" : "bg-white border-gray-100"} p-4 rounded-2xl shadow-sm border-l-4 transition-all duration-300 ${ref.status === "admitted"
+                        ? "border-green-500"
+                        : ref.status === "discharged"
+                          ? "border-blue-500"
+                          : "border-yellow-500"
+                        }`}
                     >
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex gap-3">
@@ -8252,37 +8238,35 @@ export default function ClinicPanel({
                                 {ref.diagnosis} ({ref.department})
                               </p>
                               <span
-                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider ${
-                                  ref.referralType === "opd"
-                                    ? darkMode
-                                      ? "text-cyan-400 bg-cyan-400/10 border border-cyan-400/20"
-                                      : "text-[#0a9396] bg-cyan-50 border border-cyan-100"
-                                    : darkMode
-                                      ? "text-rose-400 bg-rose-400/10 border border-rose-400/20"
-                                      : "text-rose-600 bg-rose-50 border border-rose-100"
-                                }`}
+                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider ${ref.referralType === "opd"
+                                  ? darkMode
+                                    ? "text-cyan-400 bg-cyan-400/10 border border-cyan-400/20"
+                                    : "text-[#0a9396] bg-cyan-50 border border-cyan-100"
+                                  : darkMode
+                                    ? "text-rose-400 bg-rose-400/10 border border-rose-400/20"
+                                    : "text-rose-600 bg-rose-50 border border-rose-100"
+                                  }`}
                               >
                                 {ref.referralType === "opd" ? "Outpatient (OPD)" : "Inpatient (IPD)"}
                               </span>
                               <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                                  ref.patientCondition === "Emergency"
-                                    ? darkMode
-                                      ? "text-red-400 font-black bg-red-400/10"
-                                      : "text-red-600 font-black bg-red-50"
-                                    : darkMode
-                                      ? "text-green-400 bg-green-400/10"
-                                      : "text-green-600 bg-green-50"
-                                }`}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${ref.patientCondition === "Emergency"
+                                  ? darkMode
+                                    ? "text-red-400 font-black bg-red-400/10"
+                                    : "text-red-600 font-black bg-red-50"
+                                  : darkMode
+                                    ? "text-green-400 bg-green-400/10"
+                                    : "text-green-600 bg-green-50"
+                                  }`}
                               >
                                 {ref.patientCondition || "Stable"}
                               </span>
                             </div>
                           </div>
                         </div>
-                        <span
-                          className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
-                            ref.status === "admitted"
+                        <div className="flex flex-col items-end gap-2">
+                          <span
+                            className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${ref.status === "admitted"
                               ? darkMode
                                 ? "bg-green-500/10 text-green-400"
                                 : "bg-green-100 text-green-600"
@@ -8305,10 +8289,23 @@ export default function ClinicPanel({
                                       : darkMode
                                         ? "bg-yellow-500/10 text-yellow-400"
                                         : "bg-yellow-100 text-yellow-600"
-                          }`}
-                        >
-                          {ref.status.replace("_", " ")}
-                        </span>
+                              }`}
+                          >
+                            {ref.status.replace("_", " ")}
+                          </span>
+                          {(ref.status === "admitted" || ref.status === "discharged") && (
+                            <button
+                              onClick={() => {
+                                setExpandedAdmissions(prev =>
+                                  prev.includes(ref.id) ? prev.filter(id => id !== ref.id) : [...prev, ref.id]
+                                );
+                              }}
+                              className={`text-[9px] font-bold underline transition-colors ${darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
+                            >
+                              {expandedAdmissions.includes(ref.id) ? "HIDE DETAILS" : "VIEW DETAILS"}
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div
                         className={`mt-3 pt-3 border-t flex justify-between items-end ${darkMode ? "border-white/5" : "border-gray-50"}`}
@@ -8366,7 +8363,7 @@ export default function ClinicPanel({
                             )}
                           </div>
 
-                          {ref.admissionDetails && (
+                          {expandedAdmissions.includes(ref.id) && (
                             <div
                               className={`mt-3 p-4 rounded-2xl border ${darkMode ? "bg-emerald-500/5 border-emerald-500/20" : "bg-green-50/50 border-green-100"}`}
                             >
@@ -8377,17 +8374,16 @@ export default function ClinicPanel({
                                   <Activity size={12} /> Admission Details
                                 </p>
                                 <span
-                                  className={`text-[9px] font-black px-2 py-0.5 rounded-lg border ${
-                                    ref.admissionDetails.condition ===
+                                  className={`text-[9px] font-black px-2 py-0.5 rounded-lg border ${(ref.admissionDetails?.condition || ref.patientCondition || "Stable") ===
                                     "Emergency"
-                                      ? "bg-red-100 text-red-600 border-red-200"
-                                      : ref.admissionDetails.condition ===
-                                          "Critical"
-                                        ? "bg-orange-100 text-orange-600 border-orange-200"
-                                        : "bg-emerald-100 text-emerald-600 border-emerald-200"
-                                  }`}
+                                    ? "bg-red-100 text-red-600 border-red-200"
+                                    : (ref.admissionDetails?.condition || ref.patientCondition || "Stable") ===
+                                      "Critical"
+                                      ? "bg-orange-100 text-orange-600 border-orange-200"
+                                      : "bg-emerald-100 text-emerald-600 border-emerald-200"
+                                    }`}
                                 >
-                                  {ref.admissionDetails.condition}
+                                  {ref.admissionDetails?.condition || ref.patientCondition || "Stable"}
                                 </span>
                               </div>
 
@@ -8399,7 +8395,7 @@ export default function ClinicPanel({
                                   <p
                                     className={`text-xs font-bold ${darkMode ? "text-white" : "text-gray-900"}`}
                                   >
-                                    {ref.admissionDetails.ward}
+                                    {ref.admissionDetails?.ward || ref.ward || "General Ward"}
                                   </p>
                                 </div>
                                 <div>
@@ -8409,20 +8405,20 @@ export default function ClinicPanel({
                                   <p
                                     className={`text-xs font-bold ${darkMode ? "text-emerald-600" : "text-emerald-700"}`}
                                   >
-                                    {ref.admissionDetails.scheme ||
+                                    {ref.admissionDetails?.scheme ||
                                       "General / Cashless"}
                                   </p>
                                 </div>
                               </div>
 
-                              {ref.admissionDetails.vitals && (
+                              {ref.admissionDetails?.vitals && (
                                 <div className="grid grid-cols-4 gap-2 py-2 border-y border-dashed border-gray-200 dark:border-white/10 my-3">
                                   <div>
                                     <p className="text-[7px] font-black text-gray-400 uppercase leading-none mb-1">
                                       Temp
                                     </p>
                                     <p className="text-[10px] font-black">
-                                      {ref.admissionDetails.vitals.temp || "--"}
+                                      {ref.admissionDetails?.vitals?.temp || "--"}
                                       °F
                                     </p>
                                   </div>
@@ -8431,7 +8427,7 @@ export default function ClinicPanel({
                                       BP
                                     </p>
                                     <p className="text-[10px] font-black">
-                                      {ref.admissionDetails.vitals.bp || "--"}
+                                      {ref.admissionDetails?.vitals?.bp || "--"}
                                     </p>
                                   </div>
                                   <div>
@@ -8439,8 +8435,7 @@ export default function ClinicPanel({
                                       Pulse
                                     </p>
                                     <p className="text-[10px] font-black">
-                                      {ref.admissionDetails.vitals.pulse ||
-                                        "--"}
+                                      {ref.admissionDetails?.vitals?.pulse || "--"}
                                     </p>
                                   </div>
                                   <div>
@@ -8448,7 +8443,7 @@ export default function ClinicPanel({
                                       SpO2
                                     </p>
                                     <p className="text-[10px] font-black">
-                                      {ref.admissionDetails.vitals.spo2 || "--"}
+                                      {ref.admissionDetails?.vitals?.spo2 || "--"}
                                       %
                                     </p>
                                   </div>
@@ -8462,7 +8457,7 @@ export default function ClinicPanel({
                                 <p
                                   className={`text-[11px] font-bold italic leading-relaxed ${darkMode ? "text-gray-300" : "text-gray-700"}`}
                                 >
-                                  "{ref.admissionDetails.diagnosis}"
+                                  "{ref.admissionDetails?.diagnosis || ref.diagnosis || "No diagnosis provided"}"
                                 </p>
                               </div>
                             </div>
@@ -8508,14 +8503,14 @@ export default function ClinicPanel({
                     return ref.status === "discharged";
                   return true;
                 }).length === 0 && (
-                  <div
-                    className={`text-center py-12 rounded-2xl border border-dashed transition-all ${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-200"}`}
-                  >
-                    <p className="text-gray-400 font-bold">
-                      No referrals found.
-                    </p>
-                  </div>
-                )}
+                    <div
+                      className={`text-center py-12 rounded-2xl border border-dashed transition-all ${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-200"}`}
+                    >
+                      <p className="text-gray-400 font-bold">
+                        No referrals found.
+                      </p>
+                    </div>
+                  )}
               </motion.div>
             )}
 
@@ -8529,11 +8524,10 @@ export default function ClinicPanel({
               >
                 {/* Sticky Header for Save/Edit */}
                 <div
-                  className={`sticky top-24 z-30 mb-8 flex items-center justify-between backdrop-blur-xl p-4 rounded-2xl border shadow-sm transition-colors duration-300 ${
-                    darkMode
-                      ? "bg-gray-900/60 border-white/10"
-                      : "bg-white/60 border-white/40"
-                  }`}
+                  className={`sticky top-24 z-30 mb-8 flex items-center justify-between backdrop-blur-xl p-4 rounded-2xl border shadow-sm transition-colors duration-300 ${darkMode
+                    ? "bg-gray-900/60 border-white/10"
+                    : "bg-white/60 border-white/40"
+                    }`}
                 >
                   <div>
                     <h2
@@ -8550,15 +8544,14 @@ export default function ClinicPanel({
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setIsEditingProfile(!isEditingProfile)}
-                      className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${
-                        isEditingProfile
-                          ? darkMode
-                            ? "bg-white/10 text-gray-300 hover:bg-white/20"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          : darkMode
-                            ? "bg-sky-500/10 text-sky-400 hover:bg-sky-500/20"
-                            : "bg-[#1E88E5]/10 text-[#1E88E5] hover:bg-[#1E88E5]/20"
-                      }`}
+                      className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${isEditingProfile
+                        ? darkMode
+                          ? "bg-white/10 text-gray-300 hover:bg-white/20"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        : darkMode
+                          ? "bg-sky-500/10 text-sky-400 hover:bg-sky-500/20"
+                          : "bg-[#1E88E5]/10 text-[#1E88E5] hover:bg-[#1E88E5]/20"
+                        }`}
                     >
                       {isEditingProfile ? (
                         <X size={18} />
@@ -8570,9 +8563,8 @@ export default function ClinicPanel({
                     {isEditingProfile && (
                       <button
                         onClick={handleProfileSave}
-                        className={`px-8 py-2.5 bg-[#1E88E5] text-white rounded-xl font-black text-sm shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2 ${
-                          darkMode ? "shadow-blue-500/10" : "shadow-blue-200"
-                        }`}
+                        className={`px-8 py-2.5 bg-[#1E88E5] text-white rounded-xl font-black text-sm shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2 ${darkMode ? "shadow-blue-500/10" : "shadow-blue-200"
+                          }`}
                       >
                         <Save size={18} /> Save Changes
                       </button>
@@ -8585,11 +8577,10 @@ export default function ClinicPanel({
                   <div className="lg:col-span-7 space-y-8">
                     {/* 1. Profile Header Card */}
                     <div
-                      className={`rounded-[32px] shadow-sm border overflow-hidden relative transition-colors duration-300 ${
-                        darkMode
-                          ? "bg-gray-800 border-white/10"
-                          : "bg-white border-gray-100"
-                      }`}
+                      className={`rounded-[32px] shadow-sm border overflow-hidden relative transition-colors duration-300 ${darkMode
+                        ? "bg-gray-800 border-white/10"
+                        : "bg-white border-gray-100"
+                        }`}
                     >
                       {/* Banner */}
                       <div className="h-48 bg-linear-to-r from-[#1E88E5] to-[#42A5F5] relative overflow-hidden">
@@ -8620,11 +8611,10 @@ export default function ClinicPanel({
                         <div className="flex flex-col md:flex-row md:items-end gap-6 -mt-16">
                           <div className="relative group">
                             <div
-                              className={`w-32 h-32 rounded-full border-4 shadow-xl overflow-hidden ${
-                                darkMode
-                                  ? "bg-gray-800 border-gray-800"
-                                  : "bg-gray-50 border-white"
-                              }`}
+                              className={`w-32 h-32 rounded-full border-4 shadow-xl overflow-hidden ${darkMode
+                                ? "bg-gray-800 border-gray-800"
+                                : "bg-gray-50 border-white"
+                                }`}
                             >
                               {profileForm.logo ? (
                                 <img
@@ -8715,19 +8705,17 @@ export default function ClinicPanel({
 
                     {/* 2. Clinic Details Card */}
                     <div
-                      className={`rounded-[32px] shadow-sm border p-8 transition-colors duration-300 ${
-                        darkMode
-                          ? "bg-gray-800 border-white/10"
-                          : "bg-white border-gray-100"
-                      }`}
+                      className={`rounded-[32px] shadow-sm border p-8 transition-colors duration-300 ${darkMode
+                        ? "bg-gray-800 border-white/10"
+                        : "bg-white border-gray-100"
+                        }`}
                     >
                       <div className="flex items-center gap-3 mb-8">
                         <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                            darkMode
-                              ? "bg-blue-500/10 text-sky-400"
-                              : "bg-blue-50 text-[#1E88E5]"
-                          }`}
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center ${darkMode
+                            ? "bg-blue-500/10 text-sky-400"
+                            : "bg-blue-50 text-[#1E88E5]"
+                            }`}
                         >
                           <Building size={20} />
                         </div>
@@ -8761,11 +8749,10 @@ export default function ClinicPanel({
                                   name: e.target.value,
                                 })
                               }
-                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${
-                                darkMode
-                                  ? "bg-white/5 text-white focus:bg-gray-800"
-                                  : "bg-gray-50 focus:bg-white"
-                              }`}
+                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${darkMode
+                                ? "bg-white/5 text-white focus:bg-gray-800"
+                                : "bg-gray-50 focus:bg-white"
+                                }`}
                               placeholder="Enter clinic name"
                             />
                           </div>
@@ -8793,11 +8780,10 @@ export default function ClinicPanel({
                                   doctor_name: e.target.value,
                                 })
                               }
-                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${
-                                darkMode
-                                  ? "bg-white/5 text-white focus:bg-gray-800"
-                                  : "bg-gray-50 focus:bg-white"
-                              }`}
+                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${darkMode
+                                ? "bg-white/5 text-white focus:bg-gray-800"
+                                : "bg-gray-50 focus:bg-white"
+                                }`}
                               placeholder="Dr. Name"
                             />
                           </div>
@@ -8826,11 +8812,10 @@ export default function ClinicPanel({
                                   specialization: e.target.value, // Keep synchronization for search fallback
                                 })
                               }
-                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${
-                                darkMode
-                                  ? "bg-white/5 text-white focus:bg-gray-800"
-                                  : "bg-gray-50 focus:bg-white"
-                              }`}
+                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${darkMode
+                                ? "bg-white/5 text-white focus:bg-gray-800"
+                                : "bg-gray-50 focus:bg-white"
+                                }`}
                               placeholder="e.g. BAMS / MBBS / MD"
                             />
                           </div>
@@ -8885,11 +8870,10 @@ export default function ClinicPanel({
                                         });
                                       }
                                     }}
-                                    className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 appearance-none ${
-                                      darkMode
-                                        ? "bg-white/5 text-white focus:bg-gray-800"
-                                        : "bg-gray-50 focus:bg-white"
-                                    }`}
+                                    className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 appearance-none ${darkMode
+                                      ? "bg-white/5 text-white focus:bg-gray-800"
+                                      : "bg-gray-50 focus:bg-white"
+                                      }`}
                                   >
                                     <option value="">Select Department</option>
                                     <option value="Ayurveda">Ayurveda</option>
@@ -8918,11 +8902,10 @@ export default function ClinicPanel({
                                             department: e.target.value,
                                           })
                                         }
-                                        className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${
-                                          darkMode
-                                            ? "bg-white/5 text-white focus:bg-gray-800"
-                                            : "bg-gray-50 focus:bg-white"
-                                        }`}
+                                        className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${darkMode
+                                          ? "bg-white/5 text-white focus:bg-gray-800"
+                                          : "bg-gray-50 focus:bg-white"
+                                          }`}
                                         placeholder="Type custom department name..."
                                       />
                                     </div>
@@ -8954,11 +8937,10 @@ export default function ClinicPanel({
                                   category: e.target.value,
                                 })
                               }
-                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 appearance-none ${
-                                darkMode
-                                  ? "bg-white/5 text-white focus:bg-gray-800"
-                                  : "bg-gray-50 focus:bg-white"
-                              }`}
+                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 appearance-none ${darkMode
+                                ? "bg-white/5 text-white focus:bg-gray-800"
+                                : "bg-gray-50 focus:bg-white"
+                                }`}
                             >
                               <option value="General Clinic">
                                 General Clinic
@@ -8996,11 +8978,10 @@ export default function ClinicPanel({
                                   reg_no: e.target.value,
                                 })
                               }
-                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${
-                                darkMode
-                                  ? "bg-white/5 text-white focus:bg-gray-800"
-                                  : "bg-gray-50 focus:bg-white"
-                              }`}
+                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${darkMode
+                                ? "bg-white/5 text-white focus:bg-gray-800"
+                                : "bg-gray-50 focus:bg-white"
+                                }`}
                               placeholder="e.g. REG-12345"
                             />
                           </div>
@@ -9028,11 +9009,10 @@ export default function ClinicPanel({
                                   contact_no: e.target.value,
                                 })
                               }
-                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${
-                                darkMode
-                                  ? "bg-white/5 text-white focus:bg-gray-800"
-                                  : "bg-gray-50 focus:bg-white"
-                              }`}
+                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${darkMode
+                                ? "bg-white/5 text-white focus:bg-gray-800"
+                                : "bg-gray-50 focus:bg-white"
+                                }`}
                               placeholder="e.g. +91 9876543210"
                             />
                           </div>
@@ -9060,11 +9040,10 @@ export default function ClinicPanel({
                                   website: e.target.value,
                                 })
                               }
-                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${
-                                darkMode
-                                  ? "bg-white/5 text-white focus:bg-gray-800"
-                                  : "bg-gray-50 focus:bg-white"
-                              }`}
+                              className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 ${darkMode
+                                ? "bg-white/5 text-white focus:bg-gray-800"
+                                : "bg-gray-50 focus:bg-white"
+                                }`}
                               placeholder="https://clinic.com"
                             />
                           </div>
@@ -9093,11 +9072,10 @@ export default function ClinicPanel({
                                 address: e.target.value,
                               })
                             }
-                            className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-4 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 resize-none ${
-                              darkMode
-                                ? "bg-white/5 text-white focus:bg-gray-800"
-                                : "bg-gray-50 focus:bg-white"
-                            }`}
+                            className={`w-full border-2 border-transparent rounded-2xl pl-12 pr-4 py-4 text-sm font-bold outline-hidden focus:border-[#1E88E5]/20 focus:ring-4 focus:ring-[#1E88E5]/5 transition-all disabled:opacity-70 resize-none ${darkMode
+                              ? "bg-white/5 text-white focus:bg-gray-800"
+                              : "bg-gray-50 focus:bg-white"
+                              }`}
                             placeholder="Enter full clinic address"
                           />
                         </div>
@@ -9106,20 +9084,18 @@ export default function ClinicPanel({
 
                     {/* 3. Clinic Hours */}
                     <div
-                      className={`rounded-[32px] shadow-sm border p-8 transition-colors duration-300 ${
-                        darkMode
-                          ? "bg-gray-800 border-white/10"
-                          : "bg-white border-gray-100"
-                      }`}
+                      className={`rounded-[32px] shadow-sm border p-8 transition-colors duration-300 ${darkMode
+                        ? "bg-gray-800 border-white/10"
+                        : "bg-white border-gray-100"
+                        }`}
                     >
                       <div className="flex items-center justify-between mb-8">
                         <div className="flex items-center gap-3">
                           <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                              darkMode
-                                ? "bg-orange-500/10 text-orange-400"
-                                : "bg-orange-50 text-orange-600"
-                            }`}
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center ${darkMode
+                              ? "bg-orange-500/10 text-orange-400"
+                              : "bg-orange-50 text-orange-600"
+                              }`}
                           >
                             <Clock size={20} />
                           </div>
@@ -9136,11 +9112,10 @@ export default function ClinicPanel({
                           ([day, data]) => (
                             <div
                               key={day}
-                              className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                                darkMode
-                                  ? "bg-white/5 border-white/5 hover:border-white/10"
-                                  : "bg-gray-50 border-transparent hover:border-gray-200"
-                              }`}
+                              className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${darkMode
+                                ? "bg-white/5 border-white/5 hover:border-white/10"
+                                : "bg-gray-50 border-transparent hover:border-gray-200"
+                                }`}
                             >
                               <div className="flex items-center gap-4">
                                 <div className="w-24">
@@ -9167,11 +9142,10 @@ export default function ClinicPanel({
                                           },
                                         })
                                       }
-                                      className={`border-none rounded-lg px-2 py-1 text-xs font-bold outline-hidden focus:ring-2 focus:ring-orange-500/20 ${
-                                        darkMode
-                                          ? "bg-white/5 text-white"
-                                          : "bg-white text-gray-900"
-                                      }`}
+                                      className={`border-none rounded-lg px-2 py-1 text-xs font-bold outline-hidden focus:ring-2 focus:ring-orange-500/20 ${darkMode
+                                        ? "bg-white/5 text-white"
+                                        : "bg-white text-gray-900"
+                                        }`}
                                     />
                                     <span className="text-gray-400 font-bold">
                                       to
@@ -9191,11 +9165,10 @@ export default function ClinicPanel({
                                           },
                                         })
                                       }
-                                      className={`border-none rounded-lg px-2 py-1 text-xs font-bold outline-hidden focus:ring-2 focus:ring-orange-500/20 ${
-                                        darkMode
-                                          ? "bg-white/5 text-white"
-                                          : "bg-white text-gray-900"
-                                      }`}
+                                      className={`border-none rounded-lg px-2 py-1 text-xs font-bold outline-hidden focus:ring-2 focus:ring-orange-500/20 ${darkMode
+                                        ? "bg-white/5 text-white"
+                                        : "bg-white text-gray-900"
+                                        }`}
                                     />
                                   </div>
                                 ) : (
@@ -9220,15 +9193,14 @@ export default function ClinicPanel({
                                     },
                                   })
                                 }
-                                className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                                  data.closed
-                                    ? darkMode
-                                      ? "bg-red-500/10 text-red-500"
-                                      : "bg-red-50 text-red-600"
-                                    : darkMode
-                                      ? "bg-green-500/10 text-green-500"
-                                      : "bg-green-50 text-green-600"
-                                }`}
+                                className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${data.closed
+                                  ? darkMode
+                                    ? "bg-red-500/10 text-red-500"
+                                    : "bg-red-50 text-red-600"
+                                  : darkMode
+                                    ? "bg-green-500/10 text-green-500"
+                                    : "bg-green-50 text-green-600"
+                                  }`}
                               >
                                 {data.closed ? "Closed" : "Open"}
                               </button>
@@ -9240,19 +9212,17 @@ export default function ClinicPanel({
 
                     {/* 4. Facilities Section */}
                     <div
-                      className={`rounded-[32px] shadow-sm border p-8 transition-colors duration-300 ${
-                        darkMode
-                          ? "bg-gray-800 border-white/10"
-                          : "bg-white border-gray-100"
-                      }`}
+                      className={`rounded-[32px] shadow-sm border p-8 transition-colors duration-300 ${darkMode
+                        ? "bg-gray-800 border-white/10"
+                        : "bg-white border-gray-100"
+                        }`}
                     >
                       <div className="flex items-center gap-3 mb-8">
                         <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                            darkMode
-                              ? "bg-green-500/10 text-emerald-400"
-                              : "bg-green-50 text-green-600"
-                          }`}
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center ${darkMode
+                            ? "bg-green-500/10 text-emerald-400"
+                            : "bg-green-50 text-green-600"
+                            }`}
                         >
                           <CheckSquare size={20} />
                         </div>
@@ -9279,23 +9249,22 @@ export default function ClinicPanel({
                               const newFacilities =
                                 profileForm.facilities.includes(facility)
                                   ? profileForm.facilities.filter(
-                                      (f) => f !== facility,
-                                    )
+                                    (f) => f !== facility,
+                                  )
                                   : [...profileForm.facilities, facility];
                               setProfileForm({
                                 ...profileForm,
                                 facilities: newFacilities,
                               });
                             }}
-                            className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-3 ${
-                              profileForm.facilities.includes(facility)
-                                ? darkMode
-                                  ? "bg-green-500/10 border-green-500/50 text-green-400"
-                                  : "bg-green-50 border-green-500 text-green-700"
-                                : darkMode
-                                  ? "bg-white/5 border-transparent text-gray-500 hover:border-white/10"
-                                  : "bg-gray-50 border-transparent text-gray-500 hover:border-gray-200"
-                            }`}
+                            className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-3 ${profileForm.facilities.includes(facility)
+                              ? darkMode
+                                ? "bg-green-500/10 border-green-500/50 text-green-400"
+                                : "bg-green-50 border-green-500 text-green-700"
+                              : darkMode
+                                ? "bg-white/5 border-transparent text-gray-500 hover:border-white/10"
+                                : "bg-gray-50 border-transparent text-gray-500 hover:border-gray-200"
+                              }`}
                           >
                             {profileForm.facilities.includes(facility) ? (
                               <CheckSquare size={18} />
@@ -9346,11 +9315,10 @@ export default function ClinicPanel({
                           {profileForm.visiting_doctors.map((doc, idx) => (
                             <div
                               key={idx}
-                              className={`p-5 rounded-2xl border relative group transition-colors ${
-                                darkMode
-                                  ? "bg-white/5 border-white/5"
-                                  : "bg-gray-50 border-gray-100"
-                              }`}
+                              className={`p-5 rounded-2xl border relative group transition-colors ${darkMode
+                                ? "bg-white/5 border-white/5"
+                                : "bg-gray-50 border-gray-100"
+                                }`}
                             >
                               {isEditingProfile && (
                                 <button
@@ -9390,11 +9358,10 @@ export default function ClinicPanel({
                                         visiting_doctors: newDocs,
                                       });
                                     }}
-                                    className={`w-full border-none rounded-xl px-3 py-2 text-xs font-bold outline-hidden focus:ring-2 focus:ring-blue-500/20 ${
-                                      darkMode
-                                        ? "bg-white/5 text-white"
-                                        : "bg-white text-gray-900"
-                                    }`}
+                                    className={`w-full border-none rounded-xl px-3 py-2 text-xs font-bold outline-hidden focus:ring-2 focus:ring-blue-500/20 ${darkMode
+                                      ? "bg-white/5 text-white"
+                                      : "bg-white text-gray-900"
+                                      }`}
                                     placeholder="Dr. Name"
                                   />
                                 </div>
@@ -9419,11 +9386,10 @@ export default function ClinicPanel({
                                         visiting_doctors: newDocs,
                                       });
                                     }}
-                                    className={`w-full border-none rounded-xl px-3 py-2 text-xs font-bold outline-hidden focus:ring-2 focus:ring-blue-500/20 ${
-                                      darkMode
-                                        ? "bg-white/5 text-white"
-                                        : "bg-white text-gray-900"
-                                    }`}
+                                    className={`w-full border-none rounded-xl px-3 py-2 text-xs font-bold outline-hidden focus:ring-2 focus:ring-blue-500/20 ${darkMode
+                                      ? "bg-white/5 text-white"
+                                      : "bg-white text-gray-900"
+                                      }`}
                                     placeholder="e.g. MBBS, MD"
                                   />
                                 </div>
@@ -9447,11 +9413,10 @@ export default function ClinicPanel({
                                         visiting_doctors: newDocs,
                                       });
                                     }}
-                                    className={`w-full border-none rounded-xl px-3 py-2 text-xs font-bold outline-hidden focus:ring-2 focus:ring-blue-500/20 ${
-                                      darkMode
-                                        ? "bg-white/5 text-white"
-                                        : "bg-white text-gray-900"
-                                    }`}
+                                    className={`w-full border-none rounded-xl px-3 py-2 text-xs font-bold outline-hidden focus:ring-2 focus:ring-blue-500/20 ${darkMode
+                                      ? "bg-white/5 text-white"
+                                      : "bg-white text-gray-900"
+                                      }`}
                                     placeholder="e.g. Cardiology"
                                   />
                                 </div>
@@ -9475,11 +9440,10 @@ export default function ClinicPanel({
                                         visiting_doctors: newDocs,
                                       });
                                     }}
-                                    className={`w-full border-none rounded-xl px-3 py-2 text-xs font-bold outline-hidden focus:ring-2 focus:ring-blue-500/20 ${
-                                      darkMode
-                                        ? "bg-white/5 text-white"
-                                        : "bg-white text-gray-900"
-                                    }`}
+                                    className={`w-full border-none rounded-xl px-3 py-2 text-xs font-bold outline-hidden focus:ring-2 focus:ring-blue-500/20 ${darkMode
+                                      ? "bg-white/5 text-white"
+                                      : "bg-white text-gray-900"
+                                      }`}
                                     placeholder="e.g. Mon-Fri, 5pm-8pm"
                                   />
                                 </div>
@@ -9492,19 +9456,17 @@ export default function ClinicPanel({
 
                     {/* 5. Gallery Upload */}
                     <div
-                      className={`rounded-[32px] shadow-sm border p-8 transition-colors duration-300 ${
-                        darkMode
-                          ? "bg-gray-800 border-white/10"
-                          : "bg-white border-gray-100"
-                      }`}
+                      className={`rounded-[32px] shadow-sm border p-8 transition-colors duration-300 ${darkMode
+                        ? "bg-gray-800 border-white/10"
+                        : "bg-white border-gray-100"
+                        }`}
                     >
                       <div className="flex items-center gap-3 mb-8">
                         <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                            darkMode
-                              ? "bg-purple-500/10 text-purple-400"
-                              : "bg-purple-50 text-purple-600"
-                          }`}
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center ${darkMode
+                            ? "bg-purple-500/10 text-purple-400"
+                            : "bg-purple-50 text-purple-600"
+                            }`}
                         >
                           <ImageIcon size={20} />
                         </div>
@@ -9561,11 +9523,10 @@ export default function ClinicPanel({
                                   .getElementById("clinic-gallery-upload")
                                   ?.click()
                               }
-                              className={`aspect-square rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 hover:border-[#1E88E5] hover:text-[#1E88E5] transition-all ${
-                                darkMode
-                                  ? "bg-white/5 border-white/10 text-gray-500"
-                                  : "bg-gray-50 border-gray-200 text-gray-400"
-                              }`}
+                              className={`aspect-square rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 hover:border-[#1E88E5] hover:text-[#1E88E5] transition-all ${darkMode
+                                ? "bg-white/5 border-white/10 text-gray-500"
+                                : "bg-gray-50 border-gray-200 text-gray-400"
+                                }`}
                             >
                               <Upload size={24} />
                               <span className="text-[10px] font-black uppercase">
@@ -9579,11 +9540,10 @@ export default function ClinicPanel({
                       {!isEditingProfile &&
                         profileForm.gallery.length === 0 && (
                           <div
-                            className={`py-12 text-center rounded-3xl border border-dashed ${
-                              darkMode
-                                ? "bg-white/5 border-white/10"
-                                : "bg-gray-50 border-gray-200"
-                            }`}
+                            className={`py-12 text-center rounded-3xl border border-dashed ${darkMode
+                              ? "bg-white/5 border-white/10"
+                              : "bg-gray-50 border-gray-200"
+                              }`}
                           >
                             <ImageIcon
                               size={40}
@@ -9753,11 +9713,10 @@ export default function ClinicPanel({
                         <div className="absolute inset-0 bg-black/5"></div>
                         <div className="absolute bottom-3 left-3 right-3">
                           <button
-                            className={`w-full font-black py-2 rounded-xl text-[10px] shadow-lg flex items-center justify-center gap-2 transition-all ${
-                              darkMode
-                                ? "bg-gray-700/90 text-white hover:bg-gray-600"
-                                : "bg-white/90 text-gray-900 hover:bg-white"
-                            }`}
+                            className={`w-full font-black py-2 rounded-xl text-[10px] shadow-lg flex items-center justify-center gap-2 transition-all ${darkMode
+                              ? "bg-gray-700/90 text-white hover:bg-gray-600"
+                              : "bg-white/90 text-gray-900 hover:bg-white"
+                              }`}
                           >
                             <MapPin size={12} /> Get Directions
                           </button>
@@ -9835,7 +9794,7 @@ export default function ClinicPanel({
                       </div>
                     </div>
                     {diagnosticInfo.rawDocs &&
-                    diagnosticInfo.rawDocs.length > 0 ? (
+                      diagnosticInfo.rawDocs.length > 0 ? (
                       <div className="mt-3 overflow-x-auto text-[10px] font-mono border-t border-black/5 pt-3">
                         <p className="font-bold mb-1 opacity-80">
                           Full Registry Document IDs & Clinic IDs inside
@@ -10009,16 +9968,16 @@ export default function ClinicPanel({
                     ))}
                   {appointments.filter((a) => a.status === "pending").length ===
                     0 && (
-                    <div className="text-center py-20 bg-white rounded-[40px] border-2 border-dashed border-gray-100">
-                      <Smartphone
-                        size={48}
-                        className="mx-auto text-gray-100 mb-4"
-                      />
-                      <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">
-                        No new online appointments
-                      </p>
-                    </div>
-                  )}
+                      <div className="text-center py-20 bg-white rounded-[40px] border-2 border-dashed border-gray-100">
+                        <Smartphone
+                          size={48}
+                          className="mx-auto text-gray-100 mb-4"
+                        />
+                        <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">
+                          No new online appointments
+                        </p>
+                      </div>
+                    )}
                 </div>
               </motion.div>
             )}
@@ -10307,13 +10266,12 @@ export default function ClinicPanel({
                       {/* Requests Card */}
                       <div
                         onClick={() => setOpdFilter(opdFilter === "requested" ? "all" : "requested")}
-                        className={`p-4 rounded-2xl shadow-sm border border-gray-150 dark:border-white/5 cursor-pointer hover:shadow-md transition-all border-b-4 border-yellow-500 ${
-                          opdFilter === "requested"
-                            ? "bg-yellow-500/10 dark:bg-yellow-500/20 ring-2 ring-yellow-400"
-                            : darkMode
-                              ? "bg-white/5"
-                              : "bg-white"
-                        }`}
+                        className={`p-4 rounded-2xl shadow-sm border border-gray-150 dark:border-white/5 cursor-pointer hover:shadow-md transition-all border-b-4 border-yellow-500 ${opdFilter === "requested"
+                          ? "bg-yellow-500/10 dark:bg-yellow-500/20 ring-2 ring-yellow-400"
+                          : darkMode
+                            ? "bg-white/5"
+                            : "bg-white"
+                          }`}
                       >
                         <p className="text-[10px] font-extrabold text-gray-405 uppercase">
                           Requests
@@ -10329,13 +10287,12 @@ export default function ClinicPanel({
                       {/* Registration Card */}
                       <div
                         onClick={() => setOpdFilter(opdFilter === "registration" ? "all" : "registration")}
-                        className={`p-4 rounded-2xl shadow-sm border border-gray-150 dark:border-white/5 cursor-pointer hover:shadow-md transition-all border-b-4 border-teal-500 ${
-                          opdFilter === "registration"
-                            ? "bg-teal-500/10 dark:bg-teal-500/20 ring-2 ring-teal-400"
-                            : darkMode
-                              ? "bg-white/5"
-                              : "bg-white"
-                        }`}
+                        className={`p-4 rounded-2xl shadow-sm border border-gray-150 dark:border-white/5 cursor-pointer hover:shadow-md transition-all border-b-4 border-teal-500 ${opdFilter === "registration"
+                          ? "bg-teal-500/10 dark:bg-teal-500/20 ring-2 ring-teal-400"
+                          : darkMode
+                            ? "bg-white/5"
+                            : "bg-white"
+                          }`}
                       >
                         <p className="text-[10px] font-extrabold text-gray-405 uppercase">
                           Registration
@@ -10348,13 +10305,12 @@ export default function ClinicPanel({
                       {/* Waiting Card */}
                       <div
                         onClick={() => setOpdFilter(opdFilter === "waiting" ? "all" : "waiting")}
-                        className={`p-4 rounded-2xl shadow-sm border border-gray-150 dark:border-white/5 cursor-pointer hover:shadow-md transition-all border-b-4 border-blue-500 ${
-                          opdFilter === "waiting"
-                            ? "bg-blue-500/10 dark:bg-blue-500/20 ring-2 ring-blue-400"
-                            : darkMode
-                              ? "bg-white/5"
-                              : "bg-white"
-                        }`}
+                        className={`p-4 rounded-2xl shadow-sm border border-gray-150 dark:border-white/5 cursor-pointer hover:shadow-md transition-all border-b-4 border-blue-500 ${opdFilter === "waiting"
+                          ? "bg-blue-500/10 dark:bg-blue-500/20 ring-2 ring-blue-400"
+                          : darkMode
+                            ? "bg-white/5"
+                            : "bg-white"
+                          }`}
                       >
                         <p className="text-[10px] font-extrabold text-gray-405 uppercase">
                           Waiting
@@ -10367,13 +10323,12 @@ export default function ClinicPanel({
                       {/* Consulting Card */}
                       <div
                         onClick={() => setOpdFilter(opdFilter === "consulting" ? "all" : "consulting")}
-                        className={`p-4 rounded-2xl shadow-sm border border-gray-150 dark:border-white/5 cursor-pointer hover:shadow-md transition-all border-b-4 border-orange-500 ${
-                          opdFilter === "consulting"
-                            ? "bg-orange-500/10 dark:bg-orange-500/20 ring-2 ring-orange-400"
-                            : darkMode
-                              ? "bg-white/5"
-                              : "bg-white"
-                        }`}
+                        className={`p-4 rounded-2xl shadow-sm border border-gray-150 dark:border-white/5 cursor-pointer hover:shadow-md transition-all border-b-4 border-orange-500 ${opdFilter === "consulting"
+                          ? "bg-orange-500/10 dark:bg-orange-500/20 ring-2 ring-orange-400"
+                          : darkMode
+                            ? "bg-white/5"
+                            : "bg-white"
+                          }`}
                       >
                         <p className="text-[10px] font-extrabold text-gray-405 uppercase">
                           Consulting
@@ -10386,13 +10341,12 @@ export default function ClinicPanel({
                       {/* Completed Card */}
                       <div
                         onClick={() => setOpdFilter(opdFilter === "completed" ? "all" : "completed")}
-                        className={`p-4 rounded-2xl shadow-sm border border-gray-150 dark:border-white/5 cursor-pointer hover:shadow-md transition-all border-b-4 border-green-500 ${
-                          opdFilter === "completed"
-                            ? "bg-green-500/10 dark:bg-green-500/20 ring-2 ring-green-400"
-                            : darkMode
-                              ? "bg-white/5"
-                              : "bg-white"
-                        }`}
+                        className={`p-4 rounded-2xl shadow-sm border border-gray-150 dark:border-white/5 cursor-pointer hover:shadow-md transition-all border-b-4 border-green-500 ${opdFilter === "completed"
+                          ? "bg-green-500/10 dark:bg-green-500/20 ring-2 ring-green-400"
+                          : darkMode
+                            ? "bg-white/5"
+                            : "bg-white"
+                          }`}
                       >
                         <p className="text-[10px] font-extrabold text-gray-405 uppercase">
                           Completed
@@ -10731,22 +10685,20 @@ export default function ClinicPanel({
                       <div className="flex flex-wrap gap-2 pb-2 border-b border-gray-150 dark:border-gray-800">
                         <button
                           onClick={() => setHistorySubTab("opd")}
-                          className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 ${
-                            historySubTab === "opd"
-                              ? "bg-[#005f73] text-white shadow-md shadow-teal-500/10"
-                              : "bg-gray-100 dark:bg-gray-805 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                          }`}
+                          className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 ${historySubTab === "opd"
+                            ? "bg-[#005f73] text-white shadow-md shadow-teal-500/10"
+                            : "bg-gray-100 dark:bg-gray-805 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                            }`}
                         >
                           <Users size={14} />
                           OPD Records
                         </button>
                         <button
                           onClick={() => setHistorySubTab("appointment")}
-                          className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 ${
-                            historySubTab === "appointment"
-                              ? "bg-[#005f73] text-white shadow-md shadow-teal-500/10"
-                              : "bg-gray-100 dark:bg-gray-805 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                          }`}
+                          className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 ${historySubTab === "appointment"
+                            ? "bg-[#005f73] text-white shadow-md shadow-teal-500/10"
+                            : "bg-gray-100 dark:bg-gray-805 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                            }`}
                         >
                           <Laptop size={14} />
                           Online Appointments
@@ -10884,10 +10836,10 @@ export default function ClinicPanel({
                       {historySubTab === "credit" && (() => {
                         const unpaidRecords = allCreditRecords.filter(
                           (c) =>
-                            (!opdHistorySearch ||
-                              c.patientName
-                                ?.toLowerCase()
-                                .includes(opdHistorySearch.toLowerCase())),
+                          (!opdHistorySearch ||
+                            c.patientName
+                              ?.toLowerCase()
+                              .includes(opdHistorySearch.toLowerCase())),
                         );
                         if (unpaidRecords.length === 0) {
                           return (
@@ -10989,14 +10941,14 @@ export default function ClinicPanel({
                               {
                                 (opdFilter === "all"
                                   ? [
-                                      ...appointments.filter((a) => a.status === "pending").map((a) => ({ ...a, status: "requested", isApt: true })),
-                                      ...opdQueue,
-                                    ]
+                                    ...appointments.filter((a) => a.status === "pending").map((a) => ({ ...a, status: "requested", isApt: true })),
+                                    ...opdQueue,
+                                  ]
                                   : opdFilter === "requested"
                                     ? [
-                                        ...appointments.filter((a) => a.status === "pending").map((a) => ({ ...a, status: "requested", isApt: true })),
-                                        ...opdQueue.filter((p) => p.status === "requested"),
-                                      ]
+                                      ...appointments.filter((a) => a.status === "pending").map((a) => ({ ...a, status: "requested", isApt: true })),
+                                      ...opdQueue.filter((p) => p.status === "requested"),
+                                    ]
                                     : opdQueue.filter((p) => p.status === opdFilter)
                                 ).length
                               } Active
@@ -11028,14 +10980,14 @@ export default function ClinicPanel({
                             {(() => {
                               const activeBase = opdFilter === "all"
                                 ? [
-                                    ...appointments.filter((a) => a.status === "pending").map((a) => ({ ...a, status: "requested", isApt: true })),
-                                    ...opdQueue,
-                                  ]
+                                  ...appointments.filter((a) => a.status === "pending").map((a) => ({ ...a, status: "requested", isApt: true })),
+                                  ...opdQueue,
+                                ]
                                 : opdFilter === "requested"
                                   ? [
-                                      ...appointments.filter((a) => a.status === "pending").map((a) => ({ ...a, status: "requested", isApt: true })),
-                                      ...opdQueue.filter((p) => p.status === "requested"),
-                                    ]
+                                    ...appointments.filter((a) => a.status === "pending").map((a) => ({ ...a, status: "requested", isApt: true })),
+                                    ...opdQueue.filter((p) => p.status === "requested"),
+                                  ]
                                   : opdQueue.filter((p) => p.status === opdFilter);
 
                               const displayed = activeBase.filter((p: any) => {
@@ -11085,26 +11037,24 @@ export default function ClinicPanel({
                                   <div
                                     key={`dir-${patient.id || idx}-${idx}`}
                                     onClick={() => setSelectedQueuePatientId(patient.id)}
-                                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2.5 ${
-                                      isSelected
-                                        ? "bg-teal-500/5 border-teal-500/30 shadow-xs ring-1 ring-teal-500"
-                                        : darkMode
-                                          ? "bg-white/5 border-white/5 hover:border-white/10"
-                                          : "bg-white border-gray-150 hover:bg-gray-50"
-                                    }`}
+                                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2.5 ${isSelected
+                                      ? "bg-teal-500/5 border-teal-500/30 shadow-xs ring-1 ring-teal-500"
+                                      : darkMode
+                                        ? "bg-white/5 border-white/5 hover:border-white/10"
+                                        : "bg-white border-gray-150 hover:bg-gray-50"
+                                      }`}
                                   >
                                     <div className="flex items-start justify-between gap-3 w-full">
                                       <div className="min-w-0 flex-1 flex gap-3 items-start">
                                         {/* TOKEN ROUND BADGE */}
-                                        <div className={`w-9 h-9 rounded-xl flex flex-col items-center justify-center shrink-0 font-bold ${
-                                          patient.status === "completed"
-                                            ? "bg-green-100 text-green-600"
-                                            : patient.status === "consulting"
-                                              ? "bg-orange-105 text-orange-600"
-                                              : patient.status === "requested"
-                                                ? "bg-amber-400 text-white animate-pulse"
-                                                : "bg-blue-105 text-blue-600"
-                                        }`}>
+                                        <div className={`w-9 h-9 rounded-xl flex flex-col items-center justify-center shrink-0 font-bold ${patient.status === "completed"
+                                          ? "bg-green-100 text-green-600"
+                                          : patient.status === "consulting"
+                                            ? "bg-orange-105 text-orange-600"
+                                            : patient.status === "requested"
+                                              ? "bg-amber-400 text-white animate-pulse"
+                                              : "bg-blue-105 text-blue-600"
+                                          }`}>
                                           <span className="text-[7px] tracking-wide uppercase leading-none opacity-60 font-black">Tkn</span>
                                           <span className="text-xs font-black mt-0.5">{patient.token || (patient.status === "requested" ? "?" : "-")}</span>
                                         </div>
@@ -11150,17 +11100,16 @@ export default function ClinicPanel({
 
                                       {/* STATUS BADGE RIGHT SIDE */}
                                       <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
-                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border uppercase ${
-                                          patient.status === "waiting"
-                                            ? "bg-blue-500/10 text-blue-500 border-blue-500/10"
-                                            : patient.status === "consulting"
-                                              ? "bg-orange-500/10 text-orange-500 border-orange-500/10 animate-pulse"
-                                              : patient.status === "requested"
-                                                ? "bg-amber-500/10 text-amber-500 border-amber-500/10"
-                                                : patient.status === "registration"
-                                                  ? "bg-teal-500/10 text-teal-500 border-teal-500/10"
-                                                  : "bg-green-500/10 text-green-500 border-green-500/10"
-                                        }`}>
+                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border uppercase ${patient.status === "waiting"
+                                          ? "bg-blue-500/10 text-blue-500 border-blue-500/10"
+                                          : patient.status === "consulting"
+                                            ? "bg-orange-500/10 text-orange-500 border-orange-500/10 animate-pulse"
+                                            : patient.status === "requested"
+                                              ? "bg-amber-500/10 text-amber-500 border-amber-500/10"
+                                              : patient.status === "registration"
+                                                ? "bg-teal-500/10 text-teal-500 border-teal-500/10"
+                                                : "bg-green-500/10 text-green-500 border-green-500/10"
+                                          }`}>
                                           {patient.status}
                                         </span>
                                       </div>
@@ -11168,8 +11117,8 @@ export default function ClinicPanel({
 
                                     {/* ONE-CLICK WORKFLOW CONTROLS */}
                                     {patient.status !== "completed" && (
-                                      <div 
-                                        className="flex flex-wrap items-center gap-1 mt-1 border-t pt-1.5 border-dashed border-gray-100 dark:border-white/5" 
+                                      <div
+                                        className="flex flex-wrap items-center gap-1 mt-1 border-t pt-1.5 border-dashed border-gray-100 dark:border-white/5"
                                         onClick={(e) => e.stopPropagation()}
                                       >
                                         <span className="text-[8px] font-black text-gray-400 uppercase mr-1">Direct Route:</span>
@@ -11282,9 +11231,42 @@ export default function ClinicPanel({
                             </div>
 
                             {/* DRUGS LIST RE-ALIGNED PREVIEW */}
-                                                   {/* OPERATIONS ROUTING PORT */}
+                            {/* OPERATIONS ROUTING PORT */}
                             <div className="pt-3 border-t border-gray-100 dark:border-white/5 space-y-3">
                               <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none">Workflow Router Control</p>
+
+                              {/* Universal Quick Actions */}
+                              <div className="flex flex-col gap-2 pb-3 border-b border-gray-100 dark:border-white/5">
+                                <div className="flex items-center gap-2">
+                                  <select
+                                    value={announcementLanguage}
+                                    onChange={(e) => setAnnouncementLanguage(e.target.value as any)}
+                                    className={`w-1/3 border-none rounded-xl px-2 py-2.5 text-[10px] font-bold outline-hidden focus:ring-2 focus:ring-[#005f73]/20 ${darkMode ? "bg-white/5 text-white" : "bg-gray-50 text-gray-900"}`}
+                                  >
+                                    <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="en">English (Voice)</option>
+                                    <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="hi">Hindi / हिंदी</option>
+                                    <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="mr">Marathi / मराठी</option>
+                                  </select>
+                                  <button
+                                    onClick={async () => {
+                                      if (activeQueuePatient.status === "waiting" || activeQueuePatient.status === "registration") {
+                                        await firebaseService.updateDocument("opd_queue", activeQueuePatient.id, { status: "called" });
+                                      }
+                                      announceSpeakToken(activeQueuePatient, announcementLanguage);
+                                    }}
+                                    className="w-2/3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
+                                  >
+                                    <Volume2 size={16} /> Call Patient
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={() => handleOpenConsultation(activeQueuePatient)}
+                                  className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
+                                >
+                                  <Stethoscope size={16} /> Consult the Patient
+                                </button>
+                              </div>
+
                               <div className="flex flex-col gap-2">
                                 {/* Routing for requested (online appointments pending clinic action) */}
                                 {activeQueuePatient.status === "requested" && (
@@ -11292,7 +11274,7 @@ export default function ClinicPanel({
                                     <button
                                       onClick={async () => {
                                         await firebaseService.updateDocument("opd_queue", activeQueuePatient.id, { status: "registration" });
-                                        setConfirmModal({ isOpen: true, title: "Approved & Routed", message: "Patient details routed to Offline Registration Fee Desk", type: "info", onConfirm: () => {} });
+                                        setConfirmModal({ isOpen: true, title: "Approved & Routed", message: "Patient details routed to Offline Registration Fee Desk", type: "info", onConfirm: () => { } });
                                       }}
                                       className="py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-[9px] font-black uppercase text-center transition-all hover:scale-[1.02]"
                                     >
@@ -11301,7 +11283,7 @@ export default function ClinicPanel({
                                     <button
                                       onClick={async () => {
                                         await firebaseService.updateDocument("opd_queue", activeQueuePatient.id, { status: "waiting" });
-                                        setConfirmModal({ isOpen: true, title: "Approved & Routed", message: "Patient directly routed to Active Waiting Room List", type: "info", onConfirm: () => {} });
+                                        setConfirmModal({ isOpen: true, title: "Approved & Routed", message: "Patient directly routed to Active Waiting Room List", type: "info", onConfirm: () => { } });
                                       }}
                                       className="py-2.5 bg-blue-500 hover:bg-blue-605 text-white rounded-xl text-[9px] font-black uppercase text-center transition-all hover:scale-[1.02]"
                                     >
@@ -11310,7 +11292,7 @@ export default function ClinicPanel({
                                     <button
                                       onClick={async () => {
                                         await firebaseService.updateDocument("opd_queue", activeQueuePatient.id, { status: "consulting" });
-                                        setConfirmModal({ isOpen: true, title: "Approved & Routed", message: "Patient queued directly for Doctor consultation", type: "info", onConfirm: () => {} });
+                                        setConfirmModal({ isOpen: true, title: "Approved & Routed", message: "Patient queued directly for Doctor consultation", type: "info", onConfirm: () => { } });
                                       }}
                                       className="py-2.5 bg-orange-500 hover:bg-orange-605 text-white rounded-xl text-[9px] font-black uppercase text-center transition-all hover:scale-[1.02]"
                                     >
@@ -11377,7 +11359,7 @@ export default function ClinicPanel({
                                           title: "Marked Centered Cancellation 🚫",
                                           message: `Marked ${activeQueuePatient.patientName} as Cancelled/No-Show.`,
                                           type: "info",
-                                          onConfirm: () => {},
+                                          onConfirm: () => { },
                                         });
                                       }}
                                       className="w-full py-2 bg-red-50 hover:bg-red-100 text-red-650 dark:bg-red-950/20 dark:text-red-400 font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all"
@@ -11430,7 +11412,7 @@ export default function ClinicPanel({
                                             setSavedPrescriptionData(rx);
                                             window.print();
                                           } else {
-                                            setConfirmModal({ isOpen: true, title: "No Rx Logs Found", message: "No stored prescription log found to reprint on this terminal.", type: "warning", onConfirm: () => {} });
+                                            setConfirmModal({ isOpen: true, title: "No Rx Logs Found", message: "No stored prescription log found to reprint on this terminal.", type: "warning", onConfirm: () => { } });
                                           }
                                         }}
                                         className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[9px] font-black uppercase tracking-wider text-center cursor-pointer"
@@ -11460,7 +11442,7 @@ export default function ClinicPanel({
                                             });
                                             setShowInvoicePreviewModal(true);
                                           } else {
-                                            setConfirmModal({ isOpen: true, title: "No Invoice", message: "No billing receipt record found for this patient.", type: "warning", onConfirm: () => {} });
+                                            setConfirmModal({ isOpen: true, title: "No Invoice", message: "No billing receipt record found for this patient.", type: "warning", onConfirm: () => { } });
                                           }
                                         }}
                                         className="py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl text-[9px] font-black uppercase tracking-wider text-center cursor-pointer"
@@ -11481,7 +11463,7 @@ export default function ClinicPanel({
                                         title: "Restored Queue Status 🏥",
                                         message: `Successfully re-queued ${activeQueuePatient.patientName} to Waiting List.`,
                                         type: "info",
-                                        onConfirm: () => {},
+                                        onConfirm: () => { },
                                       });
                                     }}
                                     className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 shadow-md transition-all active:scale-95 cursor-pointer"
@@ -11912,45 +11894,57 @@ export default function ClinicPanel({
                                 </div>
                               </td>
                               <td className="px-6 py-4">
-                                <span
-                                  className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                                    apt.status === "confirmed"
+                                <div className="flex gap-2 items-center">
+                                  <span
+                                    className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${apt.status === "confirmed"
                                       ? "bg-green-50 text-green-600 border-green-100"
                                       : apt.status === "cancelled"
                                         ? "bg-red-50 text-red-600 border-red-100"
                                         : "bg-yellow-50 text-yellow-600 border-yellow-100"
-                                  }`}
-                                >
-                                  {apt.status}
-                                </span>
+                                      }`}
+                                  >
+                                    {apt.status}
+                                  </span>
+                                  {apt.status === "pending" && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleApproveAsWaiting(apt);
+                                      }}
+                                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white shadow-sm rounded-full text-[9px] font-black uppercase tracking-widest transition-all active:scale-95"
+                                    >
+                                      Confirm
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-6 py-4 text-right">
                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
                                   {apt.createdAt
                                     ? apt.createdAt.seconds
                                       ? new Date(
-                                          apt.createdAt.seconds * 1000,
-                                        ).toLocaleDateString("en-GB")
+                                        apt.createdAt.seconds * 1000,
+                                      ).toLocaleDateString("en-GB")
                                       : new Date(
-                                          apt.createdAt,
-                                        ).toLocaleDateString("en-GB")
+                                        apt.createdAt,
+                                      ).toLocaleDateString("en-GB")
                                     : "N/A"}
                                 </p>
                                 <p className="text-[8px] font-bold text-gray-300">
                                   {apt.createdAt
                                     ? apt.createdAt.seconds
                                       ? new Date(
-                                          apt.createdAt.seconds * 1000,
-                                        ).toLocaleTimeString([], {
-                                          hour: "2-digit",
-                                          minute: "2-digit",
-                                        })
+                                        apt.createdAt.seconds * 1000,
+                                      ).toLocaleTimeString([], {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })
                                       : new Date(
-                                          apt.createdAt,
-                                        ).toLocaleTimeString([], {
-                                          hour: "2-digit",
-                                          minute: "2-digit",
-                                        })
+                                        apt.createdAt,
+                                      ).toLocaleTimeString([], {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })
                                     : ""}
                                 </p>
                               </td>
@@ -11977,59 +11971,59 @@ export default function ClinicPanel({
             )}
 
             {activeTab === "credit" && (
-               <motion.div
-                 key="credit"
-                 initial={{ opacity: 0, y: 20 }}
-                 animate={{ opacity: 1, y: 0 }}
-                 exit={{ opacity: 0, y: -20 }}
-                 className="space-y-6"
-               >
-                 <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-xs border border-gray-100 dark:border-gray-800">
-                   <div className="space-y-1">
-                     <h2 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-                       🏥 Clinic Financial Ledger & Dues Control
-                     </h2>
-                     <p className="text-xs text-gray-500 font-medium font-semibold">
-                       Manage billing history, track localized patient outstanding credits, generate custom invoices and recovery actions.
-                     </p>
-                   </div>
-                   
-                   <div className="flex bg-gray-100 dark:bg-gray-800 p-1.5 rounded-2xl space-x-1 overflow-x-auto max-w-full">
-                     <button
-                       onClick={() => setCreditView("dashboard")}
-                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${creditView === "dashboard" ? "bg-white dark:bg-gray-700 text-[#005f73] dark:text-blue-400 shadow-xs" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"}`}
-                     >
-                       📊 Control Dashboard
-                     </button>
-                     <button
-                       onClick={() => setCreditView("tracker")}
-                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${creditView === "tracker" ? "bg-white dark:bg-gray-700 text-[#005f73] dark:text-blue-400 shadow-xs" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"}`}
-                     >
-                       👥 Patient Balances
-                     </button>
-                     <button
-                       onClick={() => setCreditView("billing_history")}
-                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${creditView === "billing_history" ? "bg-white dark:bg-gray-700 text-[#005f73] dark:text-blue-400 shadow-xs" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"}`}
-                     >
-                       📜 Billings History
-                     </button>
-                     <button
-                       onClick={() => setCreditView("manual_billing")}
-                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${creditView === "manual_billing" ? "bg-white dark:bg-gray-700 text-[#005f73] dark:text-blue-400 shadow-xs" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"}`}
-                     >
-                       ✍️ Manual Bill Worksheet
-                     </button>
-                     <button
-                       onClick={() => setCreditView("report")}
-                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${creditView === "report" ? "bg-white dark:bg-gray-700 text-[#005f73] dark:text-blue-400 shadow-xs" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"}`}
-                     >
-                       💵 Receipts Log
-                     </button>
-                   </div>
-                 </div>
+              <motion.div
+                key="credit"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-6"
+              >
+                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-xs border border-gray-100 dark:border-gray-800">
+                  <div className="space-y-1">
+                    <h2 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                      🏥 Clinic Financial Ledger & Dues Control
+                    </h2>
+                    <p className="text-xs text-gray-500 font-medium font-semibold">
+                      Manage billing history, track localized patient outstanding credits, generate custom invoices and recovery actions.
+                    </p>
+                  </div>
 
-                 {/* Credit Stats */}
-                 {creditView === "tracker" ? (
+                  <div className="flex bg-gray-100 dark:bg-gray-800 p-1.5 rounded-2xl space-x-1 overflow-x-auto max-w-full">
+                    <button
+                      onClick={() => setCreditView("dashboard")}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${creditView === "dashboard" ? "bg-white dark:bg-gray-700 text-[#005f73] dark:text-blue-400 shadow-xs" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"}`}
+                    >
+                      📊 Control Dashboard
+                    </button>
+                    <button
+                      onClick={() => setCreditView("tracker")}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${creditView === "tracker" ? "bg-white dark:bg-gray-700 text-[#005f73] dark:text-blue-400 shadow-xs" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"}`}
+                    >
+                      👥 Patient Balances
+                    </button>
+                    <button
+                      onClick={() => setCreditView("billing_history")}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${creditView === "billing_history" ? "bg-white dark:bg-gray-700 text-[#005f73] dark:text-blue-400 shadow-xs" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"}`}
+                    >
+                      📜 Billings History
+                    </button>
+                    <button
+                      onClick={() => setCreditView("manual_billing")}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${creditView === "manual_billing" ? "bg-white dark:bg-gray-700 text-[#005f73] dark:text-blue-400 shadow-xs" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"}`}
+                    >
+                      ✍️ Manual Bill Worksheet
+                    </button>
+                    <button
+                      onClick={() => setCreditView("report")}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${creditView === "report" ? "bg-white dark:bg-gray-700 text-[#005f73] dark:text-blue-400 shadow-xs" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"}`}
+                    >
+                      💵 Receipts Log
+                    </button>
+                  </div>
+                </div>
+
+                {/* Credit Stats */}
+                {creditView === "tracker" ? (
                   <div className="grid grid-cols-2 gap-4">
                     <div
                       className={`${darkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-100"} p-5 rounded-3xl shadow-sm border-b-4 border-red-500 border`}
@@ -12105,8 +12099,8 @@ export default function ClinicPanel({
                       <div className="bg-slate-50 dark:bg-slate-900/40 p-5 rounded-3xl border border-gray-150 dark:border-white/5 shadow-xs">
                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Payments Collected</p>
                         <p className="text-2xl font-black text-green-600 mt-1">
-                          ₹{((billings || []).filter((b: any) => b.status === "paid").reduce((acc: number, curr: any) => acc + (curr.totalAmount || 0), 0) + 
-                             allPaymentHistory.reduce((acc, curr) => acc + (curr.paidAmount || 0), 0)).toLocaleString("en-IN")}
+                          ₹{((billings || []).filter((b: any) => b.status === "paid").reduce((acc: number, curr: any) => acc + (curr.totalAmount || 0), 0) +
+                            allPaymentHistory.reduce((acc, curr) => acc + (curr.paidAmount || 0), 0)).toLocaleString("en-IN")}
                         </p>
                         <span className="text-[8px] bg-green-150 text-green-700 px-2 py-0.5 rounded-md font-black uppercase tracking-wider inline-block mt-2">Fully Cleared</span>
                       </div>
@@ -12284,9 +12278,9 @@ export default function ClinicPanel({
                           <button
                             onClick={() => {
                               sendCreditReminder({
-                                  patientName: group.patientName,
-                                  patientPhone: group.patientPhone,
-                                  balance: group.totalBalance,
+                                patientName: group.patientName,
+                                patientPhone: group.patientPhone,
+                                balance: group.totalBalance,
                               });
                             }}
                             className="flex-1 py-3 bg-[#25D366]/10 text-[#25D366] rounded-xl font-bold text-xs hover:bg-[#25D366]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -12349,9 +12343,9 @@ export default function ClinicPanel({
                         className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-[#005f73]/25"
                         onChange={(e) => {
                           const val = e.target.value.toLowerCase();
-                          const matches = (billings || []).filter((b: any) => 
-                            (b.patientName || "").toLowerCase().includes(val) || 
-                            (b.patientPhone || "").includes(val) || 
+                          const matches = (billings || []).filter((b: any) =>
+                            (b.patientName || "").toLowerCase().includes(val) ||
+                            (b.patientPhone || "").includes(val) ||
                             (b.id || "").toLowerCase().includes(val)
                           );
                           (window as any)._filteredBillings = matches;
@@ -12391,13 +12385,13 @@ export default function ClinicPanel({
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                               {list.map((bill: any, bIdx: number) => {
-                                const displayDate = bill.createdAt?.seconds 
+                                const displayDate = bill.createdAt?.seconds
                                   ? new Date(bill.createdAt.seconds * 1000).toLocaleDateString("en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
                                   : bill.date || "N/A";
                                 return (
                                   <tr key={bill.id || bIdx} className="hover:bg-slate-50/50 dark:hover:bg-white/5">
                                     <td className="py-3.5 px-4 font-mono font-black text-[#005f73] dark:text-teal-400">
-                                      <div className="uppercase">INV-{bill.billingId || bill.id?.slice(0,6).toUpperCase()}</div>
+                                      <div className="uppercase">INV-{bill.billingId || bill.id?.slice(0, 6).toUpperCase()}</div>
                                       <div className="text-[9px] font-bold text-slate-400 font-sans mt-0.5">{displayDate}</div>
                                     </td>
                                     <td className="py-3.5 px-4">
@@ -12419,13 +12413,12 @@ export default function ClinicPanel({
                                     </td>
                                     <td className="py-3.5 px-4">
                                       <div className="flex flex-col gap-1 items-start">
-                                        <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase ${
-                                          bill.status === "paid" 
-                                            ? "bg-green-150 text-green-700" 
-                                            : bill.status === "unpaid" 
-                                              ? "bg-red-100 text-red-700 animate-pulse" 
-                                              : "bg-[#005f73]/15 text-[#005f73]"
-                                        }`}>
+                                        <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase ${bill.status === "paid"
+                                          ? "bg-green-150 text-green-700"
+                                          : bill.status === "unpaid"
+                                            ? "bg-red-100 text-red-700 animate-pulse"
+                                            : "bg-[#005f73]/15 text-[#005f73]"
+                                          }`}>
                                           {bill.status}
                                         </span>
                                         <span className="text-[8px] font-extrabold text-slate-500 uppercase">{bill.paymentMode || "Cash"} payment</span>
@@ -12795,14 +12788,10 @@ export default function ClinicPanel({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <HealthcareCRM
+                <MarketingOutreach
                   allPatients={allPatients}
                   selectedPatients={selectedPatients}
                   setSelectedPatients={setSelectedPatients}
-                  digitalCards={digitalCards}
-                  setDigitalCards={setDigitalCards}
-                  handleAddDigitalCard={handleAddDigitalCard}
-                  sendMarketingContent={sendMarketingContent}
                   handleBulkSendWhatsApp={handleBulkSendWhatsApp}
                   darkMode={darkMode}
                   user={user}
@@ -12858,31 +12847,28 @@ export default function ClinicPanel({
                 <div className="flex border-b border-gray-100 dark:border-white/5 gap-6">
                   <button
                     onClick={() => setFinanceSubTab("dashboard")}
-                    className={`pb-4 text-xs font-black uppercase tracking-wider transition-all relative ${
-                      financeSubTab === "dashboard"
-                        ? "text-[#005f73] dark:text-teal-400 border-b-2 border-[#005f73] dark:border-teal-400"
-                        : "text-gray-400 hover:text-gray-650"
-                    }`}
+                    className={`pb-4 text-xs font-black uppercase tracking-wider transition-all relative ${financeSubTab === "dashboard"
+                      ? "text-[#005f73] dark:text-teal-400 border-b-2 border-[#005f73] dark:border-teal-400"
+                      : "text-gray-400 hover:text-gray-650"
+                      }`}
                   >
                     Ledger Overview
                   </button>
                   <button
                     onClick={() => setFinanceSubTab("transactions")}
-                    className={`pb-4 text-xs font-black uppercase tracking-wider transition-all relative ${
-                      financeSubTab === "transactions"
-                        ? "text-[#005f73] dark:text-teal-400 border-b-2 border-[#005f73] dark:border-teal-400"
-                        : "text-gray-400 hover:text-gray-650"
-                    }`}
+                    className={`pb-4 text-xs font-black uppercase tracking-wider transition-all relative ${financeSubTab === "transactions"
+                      ? "text-[#005f73] dark:text-teal-400 border-b-2 border-[#005f73] dark:border-teal-400"
+                      : "text-gray-400 hover:text-gray-650"
+                      }`}
                   >
                     Transactions log
                   </button>
                   <button
                     onClick={() => setFinanceSubTab("credit_reminders")}
-                    className={`pb-4 text-xs font-black uppercase tracking-wider transition-all relative ${
-                      financeSubTab === "credit_reminders"
-                        ? "text-[#005f73] dark:text-teal-400 border-b-2 border-[#005f73] dark:border-teal-400"
-                        : "text-gray-400 hover:text-gray-650"
-                    }`}
+                    className={`pb-4 text-xs font-black uppercase tracking-wider transition-all relative ${financeSubTab === "credit_reminders"
+                      ? "text-[#005f73] dark:text-teal-400 border-b-2 border-[#005f73] dark:border-teal-400"
+                      : "text-gray-400 hover:text-gray-650"
+                      }`}
                   >
                     Outstanding & Reminders
                   </button>
@@ -13139,13 +13125,12 @@ export default function ClinicPanel({
                                   </td>
                                   <td className="px-6 py-4 font-bold text-gray-500">{txn.date}</td>
                                   <td className="px-6 py-4">
-                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
-                                      txn.type === "CREDIT_RECOVERY" || txn.type === "CREDIT_PAYOFF"
-                                        ? "bg-emerald-50 text-emerald-600 border border-emerald-500/10"
-                                        : txn.type === "OPD_BILL_EDIT"
-                                          ? "bg-amber-50 text-amber-600 border border-amber-500/10"
-                                          : "bg-teal-50 text-teal-600 border border-teal-500/10"
-                                    }`}>
+                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${txn.type === "CREDIT_RECOVERY" || txn.type === "CREDIT_PAYOFF"
+                                      ? "bg-emerald-50 text-emerald-600 border border-emerald-500/10"
+                                      : txn.type === "OPD_BILL_EDIT"
+                                        ? "bg-amber-50 text-amber-600 border border-amber-500/10"
+                                        : "bg-teal-50 text-teal-600 border border-teal-500/10"
+                                      }`}>
                                       {txn.type || "OPD"}
                                     </span>
                                   </td>
@@ -14098,11 +14083,11 @@ export default function ClinicPanel({
                   <div className="w-20 h-20 bg-green-100 dark:bg-green-500/20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 ring-4 ring-green-500/10">
                     <CheckCircle2 size={40} className="text-green-600" />
                   </div>
-                  
+
                   <h3 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter mb-2">
                     Patient Referred!
                   </h3>
-                  
+
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-6">
                     Referral Form Submitted Successfully
                   </p>
@@ -14123,7 +14108,7 @@ export default function ClinicPanel({
                     >
                       <MessageSquare size={22} className="fill-white" /> Send WhatsApp Msg
                     </button>
-                    
+
                     <button
                       onClick={() => setShowReferralSuccessModal(false)}
                       className={`w-full py-4 rounded-[2rem] font-black text-sm uppercase flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${darkMode ? "bg-white/5 text-gray-300 hover:bg-white/10" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
@@ -14149,9 +14134,8 @@ export default function ClinicPanel({
                   initial={{ scale: 0.95, opacity: 0, y: 30 }}
                   animate={{ scale: 1, opacity: 1, y: 0 }}
                   exit={{ scale: 0.95, opacity: 0, y: 30 }}
-                  className={`${
-                    darkMode ? "bg-[#0b141a] text-white border-white/5" : "bg-white text-slate-800 border-slate-200"
-                  } w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border flex flex-col max-h-[90vh]`}
+                  className={`${darkMode ? "bg-[#0b141a] text-white border-white/5" : "bg-white text-slate-800 border-slate-200"
+                    } w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border flex flex-col max-h-[90vh]`}
                 >
                   {/* WhatsApp Customizer Top Header */}
                   <div className="bg-[#075E54] dark:bg-[#1f2c34] p-5 text-white flex items-center justify-between shadow-md shrink-0">
@@ -14185,7 +14169,7 @@ export default function ClinicPanel({
 
                   {/* Body Scroller */}
                   <div className={`p-6 overflow-y-auto space-y-6 ${darkMode ? "bg-[#0b141a]" : "bg-slate-50"} flex-1`}>
-                    
+
                     {/* Header with Title and instructions */}
                     <div className="text-center space-y-1">
                       <span className="inline-block px-3 py-1 bg-teal-500/10 text-teal-400 text-[10px] font-black uppercase rounded-lg">
@@ -14212,7 +14196,7 @@ export default function ClinicPanel({
                         >
                           🔵 English Professional
                         </button>
-                        
+
                         <button
                           onClick={() => {
                             const descOPD = `🏥 *Carebridge+ Professional Smart OPD Queue* 🏥\n\nDear *${whatsAppModal.patientName || "Patient"}*,\nYour professional OPD registration has been completed successfully at *${user.name}*.\n\n⏱️ *Smart OPD Queue Insights:*\n• *Clinic Partner:* ${user.name}\n• *Assigned Token Number:* #${whatsAppModal.meta?.token || "1"}\n• *Active Live Token:* #${whatsAppModal.meta?.currentToken || "1"}\n• *Facility Location:* ${clinicDetails?.address || "our facility"}\n\nTo ensure comfortable and seamless consulting, please arrive 10 minutes prior to your turn.\n\nSincerely,\n*Clinical Operations Desk*`;
@@ -14250,9 +14234,8 @@ export default function ClinicPanel({
                       <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                         Live Message Content (What patient receives)
                       </span>
-                      <div className={`p-4 rounded-3xl border shadow-inner ${
-                        darkMode ? "bg-slate-950/60 border-white/5" : "bg-white border-slate-200"
-                      } space-y-3`}>
+                      <div className={`p-4 rounded-3xl border shadow-inner ${darkMode ? "bg-slate-950/60 border-white/5" : "bg-white border-slate-200"
+                        } space-y-3`}>
                         <div className="flex items-center gap-2 border-b border-slate-500/5 pb-2">
                           <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
                           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Editable WhatsApp Chat Bubble</span>
@@ -14276,9 +14259,8 @@ export default function ClinicPanel({
                   </div>
 
                   {/* Modal Footer Controls */}
-                  <div className={`p-6 border-t ${
-                    darkMode ? "bg-slate-900/40 border-white/5" : "bg-white border-slate-200"
-                  } space-y-3 shrink-0`}>
+                  <div className={`p-6 border-t ${darkMode ? "bg-slate-900/40 border-white/5" : "bg-white border-slate-200"
+                    } space-y-3 shrink-0`}>
                     <button
                       onClick={() => {
                         const encodedMessage = encodeURIComponent(whatsAppModal.message);
@@ -14297,9 +14279,8 @@ export default function ClinicPanel({
                     </button>
                     <button
                       onClick={() => setWhatsAppModal((prev: any) => ({ ...prev, isOpen: false }))}
-                      className={`w-full py-3.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition active:scale-95 ${
-                        darkMode ? "bg-white/5 text-slate-300 hover:bg-white/10" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                      }`}
+                      className={`w-full py-3.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition active:scale-95 ${darkMode ? "bg-white/5 text-slate-300 hover:bg-white/10" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                        }`}
                     >
                       Cancel Composition
                     </button>
@@ -14323,9 +14304,8 @@ export default function ClinicPanel({
                   initial={{ scale: 0.95, opacity: 0, y: 30 }}
                   animate={{ scale: 1, opacity: 1, y: 0 }}
                   exit={{ scale: 0.95, opacity: 0, y: 30 }}
-                  className={`${
-                    darkMode ? "bg-gray-900 border-white/10 text-white" : "bg-white border-slate-200 text-slate-800"
-                  } w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border flex flex-col`}
+                  className={`${darkMode ? "bg-gray-900 border-white/10 text-white" : "bg-white border-slate-200 text-slate-800"
+                    } w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border flex flex-col`}
                 >
                   <div className="bg-[#005f73] p-6 text-white text-center flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3 text-left">
@@ -14374,13 +14354,12 @@ export default function ClinicPanel({
 
                     <div className="space-y-3">
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Select Target Active Category</span>
-                      
+
                       {/* Option 1: Registration Fees Route */}
                       <button
                         onClick={() => handleApproveAsRegistration(approvalModal.appointment)}
-                        className={`w-full text-left p-4 rounded-2xl border flex items-start gap-4 transition-all hover:scale-[1.01] active:scale-[0.99] group shadow-xs ${
-                          darkMode ? "bg-teal-500/15 hover:bg-teal-500/20 border-teal-500/30" : "bg-teal-50 hover:bg-teal-100/70 border-teal-200"
-                        }`}
+                        className={`w-full text-left p-4 rounded-2xl border flex items-start gap-4 transition-all hover:scale-[1.01] active:scale-[0.99] group shadow-xs ${darkMode ? "bg-teal-500/15 hover:bg-teal-500/20 border-teal-500/30" : "bg-teal-50 hover:bg-teal-100/70 border-teal-200"
+                          }`}
                       >
                         <div className="h-10 w-10 shrink-0 rounded-xl bg-teal-500 text-white flex items-center justify-center font-bold shadow-md">
                           <Wallet size={20} />
@@ -14396,9 +14375,8 @@ export default function ClinicPanel({
                       {/* Option 2: Waiting Queue Route */}
                       <button
                         onClick={() => handleApproveAsWaiting(approvalModal.appointment)}
-                        className={`w-full text-left p-4 rounded-2xl border flex items-start gap-4 transition-all hover:scale-[1.01] active:scale-[0.99] group shadow-xs ${
-                          darkMode ? "bg-blue-500/15 hover:bg-blue-500/20 border-blue-500/30" : "bg-blue-50 hover:bg-blue-100/70 border-blue-200"
-                        }`}
+                        className={`w-full text-left p-4 rounded-2xl border flex items-start gap-4 transition-all hover:scale-[1.01] active:scale-[0.99] group shadow-xs ${darkMode ? "bg-blue-500/15 hover:bg-blue-500/20 border-blue-500/30" : "bg-blue-50 hover:bg-blue-100/70 border-blue-200"
+                          }`}
                       >
                         <div className="h-10 w-10 shrink-0 rounded-xl bg-blue-500 text-white flex items-center justify-center font-bold shadow-md">
                           <Clock size={20} />
@@ -14414,9 +14392,8 @@ export default function ClinicPanel({
                       {/* Option 3: Consultation Route */}
                       <button
                         onClick={() => handleApproveAsConsulting(approvalModal.appointment)}
-                        className={`w-full text-left p-4 rounded-2xl border flex items-start gap-4 transition-all hover:scale-[1.01] active:scale-[0.99] group shadow-xs ${
-                          darkMode ? "bg-orange-500/15 hover:bg-orange-500/20 border-orange-500/30" : "bg-orange-50 hover:bg-orange-100/70 border-orange-200"
-                        }`}
+                        className={`w-full text-left p-4 rounded-2xl border flex items-start gap-4 transition-all hover:scale-[1.01] active:scale-[0.99] group shadow-xs ${darkMode ? "bg-orange-500/15 hover:bg-orange-500/20 border-orange-500/30" : "bg-orange-50 hover:bg-orange-100/70 border-orange-200"
+                          }`}
                       >
                         <div className="h-10 w-10 shrink-0 rounded-xl bg-orange-500 text-white flex items-center justify-center font-bold shadow-md">
                           <Stethoscope size={20} />
@@ -14528,32 +14505,45 @@ export default function ClinicPanel({
                                     key={idx}
                                     type="button"
                                     onClick={() => {
+                                      const patientPhoneToMatch = p.patientPhone || p.phone;
+                                      const patientNameToMatch = p.patientName || p.name;
+
+                                      const pastVisits = allOpdRecords.filter((r: any) =>
+                                        (patientPhoneToMatch && (r.patientPhone === patientPhoneToMatch || r.phone === patientPhoneToMatch)) ||
+                                        (!patientPhoneToMatch && (r.patientName === patientNameToMatch || r.name === patientNameToMatch))
+                                      ).length;
+
+                                      let computedVisit = "1st Visit";
+                                      if (pastVisits === 1) computedVisit = "2nd Visit";
+                                      else if (pastVisits === 2) computedVisit = "3rd Visit";
+                                      else if (pastVisits >= 3) computedVisit = `${pastVisits + 1}th Visit`;
+
                                       setOpdForm({
                                         ...opdForm,
-                                        patientName: p.patientName || p.name,
+                                        patientName: patientNameToMatch,
                                         patientAge: p.patientAge || p.age,
-                                        patientPhone: p.patientPhone || p.phone,
+                                        patientPhone: patientPhoneToMatch,
                                         patientGender:
                                           p.patientGender || p.gender || "M",
                                         patientArea:
                                           p.patientArea || p.area || "",
+                                        priorityClass: opdForm.priorityClass || "Regular",
+                                        visitOption: computedVisit,
                                       });
                                       setSmartSuggestions([]);
-                                      setPatientSearchQuery(
-                                        p.patientName || p.name,
-                                      );
+                                      setPatientSearchQuery(patientNameToMatch);
                                     }}
                                     className={`w-full p-4 text-left transition-colors flex justify-between items-center ${darkMode ? "hover:bg-white/5 border-b border-white/5" : "hover:bg-gray-50 border-b border-gray-50"}`}
                                   >
                                     <div>
-                                      <p className="text-sm font-black text-gray-900 dark:text-white uppercase">
+                                      <p className={`text-base font-black uppercase tracking-wide ${darkMode ? "text-white drop-shadow-md" : "text-gray-900"}`}>
                                         {p.patientName || p.name}
                                       </p>
-                                      <p className="text-[10px] font-bold text-gray-400">
+                                      <p className={`text-[10px] font-bold mt-0.5 ${darkMode ? "text-gray-300" : "text-gray-500"}`}>
                                         {p.patientPhone || p.phone}
                                       </p>
                                     </div>
-                                    <span className="text-[10px] font-black text-[#005f73] uppercase">
+                                    <span className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-full ${darkMode ? "bg-white/10 text-white" : "bg-[#005f73]/10 text-[#005f73]"}`}>
                                       Select
                                     </span>
                                   </button>
@@ -14619,9 +14609,9 @@ export default function ClinicPanel({
                                 }
                                 className={`w-full border-none rounded-2xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73]/20 ${darkMode ? "bg-white/5 text-white" : "bg-gray-50 text-gray-900"}`}
                               >
-                                <option value="M">Male</option>
-                                <option value="F">Female</option>
-                                <option value="O">Other</option>
+                                <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="M">Male</option>
+                                <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="F">Female</option>
+                                <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="O">Other</option>
                               </select>
                             </div>
                           </div>
@@ -14660,7 +14650,7 @@ export default function ClinicPanel({
                               className={`w-full border-none rounded-2xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73]/20 ${darkMode ? "bg-white/5 text-white" : "bg-gray-50 text-gray-900"}`}
                             />
                           </div>
-                          <div className="space-y-1 md:col-span-2">
+                          <div className="space-y-1 md:col-span-1">
                             <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">
                               OPD Queue Priority Class
                             </label>
@@ -14674,11 +14664,36 @@ export default function ClinicPanel({
                               }
                               className={`w-full border-none rounded-2xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73]/20 ${darkMode ? "bg-white/5 text-white" : "bg-gray-50 text-gray-900 font-bold"}`}
                             >
-                              <option value="Regular">Regular Patient</option>
-                              <option value="Emergency">🚨 Emergency / Urgent Case</option>
-                              <option value="Senior Citizen">👵 Senior Citizen (60+)</option>
-                              <option value="Pregnant Women">🤰 Pregnant Woman</option>
-                              <option value="Follow-Up">🔄 Routine Follow-Up</option>
+                              <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="Regular">Regular Patient</option>
+                              <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="Emergency">🚨 Emergency / Urgent Case</option>
+                              <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="Senior Citizen">👵 Senior Citizen (60+)</option>
+                              <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="Pregnant Women">🤰 Pregnant Woman</option>
+                              <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="Follow-Up">🔄 Routine Follow-Up</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1 md:col-span-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">
+                              Visit Option
+                            </label>
+                            <select
+                              value={opdForm.visitOption || "1st Visit"}
+                              onChange={(e) =>
+                                setOpdForm({
+                                  ...opdForm,
+                                  visitOption: e.target.value,
+                                })
+                              }
+                              className={`w-full border-none rounded-2xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73]/20 ${darkMode ? "bg-white/5 text-white" : "bg-gray-50 text-gray-900 font-bold"}`}
+                            >
+                              <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="1st Visit">1st Visit</option>
+                              <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="2nd Visit">2nd Visit</option>
+                              <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="3rd Visit">3rd Visit</option>
+                              <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value="4th Visit">4th Visit</option>
+                              {opdForm.visitOption && !["1st Visit", "2nd Visit", "3rd Visit", "4th Visit"].includes(opdForm.visitOption) && (
+                                <option className={darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"} value={opdForm.visitOption}>
+                                  {opdForm.visitOption}
+                                </option>
+                              )}
                             </select>
                           </div>
                         </div>
@@ -14794,10 +14809,10 @@ export default function ClinicPanel({
 
                       <button
                         type="submit"
-                        disabled={isReferralSubmitting}
+                        disabled={isOpdSubmitting}
                         className="w-full bg-[#005f73] text-white font-[950] py-5 rounded-[2rem] shadow-2xl flex items-center justify-center gap-3 hover:bg-[#005f73]/90 transition-all active:scale-95 text-base"
                       >
-                        {isReferralSubmitting
+                        {isOpdSubmitting
                           ? "REGISTERING..."
                           : "REGISTER PATIENT"}{" "}
                         <CheckCircle2 size={24} />
@@ -14851,11 +14866,10 @@ export default function ClinicPanel({
                       {/* IPD Card */}
                       <motion.div
                         whileHover={{ scale: 1.02 }}
-                        className={`p-6 rounded-2xl border-2 flex flex-col justify-between cursor-pointer transition-all ${
-                          darkMode 
-                            ? "bg-gray-800/50 border-white/10 hover:border-[#005f73] hover:shadow-[0_0_15px_rgba(0,95,115,0.3)]" 
-                            : "bg-white border-gray-100 hover:border-[#005f73] hover:shadow-lg hover:shadow-teal-100"
-                        }`}
+                        className={`p-6 rounded-2xl border-2 flex flex-col justify-between cursor-pointer transition-all ${darkMode
+                          ? "bg-gray-800/50 border-white/10 hover:border-[#005f73] hover:shadow-[0_0_15px_rgba(0,95,115,0.3)]"
+                          : "bg-white border-gray-100 hover:border-[#005f73] hover:shadow-lg hover:shadow-teal-100"
+                          }`}
                         onClick={() => {
                           setReferralForm(prev => ({ ...prev, referralType: "ipd" }));
                           setShowReferralTypeModal(false);
@@ -14889,11 +14903,10 @@ export default function ClinicPanel({
                       {/* OPD Card */}
                       <motion.div
                         whileHover={{ scale: 1.02 }}
-                        className={`p-6 rounded-2xl border-2 flex flex-col justify-between cursor-pointer transition-all ${
-                          darkMode 
-                            ? "bg-gray-800/50 border-white/10 hover:border-[#0a9396] hover:shadow-[0_0_15px_rgba(10,147,150,0.3)]" 
-                            : "bg-white border-gray-100 hover:border-[#0a9396] hover:shadow-lg hover:shadow-cyan-100"
-                        }`}
+                        className={`p-6 rounded-2xl border-2 flex flex-col justify-between cursor-pointer transition-all ${darkMode
+                          ? "bg-gray-800/50 border-white/10 hover:border-[#0a9396] hover:shadow-[0_0_15px_rgba(10,147,150,0.3)]"
+                          : "bg-white border-gray-100 hover:border-[#0a9396] hover:shadow-lg hover:shadow-cyan-100"
+                          }`}
                         onClick={() => {
                           setShowReferralTypeModal(false);
                           setShowOPDReferralModal(true);
@@ -15194,17 +15207,16 @@ export default function ClinicPanel({
 
                           <div className="space-y-1 relative">
                             <label className="text-[10px] font-bold text-gray-400 uppercase">Select Target Consultant Doctor</label>
-                            
+
                             {/* Searchable Toggle Button */}
                             <div className="relative">
                               <button
                                 type="button"
                                 onClick={() => setShowOpdDoctorDropdown(!showOpdDoctorDropdown)}
-                                className={`w-full text-left rounded-xl px-4 py-3 text-sm font-bold flex items-center justify-between border transition-all ${
-                                  darkMode 
-                                    ? "bg-white/5 text-white border-white/10 hover:bg-white/10" 
-                                    : "bg-gray-50 border-gray-100 text-gray-900 hover:bg-gray-100/50"
-                                }`}
+                                className={`w-full text-left rounded-xl px-4 py-3 text-sm font-bold flex items-center justify-between border transition-all ${darkMode
+                                  ? "bg-white/5 text-white border-white/10 hover:bg-white/10"
+                                  : "bg-gray-50 border-gray-100 text-gray-900 hover:bg-gray-100/50"
+                                  }`}
                               >
                                 <span>
                                   {opdReferralForm.doctorId === "" && "Select Target Specialist"}
@@ -15219,11 +15231,10 @@ export default function ClinicPanel({
 
                             {/* Dropdown with Internal Filter Search Bar */}
                             {showOpdDoctorDropdown && (
-                              <div className={`absolute left-0 right-0 z-[120] mt-1 p-2 rounded-xl shadow-2xl border ${
-                                darkMode 
-                                  ? "bg-gray-800 border-gray-700 text-white shadow-black/40" 
-                                  : "bg-white border-gray-100 text-gray-950 shadow-gray-200"
-                              }`}>
+                              <div className={`absolute left-0 right-0 z-[120] mt-1 p-2 rounded-xl shadow-2xl border ${darkMode
+                                ? "bg-gray-800 border-gray-700 text-white shadow-black/40"
+                                : "bg-white border-gray-100 text-gray-950 shadow-gray-200"
+                                }`}>
                                 {/* Doctor Search Bar Input */}
                                 <div className="relative mb-2" onClick={(e) => e.stopPropagation()}>
                                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
@@ -15232,11 +15243,10 @@ export default function ClinicPanel({
                                     placeholder="Search doctor by name, qualification, department..."
                                     value={opdDoctorSearch}
                                     onChange={(e) => setOpdDoctorSearch(e.target.value)}
-                                    className={`w-full pl-9 pr-3 py-2 text-xs font-bold rounded-lg border outline-hidden focus:ring-1 focus:ring-[#0a9396] ${
-                                      darkMode 
-                                        ? "bg-gray-900 border-gray-700 text-white" 
-                                        : "bg-gray-50 border-gray-100 text-gray-900"
-                                    }`}
+                                    className={`w-full pl-9 pr-3 py-2 text-xs font-bold rounded-lg border outline-hidden focus:ring-1 focus:ring-[#0a9396] ${darkMode
+                                      ? "bg-gray-900 border-gray-700 text-white"
+                                      : "bg-gray-50 border-gray-100 text-gray-900"
+                                      }`}
                                     autoFocus
                                   />
                                 </div>
@@ -15255,13 +15265,12 @@ export default function ClinicPanel({
                                       setShowOpdDoctorDropdown(false);
                                       setOpdDoctorSearch("");
                                     }}
-                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex flex-col transition-all border ${
-                                      opdReferralForm.doctorId === "any"
-                                        ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400"
-                                        : darkMode
-                                          ? "hover:bg-white/5 border-transparent text-gray-200"
-                                          : "hover:bg-gray-50 border-transparent text-gray-750"
-                                    }`}
+                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex flex-col transition-all border ${opdReferralForm.doctorId === "any"
+                                      ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400"
+                                      : darkMode
+                                        ? "hover:bg-white/5 border-transparent text-gray-200"
+                                        : "hover:bg-gray-50 border-transparent text-gray-750"
+                                      }`}
                                   >
                                     <span className="font-extrabold text-xs">Any Available Consultant</span>
                                     <span className="text-[9px] text-gray-400 font-medium">Auto-route reference to any duty doctor</span>
@@ -15303,13 +15312,12 @@ export default function ClinicPanel({
                                             setShowOpdDoctorDropdown(false);
                                             setOpdDoctorSearch("");
                                           }}
-                                          className={`w-full text-left px-3 py-2 rounded-lg flex flex-col transition-all border ${
-                                            isSelected
-                                              ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400"
-                                              : darkMode
-                                                ? "hover:bg-white/5 border-transparent text-gray-100"
-                                                : "hover:bg-gray-50 border-transparent text-gray-800"
-                                          }`}
+                                          className={`w-full text-left px-3 py-2 rounded-lg flex flex-col transition-all border ${isSelected
+                                            ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400"
+                                            : darkMode
+                                              ? "hover:bg-white/5 border-transparent text-gray-100"
+                                              : "hover:bg-gray-50 border-transparent text-gray-800"
+                                            }`}
                                         >
                                           <div className="flex items-center justify-between w-full">
                                             <span className="font-extrabold text-xs">Dr. {doc.name}</span>
@@ -15372,11 +15380,10 @@ export default function ClinicPanel({
                         <button
                           type="button"
                           onClick={() => setShowOPDReferralModal(false)}
-                          className={`flex-1 font-bold py-3.5 rounded-xl border transition-all ${
-                            darkMode
-                              ? "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"
-                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                          }`}
+                          className={`flex-1 font-bold py-3.5 rounded-xl border transition-all ${darkMode
+                            ? "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"
+                            : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                            }`}
                         >
                           Cancel
                         </button>
@@ -15622,15 +15629,14 @@ export default function ClinicPanel({
                                   patientCondition: e.target.value,
                                 })
                               }
-                              className={`w-full border rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${
-                                referralForm.patientCondition === "Emergency"
-                                  ? darkMode
-                                    ? "bg-red-500/10 text-red-400 border-red-500/20"
-                                    : "bg-red-50 text-red-600 border-red-100"
-                                  : darkMode
-                                    ? "bg-green-500/10 text-green-400 border-green-500/20"
-                                    : "bg-green-50 text-green-600 border-green-100"
-                              }`}
+                              className={`w-full border rounded-xl px-4 py-3 text-sm font-bold outline-hidden focus:ring-2 focus:ring-[#005f73] ${referralForm.patientCondition === "Emergency"
+                                ? darkMode
+                                  ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                  : "bg-red-50 text-red-600 border-red-100"
+                                : darkMode
+                                  ? "bg-green-500/10 text-green-400 border-green-500/20"
+                                  : "bg-green-50 text-green-600 border-green-100"
+                                }`}
                             >
                               <option value="Stable">Stable</option>
                               <option value="Emergency Stable">
@@ -15667,8 +15673,8 @@ export default function ClinicPanel({
                               (Array.isArray(selectedHospital.departments)
                                 ? selectedHospital.departments
                                 : String(selectedHospital.departments).split(
-                                    ",",
-                                  )
+                                  ",",
+                                )
                               ).map((dept: any, idx: number) => {
                                 const d = String(dept).trim();
                                 if (!d) return null;
@@ -15916,13 +15922,12 @@ export default function ClinicPanel({
                         <div className="flex justify-between items-start">
                           <div>
                             <span
-                              className={`px-3 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm mb-2 w-fit ${
-                                hospData.tier === "premium"
-                                  ? "bg-linear-to-r from-[#005f73] to-[#023e8a] text-white"
-                                  : hospData.tier === "priority"
-                                    ? "bg-linear-to-r from-[#0a9396] to-[#0077b6] text-white"
-                                    : "bg-linear-to-r from-[#ee9b00] to-[#ca6702] text-white"
-                              }`}
+                              className={`px-3 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm mb-2 w-fit ${hospData.tier === "premium"
+                                ? "bg-linear-to-r from-[#005f73] to-[#023e8a] text-white"
+                                : hospData.tier === "priority"
+                                  ? "bg-linear-to-r from-[#0a9396] to-[#0077b6] text-white"
+                                  : "bg-linear-to-r from-[#ee9b00] to-[#ca6702] text-white"
+                                }`}
                             >
                               {hospData.tier === "premium" && (
                                 <Crown size={10} />
@@ -16120,25 +16125,25 @@ export default function ClinicPanel({
                           <div className="flex flex-wrap gap-2">
                             {Array.isArray(hospData.departments)
                               ? hospData.departments.map(
-                                  (d: string, idx: number) => (
-                                    <span
-                                      key={`${d}-${idx}`}
-                                      className={`${darkMode ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-50 text-blue-600 border-blue-100"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
-                                    >
-                                      {d}
-                                    </span>
-                                  ),
-                                )
+                                (d: string, idx: number) => (
+                                  <span
+                                    key={`${d}-${idx}`}
+                                    className={`${darkMode ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-50 text-blue-600 border-blue-100"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
+                                  >
+                                    {d}
+                                  </span>
+                                ),
+                              )
                               : String(hospData.departments || "General")
-                                  .split(",")
-                                  .map((d: string, idx: number) => (
-                                    <span
-                                      key={`${d}-${idx}`}
-                                      className={`${darkMode ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-50 text-blue-600 border-blue-100"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
-                                    >
-                                      {d.trim()}
-                                    </span>
-                                  ))}
+                                .split(",")
+                                .map((d: string, idx: number) => (
+                                  <span
+                                    key={`${d}-${idx}`}
+                                    className={`${darkMode ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-50 text-blue-600 border-blue-100"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
+                                  >
+                                    {d.trim()}
+                                  </span>
+                                ))}
                           </div>
                         </div>
 
@@ -16152,26 +16157,26 @@ export default function ClinicPanel({
                           <div className="flex flex-wrap gap-2">
                             {Array.isArray(hospData.schemes)
                               ? hospData.schemes.map(
-                                  (s: string, idx: number) => (
-                                    <span
-                                      key={`${s}-${idx}`}
-                                      className={`${darkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#e0f2f1] text-[#0a9396] border-[#b2dfdb]"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
-                                    >
-                                      {s}
-                                    </span>
-                                  ),
-                                )
+                                (s: string, idx: number) => (
+                                  <span
+                                    key={`${s}-${idx}`}
+                                    className={`${darkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#e0f2f1] text-[#0a9396] border-[#b2dfdb]"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
+                                  >
+                                    {s}
+                                  </span>
+                                ),
+                              )
                               : String(hospData.schemes || "")
-                                  .split(",")
-                                  .filter(Boolean)
-                                  .map((s: string, idx: number) => (
-                                    <span
-                                      key={`${s}-${idx}`}
-                                      className={`${darkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#e0f2f1] text-[#0a9396] border-[#b2dfdb]"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
-                                    >
-                                      {s.trim()}
-                                    </span>
-                                  ))}
+                                .split(",")
+                                .filter(Boolean)
+                                .map((s: string, idx: number) => (
+                                  <span
+                                    key={`${s}-${idx}`}
+                                    className={`${darkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#e0f2f1] text-[#0a9396] border-[#b2dfdb]"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}
+                                  >
+                                    {s.trim()}
+                                  </span>
+                                ))}
                           </div>
                         </div>
 
@@ -16179,83 +16184,33 @@ export default function ClinicPanel({
                           selectedHospitalDoctors.length > 0) ||
                           (hospData.specialists &&
                             hospData.specialists.length > 0)) && (
-                          <div
-                            className={`border-t ${darkMode ? "border-white/10" : "border-gray-100"} pt-6`}
-                          >
-                            <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
-                              <UserMd size={12} className="inline mr-1" />{" "}
-                              Doctors & Specialists
-                            </label>
-                            <div className="space-y-3 max-h-60 overflow-y-auto pr-2 no-scrollbar">
-                              {/* Show Specialists from hospital_details (profile array) */}
-                              {hospData.specialists?.map(
-                                (doc: any, index: number) => (
-                                  <div
-                                    key={`specialist-${index}`}
-                                    className={`${darkMode ? "bg-emerald-500/10 border-emerald-500/20" : "bg-emerald-50/30 border-emerald-100/50"} p-3 rounded-xl border`}
-                                  >
-                                    <div className="flex justify-between items-start">
-                                      <h6
-                                        className={`font-extrabold ${darkMode ? "text-white" : "text-gray-900"} text-xs`}
-                                      >
-                                        {doc.name}
-                                      </h6>
-                                      <span
-                                        className={`text-[8px] font-black ${darkMode ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700"} px-1.5 py-0.5 rounded uppercase`}
-                                      >
-                                        Profile
-                                      </span>
-                                    </div>
-                                    <p
-                                      className={`${darkMode ? "text-gray-400" : "text-gray-500"} text-[10px] font-bold uppercase`}
-                                    >
-                                      {doc.qualification}
-                                    </p>
-                                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                                      <p
-                                        className={`${darkMode ? "text-emerald-400" : "text-[#00796b]"} text-[10px] font-bold flex items-center gap-1`}
-                                      >
-                                        <Stethoscope size={10} />{" "}
-                                        {doc.department || "General"}
-                                      </p>
-                                      <p className="text-orange-400 text-[10px] font-bold flex items-center gap-1">
-                                        <Clock size={10} />{" "}
-                                        {doc.timing || "N/A"}
-                                      </p>
-                                      {doc.contact && (
-                                        <p className="text-blue-400 text-[10px] font-bold flex items-center gap-1">
-                                          <Phone size={10} /> {doc.contact}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-                                ),
-                              )}
-
-                              {/* Show Doctors from doctors collection */}
-                              {selectedHospitalDoctors.map(
-                                (doc: any, index: number) => {
-                                  // Avoid duplication if already in specialists
-                                  const isDuplicate =
-                                    hospData.specialists?.some(
-                                      (s: any) =>
-                                        s.name?.toLowerCase() ===
-                                          doc.name?.toLowerCase() &&
-                                        s.qualification?.toLowerCase() ===
-                                          doc.qualification?.toLowerCase(),
-                                    );
-                                  if (isDuplicate) return null;
-
-                                  return (
+                            <div
+                              className={`border-t ${darkMode ? "border-white/10" : "border-gray-100"} pt-6`}
+                            >
+                              <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                                <UserMd size={12} className="inline mr-1" />{" "}
+                                Doctors & Specialists
+                              </label>
+                              <div className="space-y-3 max-h-60 overflow-y-auto pr-2 no-scrollbar">
+                                {/* Show Specialists from hospital_details (profile array) */}
+                                {hospData.specialists?.map(
+                                  (doc: any, index: number) => (
                                     <div
-                                      key={`doctor-${doc.id}-${index}`}
-                                      className={`${darkMode ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-100"} p-3 rounded-xl border`}
+                                      key={`specialist-${index}`}
+                                      className={`${darkMode ? "bg-emerald-500/10 border-emerald-500/20" : "bg-emerald-50/30 border-emerald-100/50"} p-3 rounded-xl border`}
                                     >
-                                      <h6
-                                        className={`font-extrabold ${darkMode ? "text-white" : "text-gray-900"} text-xs`}
-                                      >
-                                        {doc.name}
-                                      </h6>
+                                      <div className="flex justify-between items-start">
+                                        <h6
+                                          className={`font-extrabold ${darkMode ? "text-white" : "text-gray-900"} text-xs`}
+                                        >
+                                          {doc.name}
+                                        </h6>
+                                        <span
+                                          className={`text-[8px] font-black ${darkMode ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700"} px-1.5 py-0.5 rounded uppercase`}
+                                        >
+                                          Profile
+                                        </span>
+                                      </div>
                                       <p
                                         className={`${darkMode ? "text-gray-400" : "text-gray-500"} text-[10px] font-bold uppercase`}
                                       >
@@ -16279,12 +16234,62 @@ export default function ClinicPanel({
                                         )}
                                       </div>
                                     </div>
-                                  );
-                                },
-                              )}
+                                  ),
+                                )}
+
+                                {/* Show Doctors from doctors collection */}
+                                {selectedHospitalDoctors.map(
+                                  (doc: any, index: number) => {
+                                    // Avoid duplication if already in specialists
+                                    const isDuplicate =
+                                      hospData.specialists?.some(
+                                        (s: any) =>
+                                          s.name?.toLowerCase() ===
+                                          doc.name?.toLowerCase() &&
+                                          s.qualification?.toLowerCase() ===
+                                          doc.qualification?.toLowerCase(),
+                                      );
+                                    if (isDuplicate) return null;
+
+                                    return (
+                                      <div
+                                        key={`doctor-${doc.id}-${index}`}
+                                        className={`${darkMode ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-100"} p-3 rounded-xl border`}
+                                      >
+                                        <h6
+                                          className={`font-extrabold ${darkMode ? "text-white" : "text-gray-900"} text-xs`}
+                                        >
+                                          {doc.name}
+                                        </h6>
+                                        <p
+                                          className={`${darkMode ? "text-gray-400" : "text-gray-500"} text-[10px] font-bold uppercase`}
+                                        >
+                                          {doc.qualification}
+                                        </p>
+                                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                                          <p
+                                            className={`${darkMode ? "text-emerald-400" : "text-[#00796b]"} text-[10px] font-bold flex items-center gap-1`}
+                                          >
+                                            <Stethoscope size={10} />{" "}
+                                            {doc.department || "General"}
+                                          </p>
+                                          <p className="text-orange-400 text-[10px] font-bold flex items-center gap-1">
+                                            <Clock size={10} />{" "}
+                                            {doc.timing || "N/A"}
+                                          </p>
+                                          {doc.contact && (
+                                            <p className="text-blue-400 text-[10px] font-bold flex items-center gap-1">
+                                              <Phone size={10} /> {doc.contact}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  },
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
                       </div>
 
                       <div
@@ -16292,11 +16297,10 @@ export default function ClinicPanel({
                       >
                         <button
                           onClick={() => setShowProfileModal(false)}
-                          className={`flex-1 font-bold py-3 rounded-xl flex items-center justify-center gap-2 border transition-all ${
-                            darkMode
-                              ? "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"
-                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                          }`}
+                          className={`flex-1 font-bold py-3 rounded-xl flex items-center justify-center gap-2 border transition-all ${darkMode
+                            ? "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"
+                            : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                            }`}
                         >
                           <ChevronLeft size={18} /> Back to List
                         </button>
@@ -16398,7 +16402,7 @@ export default function ClinicPanel({
                               <div className="bg-red-500/10 text-red-500 font-black px-3.5 py-1.5 rounded-full text-xs border border-red-500/10 leading-none col-span-1">
                                 Total Credit: ₹{debtor.totalCredit}
                               </div>
-                              
+
                               {/* Action Buttons: WhatsApp and Payment Recall */}
                               <div className="flex items-center gap-1.5 shrink-0 col-span-1">
                                 <button
@@ -16719,11 +16723,10 @@ export default function ClinicPanel({
                                   paidAmount: String(fee),
                                 })
                               }
-                              className={`flex-1 py-2 rounded-xl text-sm font-black border-2 transition-all ${
-                                paymentForm.totalAmount === String(fee)
-                                  ? "bg-[#005f73] text-white border-[#005f73]"
-                                  : `${darkMode ? "bg-white/5 text-gray-400 border-white/10 hover:border-white/20" : "bg-white text-gray-600 border-gray-100 hover:border-gray-200"}`
-                              }`}
+                              className={`flex-1 py-2 rounded-xl text-sm font-black border-2 transition-all ${paymentForm.totalAmount === String(fee)
+                                ? "bg-[#005f73] text-white border-[#005f73]"
+                                : `${darkMode ? "bg-white/5 text-gray-400 border-white/10 hover:border-white/20" : "bg-white text-gray-600 border-gray-100 hover:border-gray-200"}`
+                                }`}
                             >
                               ₹{fee}
                             </button>
@@ -16816,11 +16819,10 @@ export default function ClinicPanel({
                                   });
                                 }
                               }}
-                              className={`py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${
-                                paymentForm.paymentMode === mode
-                                  ? "bg-[#005f73] text-white border-[#005f73]"
-                                  : `${darkMode ? "bg-white/5 text-gray-400 border-white/10 hover:border-white/20" : "bg-white text-gray-600 border-gray-100 hover:border-gray-200"}`
-                              }`}
+                              className={`py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${paymentForm.paymentMode === mode
+                                ? "bg-[#005f73] text-white border-[#005f73]"
+                                : `${darkMode ? "bg-white/5 text-gray-400 border-white/10 hover:border-white/20" : "bg-white text-gray-600 border-gray-100 hover:border-gray-200"}`
+                                }`}
                             >
                               {mode}
                             </button>
@@ -16847,11 +16849,10 @@ export default function ClinicPanel({
                                   paymentMode: mode,
                                 })
                               }
-                              className={`py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${
-                                paymentForm.paymentMode === mode
-                                  ? "bg-[#005f73] text-white border-[#005f73]"
-                                  : `${darkMode ? "bg-white/5 text-gray-400 border-white/10 hover:border-white/20" : "bg-white text-gray-600 border-gray-100 hover:border-gray-200"}`
-                              }`}
+                              className={`py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${paymentForm.paymentMode === mode
+                                ? "bg-[#005f73] text-white border-[#005f73]"
+                                : `${darkMode ? "bg-white/5 text-gray-400 border-white/10 hover:border-white/20" : "bg-white text-gray-600 border-gray-100 hover:border-gray-200"}`
+                                }`}
                             >
                               {mode}
                             </button>
@@ -16871,40 +16872,39 @@ export default function ClinicPanel({
                           : "Balance (उधारी)"}
                       </span>
                       <span
-                        className={`text-xl font-black ${
-                          selectedCreditPatient?.isGrouped
-                            ? (groupedCreditRecords.find(
-                                (g) =>
-                                  g.patientPhone ===
-                                  selectedCreditPatient.patientPhone,
-                              )?.totalBalance || 0) -
-                                Number(paymentForm.paidAmount) >
-                              0
-                              ? "text-red-600"
-                              : "text-green-600"
-                            : Number(paymentForm.totalAmount) -
-                                  Number(paymentForm.paidAmount) >
-                                0
-                              ? "text-red-600"
-                              : "text-green-600"
-                        }`}
+                        className={`text-xl font-black ${selectedCreditPatient?.isGrouped
+                          ? (groupedCreditRecords.find(
+                            (g) =>
+                              g.patientPhone ===
+                              selectedCreditPatient.patientPhone,
+                          )?.totalBalance || 0) -
+                            Number(paymentForm.paidAmount) >
+                            0
+                            ? "text-red-600"
+                            : "text-green-600"
+                          : Number(paymentForm.totalAmount) -
+                            Number(paymentForm.paidAmount) >
+                            0
+                            ? "text-red-600"
+                            : "text-green-600"
+                          }`}
                       >
                         ₹
                         {selectedCreditPatient?.isGrouped
                           ? Math.max(
-                              0,
-                              (groupedCreditRecords.find(
-                                (g) =>
-                                  g.patientPhone ===
-                                  selectedCreditPatient.patientPhone,
-                              )?.totalBalance || 0) -
-                                Number(paymentForm.paidAmount),
-                            )
+                            0,
+                            (groupedCreditRecords.find(
+                              (g) =>
+                                g.patientPhone ===
+                                selectedCreditPatient.patientPhone,
+                            )?.totalBalance || 0) -
+                            Number(paymentForm.paidAmount),
+                          )
                           : Math.max(
-                              0,
-                              Number(paymentForm.totalAmount) -
-                                Number(paymentForm.paidAmount),
-                            )}
+                            0,
+                            Number(paymentForm.totalAmount) -
+                            Number(paymentForm.paidAmount),
+                          )}
                       </span>
                     </div>
 
@@ -16952,7 +16952,7 @@ export default function ClinicPanel({
                   onClick={() => setShowInvoicePreviewModal(false)}
                   className="absolute inset-0 bg-black/60 backdrop-blur-xs print:hidden"
                 />
-                
+
                 <motion.div
                   key="invoice-modal-content"
                   initial={{ scale: 0.95, opacity: 0 }}
@@ -17037,7 +17037,7 @@ export default function ClinicPanel({
                         <span className="text-gray-500">Subtotal Amount:</span>
                         <span>₹{invoiceToPrint.total}</span>
                       </div>
-                      
+
                       <div className="flex justify-between">
                         <span className="text-gray-500">Exempted / Discount Applied:</span>
                         <span className="text-green-500">-₹0</span>
@@ -17201,7 +17201,7 @@ export default function ClinicPanel({
                                         message:
                                           "Please select at least one patient from the list below to send this digital card.",
                                         type: "warning",
-                                        onConfirm: () => {},
+                                        onConfirm: () => { },
                                       });
                                       return;
                                     }
@@ -17511,11 +17511,10 @@ export default function ClinicPanel({
                                 useBp: !marketingTarget.useBp,
                               })
                             }
-                            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${
-                              marketingTarget.useBp
-                                ? "bg-red-500 text-white border-red-500"
-                                : "bg-white text-gray-500 border-gray-100"
-                            }`}
+                            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${marketingTarget.useBp
+                              ? "bg-red-500 text-white border-red-500"
+                              : "bg-white text-gray-500 border-gray-100"
+                              }`}
                           >
                             <Activity size={14} /> BP Patients
                           </button>
@@ -17527,11 +17526,10 @@ export default function ClinicPanel({
                                 useSugar: !marketingTarget.useSugar,
                               })
                             }
-                            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${
-                              marketingTarget.useSugar
-                                ? "bg-orange-500 text-white border-orange-500"
-                                : "bg-white text-gray-500 border-gray-100"
-                            }`}
+                            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${marketingTarget.useSugar
+                              ? "bg-orange-500 text-white border-orange-500"
+                              : "bg-white text-gray-500 border-gray-100"
+                              }`}
                           >
                             <Pill size={14} /> Sugar Patients
                           </button>
@@ -17592,11 +17590,10 @@ export default function ClinicPanel({
                         {targetedPatients.map((patient, index) => (
                           <label
                             key={`${patient.phone}-${index}`}
-                            className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
-                              selectedPatients.includes(patient.phone)
-                                ? "bg-blue-50 border-blue-200"
-                                : "bg-white border-gray-100 hover:border-gray-200"
-                            }`}
+                            className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${selectedPatients.includes(patient.phone)
+                              ? "bg-blue-50 border-blue-200"
+                              : "bg-white border-gray-100 hover:border-gray-200"
+                              }`}
                           >
                             <div className="flex items-center gap-3">
                               <input
@@ -17787,7 +17784,7 @@ export default function ClinicPanel({
                                         message:
                                           "Please select at least one patient from the list below to send this health tip.",
                                         type: "warning",
-                                        onConfirm: () => {},
+                                        onConfirm: () => { },
                                       });
                                       return;
                                     }
@@ -17970,11 +17967,10 @@ export default function ClinicPanel({
                                 useBp: !marketingTarget.useBp,
                               })
                             }
-                            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${
-                              marketingTarget.useBp
-                                ? "bg-red-500 text-white border-red-500"
-                                : "bg-white text-gray-500 border-gray-100"
-                            }`}
+                            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${marketingTarget.useBp
+                              ? "bg-red-500 text-white border-red-500"
+                              : "bg-white text-gray-500 border-gray-100"
+                              }`}
                           >
                             <Activity size={14} /> BP Patients
                           </button>
@@ -17986,11 +17982,10 @@ export default function ClinicPanel({
                                 useSugar: !marketingTarget.useSugar,
                               })
                             }
-                            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${
-                              marketingTarget.useSugar
-                                ? "bg-orange-500 text-white border-orange-500"
-                                : "bg-white text-gray-500 border-gray-100"
-                            }`}
+                            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${marketingTarget.useSugar
+                              ? "bg-orange-500 text-white border-orange-500"
+                              : "bg-white text-gray-500 border-gray-100"
+                              }`}
                           >
                             <Pill size={14} /> Sugar Patients
                           </button>
@@ -18051,11 +18046,10 @@ export default function ClinicPanel({
                         {targetedPatients.map((patient, index) => (
                           <label
                             key={`${patient.phone}-${index}`}
-                            className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
-                              selectedPatients.includes(patient.phone)
-                                ? "bg-emerald-50 border-emerald-200"
-                                : "bg-white border-gray-100 hover:border-gray-200"
-                            }`}
+                            className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${selectedPatients.includes(patient.phone)
+                              ? "bg-emerald-50 border-emerald-200"
+                              : "bg-white border-gray-100 hover:border-gray-200"
+                              }`}
                           >
                             <div className="flex items-center gap-3">
                               <input
@@ -18214,11 +18208,10 @@ export default function ClinicPanel({
                                 useBp: !marketingTarget.useBp,
                               })
                             }
-                            className={`py-2.5 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${
-                              marketingTarget.useBp
-                                ? "bg-red-500 text-white border-red-500 shadow-md"
-                                : "bg-white text-gray-500 border-gray-100"
-                            }`}
+                            className={`py-2.5 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${marketingTarget.useBp
+                              ? "bg-red-500 text-white border-red-500 shadow-md"
+                              : "bg-white text-gray-500 border-gray-100"
+                              }`}
                           >
                             <Activity size={14} /> BP Targeted
                           </button>
@@ -18230,11 +18223,10 @@ export default function ClinicPanel({
                                 useSugar: !marketingTarget.useSugar,
                               })
                             }
-                            className={`py-2.5 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${
-                              marketingTarget.useSugar
-                                ? "bg-orange-500 text-white border-orange-500 shadow-md"
-                                : "bg-white text-gray-500 border-gray-100"
-                            }`}
+                            className={`py-2.5 px-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border-2 transition-all ${marketingTarget.useSugar
+                              ? "bg-orange-500 text-white border-orange-500 shadow-md"
+                              : "bg-white text-gray-500 border-gray-100"
+                              }`}
                           >
                             <Pill size={14} /> Sugar Targeted
                           </button>
@@ -18326,7 +18318,7 @@ export default function ClinicPanel({
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0.9, opacity: 0 }}
-                  className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]"
+                  className={`w-full max-w-2xl rounded-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh] ${darkMode ? "bg-slate-900 border border-white/10" : "bg-white"}`}
                 >
                   <div className="bg-green-600 p-6 text-white flex justify-between items-center">
                     <div>
@@ -18348,35 +18340,35 @@ export default function ClinicPanel({
                   <div className="p-6 overflow-y-auto no-scrollbar space-y-6">
                     {/* Summary Stats */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="bg-gray-50 p-4 rounded-2xl">
+                      <div className={`p-4 rounded-2xl ${darkMode ? "bg-white/5 border border-white/10" : "bg-gray-50"}`}>
                         <p className="text-[10px] font-extrabold text-gray-400 uppercase">
                           Total Patients
                         </p>
-                        <p className="text-xl font-black text-gray-900">
+                        <p className={`text-xl font-black ${darkMode ? "text-white" : "text-gray-900"}`}>
                           {todayFinance.patientCount}
                         </p>
                       </div>
-                      <div className="bg-gray-50 p-4 rounded-2xl">
+                      <div className={`p-4 rounded-2xl ${darkMode ? "bg-white/5 border border-white/10" : "bg-gray-50"}`}>
                         <p className="text-[10px] font-extrabold text-gray-400 uppercase">
                           Cash
                         </p>
-                        <p className="text-xl font-black text-green-600">
+                        <p className={`text-xl font-black ${darkMode ? "text-green-400" : "text-green-600"}`}>
                           ₹{todayFinance.cash}
                         </p>
                       </div>
-                      <div className="bg-gray-50 p-4 rounded-2xl">
+                      <div className={`p-4 rounded-2xl ${darkMode ? "bg-white/5 border border-white/10" : "bg-gray-50"}`}>
                         <p className="text-[10px] font-extrabold text-gray-400 uppercase">
                           PhonePe
                         </p>
-                        <p className="text-xl font-black text-purple-600">
+                        <p className={`text-xl font-black ${darkMode ? "text-purple-400" : "text-purple-600"}`}>
                           ₹{todayFinance.phonePe}
                         </p>
                       </div>
-                      <div className="bg-gray-50 p-4 rounded-2xl">
+                      <div className={`p-4 rounded-2xl ${darkMode ? "bg-white/5 border border-white/10" : "bg-gray-50"}`}>
                         <p className="text-[10px] font-extrabold text-gray-400 uppercase">
                           Credit
                         </p>
-                        <p className="text-xl font-black text-red-600">
+                        <p className={`text-xl font-black ${darkMode ? "text-red-400" : "text-red-600"}`}>
                           ₹{todayFinance.credit}
                         </p>
                       </div>
@@ -18387,10 +18379,10 @@ export default function ClinicPanel({
                       <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
                         Patient Details
                       </h4>
-                      <div className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
+                      <div className={`rounded-2xl overflow-hidden border ${darkMode ? "bg-slate-800/50 border-white/10" : "bg-gray-50 border-gray-100"}`}>
                         <table className="w-full text-left">
                           <thead>
-                            <tr className="bg-gray-100/50">
+                            <tr className={darkMode ? "bg-white/5" : "bg-gray-100/50"}>
                               <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase">
                                 Patient Name
                               </th>
@@ -18402,11 +18394,11 @@ export default function ClinicPanel({
                               </th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-100">
+                          <tbody className={`divide-y ${darkMode ? "divide-white/10" : "divide-gray-100"}`}>
                             {todayTransactions.map((item, idx) => {
                               return (
                                 <tr key={idx}>
-                                  <td className="px-4 py-3 text-xs font-bold text-gray-900">
+                                  <td className={`px-4 py-3 text-xs font-bold ${darkMode ? "text-white" : "text-gray-900"}`}>
                                     {item.name}
                                     <span className="ml-2 text-[8px] text-gray-400 uppercase tracking-tighter">
                                       {item.type}
@@ -18440,19 +18432,18 @@ export default function ClinicPanel({
                                       </div>
                                     ) : (
                                       <span
-                                        className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
-                                          item.mode === "cash"
-                                            ? "bg-green-100 text-green-600"
-                                            : item.mode === "phonepe"
-                                              ? "bg-purple-100 text-purple-600"
-                                              : "bg-red-100 text-red-600"
-                                        }`}
+                                        className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${item.mode === "cash"
+                                          ? "bg-green-100 text-green-600"
+                                          : item.mode === "phonepe"
+                                            ? "bg-purple-100 text-purple-600"
+                                            : "bg-red-100 text-red-600"
+                                          }`}
                                       >
                                         {item.mode}
                                       </span>
                                     )}
                                   </td>
-                                  <td className="px-4 py-3 text-xs font-black text-gray-900 text-right">
+                                  <td className={`px-4 py-3 text-xs font-black text-right ${darkMode ? "text-white" : "text-gray-900"}`}>
                                     ₹{item.amount || 0}
                                   </td>
                                 </tr>
@@ -18484,10 +18475,10 @@ export default function ClinicPanel({
                     </div>
                   </div>
 
-                  <div className="p-6 bg-gray-50 dark:bg-gray-800 border-t border-gray-100 dark:border-white/5 flex gap-3">
+                  <div className={`p-6 border-t flex gap-3 ${darkMode ? "bg-slate-900 border-white/10" : "bg-gray-50 border-gray-100"}`}>
                     <button
                       onClick={() => setShowEndDayModal(false)}
-                      className="flex-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-white font-bold py-4 rounded-2xl shadow-sm"
+                      className={`flex-1 font-bold py-4 rounded-2xl shadow-sm border transition-all ${darkMode ? "bg-slate-800 border-white/10 text-white hover:bg-slate-700" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-100"}`}
                     >
                       Cancel
                     </button>
@@ -18565,6 +18556,7 @@ export default function ClinicPanel({
                     { id: "medicine", icon: Pill, label: "Medicine" },
                     { id: "investigations", icon: FileSearch, label: "Tests" },
                     { id: "advice", icon: Info, label: "Advice" },
+                    { id: "followup", icon: CalendarDays, label: "Follow Up" },
                     { id: "preview", icon: Eye, label: "Preview" },
                   ].map((item) => (
                     <button
@@ -18607,6 +18599,7 @@ export default function ClinicPanel({
                     { id: "medicine", icon: Pill, label: "Medicine" },
                     { id: "investigations", icon: FileSearch, label: "Tests" },
                     { id: "advice", icon: Info, label: "Advice" },
+                    { id: "followup", icon: CalendarDays, label: "Follow Up" },
                   ].map((item) => (
                     <button
                       key={item.id}
@@ -18656,11 +18649,10 @@ export default function ClinicPanel({
                         onClick={() =>
                           setIsAiAssistantEnabled(!isAiAssistantEnabled)
                         }
-                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm cursor-pointer ${
-                          isAiAssistantEnabled
-                            ? "bg-green-100 text-green-600 border border-green-200"
-                            : "bg-gray-100 text-gray-400 border border-gray-200"
-                        }`}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm cursor-pointer ${isAiAssistantEnabled
+                          ? "bg-green-100 text-green-600 border border-green-200"
+                          : "bg-gray-100 text-gray-400 border border-gray-200"
+                          }`}
                       >
                         <Zap
                           size={14}
@@ -18675,11 +18667,10 @@ export default function ClinicPanel({
                           type="button"
                           onClick={() => handleFetchAISuggestions()}
                           disabled={aiLoading}
-                          className={`text-[9px] font-black px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm cursor-pointer ${
-                            aiLoading
-                              ? "bg-gray-100 text-gray-400"
-                              : "bg-purple-100 text-purple-600 hover:scale-105 active:scale-95"
-                          }`}
+                          className={`text-[9px] font-black px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-sm cursor-pointer ${aiLoading
+                            ? "bg-gray-100 text-gray-400"
+                            : "bg-purple-100 text-purple-600 hover:scale-105 active:scale-95"
+                            }`}
                         >
                           <Sparkles
                             size={13}
@@ -18698,7 +18689,7 @@ export default function ClinicPanel({
                     </div>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8 no-scrollbar scroll-smooth pb-32">
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8 no-scrollbar scroll-smooth">
                     {/* Hospital-Grade Persistent EMR Patient History & Alerts Card */}
                     <div className="bg-slate-50 dark:bg-slate-900/60 p-4.5 rounded-3xl border border-gray-150 dark:border-white/5 space-y-3 shadow-xs">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -18839,11 +18830,10 @@ export default function ClinicPanel({
                                     chronicConditions: next
                                   }));
                                 }}
-                                className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase transition-all border cursor-pointer active:scale-95 ${
-                                  isToggled
-                                    ? "bg-[#005f73] text-white border-[#005f73] shadow-xs"
-                                    : cond.color
-                                }`}
+                                className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase transition-all border cursor-pointer active:scale-95 ${isToggled
+                                  ? "bg-[#005f73] text-white border-[#005f73] shadow-xs"
+                                  : cond.color
+                                  }`}
                               >
                                 {isToggled ? `✓ ${cond.name}` : `+ ${cond.name}`}
                               </button>
@@ -18862,6 +18852,7 @@ export default function ClinicPanel({
                         { id: "medicines", icon: Pill, label: "Medicine" },
                         { id: "investigations", icon: FileSearch, label: "Tests" },
                         { id: "advice", icon: Info, label: "Advice" },
+                        { id: "followup", icon: CalendarDays, label: "Follow Up" },
                         { id: "timeline", icon: History, label: "EMR Timeline" },
                       ].map((sec) => {
                         const isTabActive = consultationSubTab === sec.id;
@@ -18871,27 +18862,27 @@ export default function ClinicPanel({
                             key={sec.id}
                             onClick={() => {
                               setConsultationSubTab(sec.id as any);
+                              setSmartSearchQuery("");
                               if (sec.id !== "timeline" && sec.id !== "vitals") {
-                                setActiveSearchType(sec.id === "medicines" ? "medicine" : sec.id as any);
+                                const typeMap: any = { complaints: "complaint", investigations: "investigation", medicines: "medicine" };
+                                setActiveSearchType(typeMap[sec.id] || sec.id as any);
                               }
                             }}
                             className="shrink-0 flex flex-col items-center gap-1 group cursor-pointer"
                           >
                             <div
-                              className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all border shadow-xs ${
-                                isTabActive
-                                  ? "bg-[#005f73] text-white border-[#005f73]"
-                                  : "bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-white/5 hover:bg-[#005f73]/10 hover:text-[#005f73] hover:border-[#005f73]/20"
-                              }`}
+                              className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all border shadow-xs ${isTabActive
+                                ? "bg-[#005f73] text-white border-[#005f73]"
+                                : "bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-white/5 hover:bg-[#005f73]/10 hover:text-[#005f73] hover:border-[#005f73]/20"
+                                }`}
                             >
                               <sec.icon size={18} />
                             </div>
                             <span
-                              className={`text-[8px] font-black uppercase tracking-tighter whitespace-nowrap transition-colors ${
-                                isTabActive
-                                  ? "text-[#005f73] dark:text-teal-400 font-extrabold"
-                                  : "text-slate-400 group-hover:text-[#005f73]"
-                              }`}
+                              className={`text-[8px] font-black uppercase tracking-tighter whitespace-nowrap transition-colors ${isTabActive
+                                ? "text-[#005f73] dark:text-teal-400 font-extrabold"
+                                : "text-slate-400 group-hover:text-[#005f73]"
+                                }`}
                             >
                               {sec.label}
                             </span>
@@ -19002,7 +18993,7 @@ export default function ClinicPanel({
                                     }
                                   }}
                                   className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-white/5 outline-none text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f73]/20 transition-all shadow-inner"
-                                  value={activeSearchType === sec.type ? smartSearchQuery : ""}
+                                  value={smartSearchQuery}
                                 />
                               </div>
                               <button
@@ -19025,11 +19016,10 @@ export default function ClinicPanel({
                                   }
                                 }}
                                 disabled={!smartSearchQuery.trim()}
-                                className={`px-4 rounded-xl font-black text-white transition-all flex items-center justify-center gap-2 shrink-0 shadow-sm cursor-pointer ${
-                                  smartSearchQuery.trim()
-                                    ? "bg-[#005f73] hover:scale-105"
-                                    : "bg-gray-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
-                                }`}
+                                className={`px-4 rounded-xl font-black text-white transition-all flex items-center justify-center gap-2 shrink-0 shadow-sm cursor-pointer ${smartSearchQuery.trim()
+                                  ? "bg-[#005f73] hover:scale-105"
+                                  : "bg-gray-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
+                                  }`}
                               >
                                 <PlusCircle size={16} />
                                 <span className="text-[10px] uppercase">ADD</span>
@@ -19067,8 +19057,8 @@ export default function ClinicPanel({
                               </div>
                             )}
 
-                            {/* AI smart suggestions chip board */}
-                            {!aiLoading && (aiRecommendations as any)[sec.id]?.length > 0 && (
+                            {/* AI smart suggestions chip board (Disabled for complaints section) */}
+                            {sec.id !== "complaints" && !aiLoading && (aiRecommendations as any)[sec.id]?.length > 0 && (
                               <div className="bg-purple-50/40 dark:bg-purple-900/10 p-3.5 rounded-2xl border border-purple-100 dark:border-purple-500/10 space-y-2.5">
                                 <div className="flex items-center justify-between">
                                   <p className="text-[8px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest flex items-center gap-1 mb-1 leading-none">
@@ -19103,7 +19093,7 @@ export default function ClinicPanel({
                               </div>
                             )}
 
-                            {aiLoading && (
+                            {sec.id !== "complaints" && aiLoading && (
                               <div className="flex items-center gap-2 p-1.5">
                                 <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" />
                                 <span className="text-[8px] font-black text-purple-400 uppercase tracking-widest animate-pulse">Consulting AI Knowledge Base...</span>
@@ -19136,7 +19126,7 @@ export default function ClinicPanel({
 
                             {/* Standard General Advice tab embeds follow-up days planner */}
                             {consultationSubTab === "advice" && (
-                              <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
+                              <div id="section-followup" className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
                                 <div className="flex items-center gap-2 text-rose-500">
                                   <CalendarDays size={18} />
                                   <h4 className="text-xs font-black uppercase tracking-widest">Next Follow-up Timeline</h4>
@@ -19196,7 +19186,7 @@ export default function ClinicPanel({
                                   }
                                 }}
                                 className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-white/5 outline-none text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f73]/20 transition-all shadow-inner"
-                                value={activeSearchType === "medicine" ? smartSearchQuery : ""}
+                                value={smartSearchQuery}
                               />
                             </div>
                             <button
@@ -19207,11 +19197,10 @@ export default function ClinicPanel({
                                 }
                               }}
                               disabled={!smartSearchQuery.trim()}
-                              className={`px-4 rounded-xl font-black text-white transition-all flex items-center justify-center gap-2 shrink-0 shadow-sm cursor-pointer ${
-                                smartSearchQuery.trim()
-                                  ? "bg-[#005f73] hover:scale-105"
-                                  : "bg-gray-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
-                              }`}
+                              className={`px-4 rounded-xl font-black text-white transition-all flex items-center justify-center gap-2 shrink-0 shadow-sm cursor-pointer ${smartSearchQuery.trim()
+                                ? "bg-[#005f73] hover:scale-105"
+                                : "bg-gray-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
+                                }`}
                             >
                               <PlusCircle size={16} />
                               <span className="text-[10px] uppercase">ADD</span>
@@ -19377,11 +19366,10 @@ export default function ClinicPanel({
                                                 }
                                                 setPrescriptionForm({ ...prescriptionForm, medicines: newMeds });
                                               }}
-                                              className={`text-[7.5px] w-4.5 h-4.5 rounded-full flex items-center justify-center font-bold border transition-all cursor-pointer ${
-                                                isSelected
-                                                  ? "bg-blue-600 border-blue-600 text-white shadow-sm font-black"
-                                                  : "bg-slate-100 dark:bg-slate-800 border-slate-200 text-blue-500 hover:bg-blue-50"
-                                              }`}
+                                              className={`text-[7.5px] w-4.5 h-4.5 rounded-full flex items-center justify-center font-bold border transition-all cursor-pointer ${isSelected
+                                                ? "bg-blue-600 border-blue-600 text-white shadow-sm font-black"
+                                                : "bg-slate-100 dark:bg-slate-800 border-slate-200 text-blue-500 hover:bg-blue-50"
+                                                }`}
                                               title={label}
                                             >
                                               {time}
@@ -19553,7 +19541,7 @@ export default function ClinicPanel({
                                                           title: "Medicine Added",
                                                           message: `${med.name} added to appropriate prescribing matrix!`,
                                                           type: "info",
-                                                          onConfirm: () => {}
+                                                          onConfirm: () => { }
                                                         });
                                                       }}
                                                       className="ml-1 p-0.5 bg-teal-500 hover:bg-teal-600 text-white rounded font-bold text-[8px] px-1 uppercase cursor-pointer"
@@ -19579,7 +19567,7 @@ export default function ClinicPanel({
                                               title: "Prescription Copied",
                                               message: "All clinical metrics, diagnoses, advice, and medications imported directly!",
                                               type: "info",
-                                              onConfirm: () => {}
+                                              onConfirm: () => { }
                                             });
                                           }}
                                           className="flex-1 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-[9px] uppercase tracking-wider rounded-lg text-center shadow-xs cursor-pointer"
@@ -19599,7 +19587,7 @@ export default function ClinicPanel({
                   </div>
 
                   {/* Fixed Footer for Consultation Assistant */}
-                  <div className="absolute bottom-0 left-0 right-0 p-5 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-white/5 flex gap-3 z-20 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
+                  <div className="p-5 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-white/5 flex gap-3 z-20 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] shrink-0">
                     <button
                       onClick={handleSavePrescription}
                       className="flex-1 bg-green-600 text-white font-black py-4 rounded-[2rem] shadow-xl hover:bg-green-700 transition-all flex items-center justify-center gap-3 active:scale-95 text-sm uppercase tracking-wider"
@@ -19632,8 +19620,8 @@ export default function ClinicPanel({
                   id="prescription-preview"
                   className="flex-1 bg-gray-100 dark:bg-gray-900 md:py-12 md:px-8 py-6 px-4 md:overflow-y-auto no-scrollbar scroll-smooth print:p-0 pdf-safe"
                 >
-                  <div id="prescription-paper" className="max-w-[800px] mx-auto bg-white shadow-[0_30px_100px_rgba(0,0,0,0.1)] md:shadow-[0_30px_100px_rgba(0,0,0,0.15)] rounded-2xl min-h-[1120px] flex flex-col print:shadow-none print:rounded-none print:m-0 print:w-full overflow-hidden relative font-sans text-gray-900 border border-gray-100 md:border-none p-6 md:p-10">
-                    
+                  <div id="prescription-paper" className="max-w-[800px] mx-auto bg-[#faf9f6] shadow-[0_30px_100px_rgba(0,0,0,0.15)] md:shadow-[0_30px_100px_rgba(0,0,0,0.2)] rounded-sm min-h-[1120px] flex flex-col print:shadow-none print:rounded-none print:m-0 print:w-full overflow-hidden relative font-serif text-slate-900 border-[8px] border-double border-teal-900/10 p-6 md:p-10">
+
                     {/* Decorative Watermark for Print */}
                     <div className="absolute inset-0 pointer-events-none opacity-[0.02] select-none flex items-center justify-center -rotate-45">
                       <h1 className="text-[100px] md:text-[180px] font-black uppercase tracking-tighter">
@@ -19844,9 +19832,8 @@ export default function ClinicPanel({
                         ].map((v) => (
                           <div
                             key={v.label}
-                            className={`p-2 rounded-lg bg-slate-50/50 border border-slate-100/80 flex flex-col items-center justify-center text-center transition-all ${
-                              v.value ? "opacity-100 border-teal-100" : "opacity-30"
-                            }`}
+                            className={`p-2 rounded-lg bg-slate-50/50 border border-slate-100/80 flex flex-col items-center justify-center text-center transition-all ${v.value ? "opacity-100 border-teal-100" : "opacity-30"
+                              }`}
                           >
                             <div className="mb-0.5">{v.icon}</div>
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-tight">
@@ -19862,10 +19849,10 @@ export default function ClinicPanel({
 
                     {/* Dynamic Clinical Information Grid */}
                     <div className="relative z-10 flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                      
+
                       {/* Left: Complaints & Suggested Investigations */}
                       <div className="md:col-span-1 space-y-5 md:border-r md:border-slate-150 md:pr-6">
-                        
+
                         {/* Symptoms Section */}
                         <div className="space-y-3">
                           <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1 flex items-center gap-1.5">
@@ -19904,9 +19891,8 @@ export default function ClinicPanel({
                                     <span className="text-[11px] font-bold text-[#005f73] uppercase tracking-tight">
                                       {test}
                                     </span>
-                                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded tracking-widest uppercase ${
-                                      isUrgent ? "bg-red-100 text-red-700" : "bg-teal-50 text-teal-700"
-                                    }`}>
+                                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded tracking-widest uppercase ${isUrgent ? "bg-red-100 text-red-700" : "bg-teal-50 text-teal-700"
+                                      }`}>
                                       {isUrgent ? "Important" : "Routine"}
                                     </span>
                                   </div>
@@ -19929,7 +19915,7 @@ export default function ClinicPanel({
 
                       {/* Right: Primary Diagnosis stand-out card & Rx Medicine Table */}
                       <div className="md:col-span-2 space-y-6">
-                        
+
                         {/* Highlights Medical Box for Diagnosis */}
                         <div className="bg-gradient-to-r from-teal-50 to-indigo-50/30 border-l-4 border-teal-600 rounded-r-xl p-3 shadow-[0_1px_5px_rgba(0,0,0,0.02)]">
                           <p className="text-[8px] font-black text-teal-700 uppercase tracking-widest mb-1 flex items-center gap-1">
@@ -19970,7 +19956,7 @@ export default function ClinicPanel({
                                   // Parse frequency to populate checkboxes beautifully
                                   const freq = (med.frequency || "").toLowerCase().trim();
                                   const parts = freq.split("-");
-                                  
+
                                   let morningVal = "0";
                                   let afternoonVal = "0";
                                   let nightVal = "0";
@@ -20017,7 +20003,7 @@ export default function ClinicPanel({
                                           </span>
                                         </div>
                                       </td>
-                                      
+
                                       {/* Morning Column */}
                                       <td className="py-3 text-center">
                                         <div className="flex justify-center items-center">
@@ -20059,13 +20045,12 @@ export default function ClinicPanel({
 
                                       {/* Food Timing */}
                                       <td className="py-3 text-center">
-                                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                                          isAfterFood 
-                                            ? "bg-amber-50 text-amber-800 border border-amber-100" 
-                                            : isBeforeFood 
-                                              ? "bg-sky-50 text-sky-800 border border-sky-100" 
-                                              : "bg-slate-100 text-slate-700"
-                                        }`}>
+                                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${isAfterFood
+                                          ? "bg-amber-50 text-amber-800 border border-amber-100"
+                                          : isBeforeFood
+                                            ? "bg-sky-50 text-sky-800 border border-sky-100"
+                                            : "bg-slate-100 text-slate-700"
+                                          }`}>
                                           {med.timing || "Anytime"}
                                         </span>
                                       </td>
@@ -20137,7 +20122,7 @@ export default function ClinicPanel({
 
                     {/* Footer: Digital QR Health verification, legal and Doctor authorized signature */}
                     <div className="relative z-10 border-t border-slate-200 pt-5 mt-auto grid grid-cols-1 md:grid-cols-3 gap-6 items-end pb-2">
-                      
+
                       {/* Left: Digital Verification */}
                       <div className="md:col-span-1 space-y-2">
                         <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-xl flex items-center gap-3">
@@ -20256,9 +20241,8 @@ export default function ClinicPanel({
               initial={{ opacity: 0, scale: 0.95, y: 30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className={`w-full max-w-md rounded-[2rem] overflow-hidden border p-6 space-y-6 shadow-2xl transition-all ${
-                darkMode ? "bg-[#001219] border-white/10 text-white" : "bg-white border-slate-200 text-slate-800"
-              }`}
+              className={`w-full max-w-md rounded-[2rem] overflow-hidden border p-6 space-y-6 shadow-2xl transition-all ${darkMode ? "bg-[#001219] border-white/10 text-white" : "bg-white border-slate-200 text-slate-800"
+                }`}
             >
               <div className="flex justify-between items-center pb-4 border-b border-slate-500/10">
                 <div>
@@ -20310,9 +20294,8 @@ export default function ClinicPanel({
               initial={{ opacity: 0, scale: 0.95, y: 30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className={`w-full max-w-md rounded-[2rem] overflow-hidden border p-6 space-y-6 shadow-2xl transition-all ${
-                darkMode ? "bg-[#001219] border-white/10 text-white" : "bg-white border-slate-200 text-slate-800"
-              }`}
+              className={`w-full max-w-md rounded-[2rem] overflow-hidden border p-6 space-y-6 shadow-2xl transition-all ${darkMode ? "bg-[#001219] border-white/10 text-white" : "bg-white border-slate-200 text-slate-800"
+                }`}
             >
               <div className="flex justify-between items-center pb-4 border-b border-slate-500/10">
                 <div>
@@ -20337,7 +20320,7 @@ export default function ClinicPanel({
                     For high-priority clinical synchronization adjustments, billing questions, or hospital integration issues, call care support:
                   </p>
                   <div className="p-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-center rounded-xl font-extrabold text-sm">
-                    +91 9921-229-21D
+                    9022066914
                   </div>
                 </div>
 

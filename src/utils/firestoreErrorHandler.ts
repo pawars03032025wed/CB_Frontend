@@ -214,8 +214,13 @@ export function handleFirestoreError(error: any, operationType: OperationType, p
   let errorMessage = error instanceof Error ? error.message : String(error);
   const errorCode = error?.code || 'unknown';
 
+  let friendlyMessage = "An unexpected database operation occurred.";
   if (errorCode === 'permission-denied') {
-    errorMessage = "Permission Denied: Access restricted.";
+    friendlyMessage = "Access restricted: You do not have permission to view or edit this resource.";
+  } else if (errorCode === 'unavailable' || errorMessage.toLowerCase().includes("offline") || errorMessage.toLowerCase().includes("could not reach")) {
+    friendlyMessage = "Network connection is offline. Operating in offline cache mode.";
+  } else if (errorCode === 'deadline-exceeded') {
+    friendlyMessage = "Database request timed out. Retrying in the background...";
   }
 
   const errInfo: FirestoreErrorInfo = {
@@ -237,10 +242,24 @@ export function handleFirestoreError(error: any, operationType: OperationType, p
     path
   };
 
-  console.error(`Firestore Error [${operationType}] at [${path}]:`, { errorMessage, errorCode });
+  console.error(`[Firestore Error] [${operationType}] at [${path}]:`, { errorMessage, errorCode, friendlyMessage });
   
-  if (errorMessage.toLowerCase().includes("offline") || errorMessage.toLowerCase().includes("could not reach")) {
-    return;
+  if (typeof window !== 'undefined') {
+    const customEvent = new CustomEvent('firestore-error-alert', {
+      detail: { code: errorCode, message: friendlyMessage, type: operationType }
+    });
+    window.dispatchEvent(customEvent);
+  }
+
+  // Handle offline and timeout events gracefully by logging and returning (preventing UI crashes)
+  if (
+    errorCode === 'unavailable' || 
+    errorCode === 'deadline-exceeded' || 
+    errorMessage.toLowerCase().includes("offline") || 
+    errorMessage.toLowerCase().includes("could not reach")
+  ) {
+    console.warn(`[Firestore Telemetry] Gracefully suppressed exception for offline/timeout condition: ${errorCode}`);
+    return { error: true, code: errorCode, message: friendlyMessage };
   }
 
   throw new Error(safeStringify(errInfo));

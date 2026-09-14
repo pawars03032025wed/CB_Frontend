@@ -1,3 +1,4 @@
+import AdminPaymentDetails from "./AdminPaymentDetails";
 import { useState, useEffect, useMemo } from "react";
 import {
   ShieldCheck,
@@ -33,6 +34,14 @@ import {
   History,
   ClipboardList,
   Home,
+  Eye,
+  Stethoscope,
+  Activity,
+  Smartphone,
+  ExternalLink,
+  FileText,
+  Image as ImageIcon,
+  CreditCard
 } from "lucide-react";
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -135,6 +144,7 @@ export default function AdminPanel({
   const [historyDateTo, setHistoryDateTo] = useState("");
   const [hospSearch, setHospSearch] = useState("");
   const [clinicSearch, setClinicSearch] = useState("");
+  const [selectedProfile, setSelectedProfile] = useState<{user: any, details: any, type: "hospital" | "clinic"} | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -502,6 +512,7 @@ export default function AdminPanel({
   const menuItems = [
     { id: "home", icon: LayoutDashboard, label: "Dashboard" },
     { id: "approvals", icon: ShieldCheck, label: "Panel Approvals" },
+    { id: "payments", icon: CreditCard, label: "Payment Details" },
     { id: "hospitals", icon: HospitalIcon, label: "Hospital Management" },
     { id: "clinics", icon: UserMd, label: "Clinic Management" },
     { id: "patients", icon: Users, label: "Public User List" },
@@ -514,6 +525,7 @@ export default function AdminPanel({
   const bottomNavItems = [
     { id: "home", icon: Home, label: "Home" },
     { id: "menu", icon: Menu, label: "Menu" },
+    { id: "payments", icon: CreditCard, label: "Payments" },
     { id: "hospitals", icon: HospitalIcon, label: "Hospital" },
     { id: "clinics", icon: UserMd, label: "Clinic" },
     { id: "patients", icon: Users, label: "Public User" },
@@ -566,7 +578,7 @@ export default function AdminPanel({
                     referralView === "history")
                     ? "bg-[#005f73] text-white shadow-lg shadow-[#005f73]/20"
                     : isDarkMode
-                      ? "text-gray-400 hover:bg-white/5 hover:text-white"
+                      ? "text-gray-300 hover:bg-white/10 hover:text-white"
                       : "text-gray-500 hover:bg-gray-50 hover:text-[#005f73]"
                 }`}
               >
@@ -601,32 +613,32 @@ export default function AdminPanel({
             <Menu size={24} />
           </button>
 
-          <div className="flex-1">
-            <h2
-              className={`text-lg font-black italic ${isDarkMode ? "text-white" : "text-gray-900"}`}
-            >
-              <span className="text-[#99CC00] text-xl">Carebridge</span>
-              <span
-                className={`${isDarkMode ? "text-white" : "text-[#87CEEB] text-xl"}`}
+          <div className="flex-1 flex items-center gap-3">
+            <div className="bg-white p-1.5 rounded-xl shadow-xs border border-gray-100 shrink-0 h-10 w-10 flex items-center justify-center">
+               <img src="/carebridge-logo.png" alt="Logo" className="w-full h-full object-contain drop-shadow-sm" />
+            </div>
+            <div>
+              <h2
+                className={`text-xl font-black italic tracking-tighter leading-none ${isDarkMode ? "text-white" : "text-slate-900"}`}
               >
-                +
-              </span>
-            </h2>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span
-                className={`text-[10px] font-bold ${isDarkMode ? "text-gray-500" : "text-gray-400"} uppercase tracking-widest`}
-              >
-                Welcome to Admin Panel
-              </span>
-              <div
-                className={`w-1 h-1 ${isDarkMode ? "bg-gray-700" : "bg-gray-300"} rounded-full`}
-              ></div>
-              <span
-                className={`text-[10px] font-black ${isDarkMode ? "text-blue-400" : "text-blue-500"} uppercase tracking-widest flex items-center gap-1`}
-              >
-                <Clock size={10} /> {formatISTDate(currentTime)} |{" "}
-                {formatISTTime(currentTime)}
-              </span>
+                Carebridge<span className="text-[#00b4d8]">+</span>
+              </h2>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span
+                  className={`text-[10px] font-bold ${isDarkMode ? "text-gray-400" : "text-gray-500"} uppercase tracking-widest`}
+                >
+                  Welcome to Admin Panel
+                </span>
+                <div
+                  className={`w-1 h-1 ${isDarkMode ? "bg-gray-700" : "bg-gray-300"} rounded-full hidden sm:block`}
+                ></div>
+                <span
+                  className={`hidden sm:flex text-[10px] font-black ${isDarkMode ? "text-blue-400" : "text-blue-500"} uppercase tracking-widest items-center gap-1`}
+                >
+                  <Clock size={10} /> {formatISTDate(currentTime)} |{" "}
+                  {formatISTTime(currentTime)}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -931,6 +943,13 @@ export default function AdminPanel({
                               </div>
                               <div className="flex gap-2">
                                 <button
+                                  onClick={() => setSelectedProfile({ user: u, details: hospDetails[u.id] || {}, type: "hospital" })}
+                                  className={`p-2 rounded-lg transition-all ${isDarkMode ? "text-blue-400 bg-blue-400/10 hover:bg-blue-400/20" : "text-[#00b4d8] bg-[#00b4d8]/10 hover:bg-[#00b4d8]/20"}`}
+                                  title="View Profile"
+                                >
+                                  <Eye size={18} />
+                                </button>
+                                <button
                                   onClick={() => handleApproval(u.id, "active")}
                                   className="bg-green-500 text-white p-2 rounded-lg hover:bg-green-600 transition-all shadow-lg shadow-green-500/20"
                                   title="Approve"
@@ -1004,6 +1023,13 @@ export default function AdminPanel({
                               </div>
                               <div className="flex gap-2">
                                 <button
+                                  onClick={() => setSelectedProfile({ user: u, details: clinicDetails[u.id] || {}, type: "clinic" })}
+                                  className={`p-2 rounded-lg transition-all ${isDarkMode ? "text-blue-400 bg-blue-400/10 hover:bg-blue-400/20" : "text-[#00b4d8] bg-[#00b4d8]/10 hover:bg-[#00b4d8]/20"}`}
+                                  title="View Profile"
+                                >
+                                  <Eye size={18} />
+                                </button>
+                                <button
                                   onClick={() => handleApproval(u.id, "active")}
                                   className="bg-green-500 text-white p-2 rounded-lg hover:bg-green-600 transition-all shadow-lg shadow-green-500/20"
                                   title="Approve"
@@ -1050,6 +1076,10 @@ export default function AdminPanel({
                     </div>
                   </div>
                 </motion.div>
+              )}
+
+              {activeTab === "payments" && (
+                <AdminPaymentDetails darkMode={isDarkMode} />
               )}
 
               {activeTab === "hospitals" && (
@@ -1232,6 +1262,13 @@ export default function AdminPanel({
                                 </td>
                                 <td className="px-6 py-4 text-right space-x-2">
                                   <button
+                                    onClick={() => setSelectedProfile({ user: hosp, details: hospDetails[hosp.id] || {}, type: "hospital" })}
+                                    className={`p-2 rounded-lg transition-all ${isDarkMode ? "text-blue-400 hover:bg-blue-400/10" : "text-[#00b4d8] hover:bg-[#00b4d8]/10"}`}
+                                    title="View Profile"
+                                  >
+                                    <Eye size={18} />
+                                  </button>
+                                  <button
                                     className={`p-2 rounded-lg transition-all ${isDarkMode ? "text-amber-400 hover:bg-amber-400/10" : "text-[#ee9b00] hover:bg-[#ee9b00]/10"}`}
                                     title="Send Warning"
                                   >
@@ -1377,6 +1414,13 @@ export default function AdminPanel({
                                   </select>
                                 </td>
                                 <td className="px-6 py-4 text-right space-x-2">
+                                  <button
+                                    onClick={() => setSelectedProfile({ user: clinic, details: clinicDetails[clinic.id] || {}, type: "clinic" })}
+                                    className={`p-2 rounded-lg transition-all ${isDarkMode ? "text-blue-400 hover:bg-blue-400/10" : "text-[#00b4d8] hover:bg-[#00b4d8]/10"}`}
+                                    title="View Profile"
+                                  >
+                                    <Eye size={18} />
+                                  </button>
                                   <button
                                     className="p-2 text-[#ee9b00] hover:bg-[#ee9b00]/10 rounded-lg transition-all"
                                     title="Send Warning"
@@ -2259,6 +2303,314 @@ export default function AdminPanel({
               type={confirmModal.type}
               confirmText="Yes, Proceed"
             />
+{/* Profile Modal */}
+            <AnimatePresence>
+              {selectedProfile && (
+                <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[1050] flex items-center justify-center p-4">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 30 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className={`w-full ${selectedProfile.type === "clinic" ? "max-w-2xl" : "max-w-md"} flex flex-col rounded-[2.5rem] overflow-hidden border shadow-2xl relative max-h-[92vh] ${isDarkMode ? "bg-[#0c1226] border-white/10 text-white" : "bg-white border-slate-200 text-slate-800"}`}
+                  >
+                    {selectedProfile.type === "clinic" ? (
+                      <>
+                        {/* Clinic Aspect Cover Header */}
+                        <div className="relative h-44 bg-gradient-to-r from-teal-600/30 to-blue-600/30 overflow-hidden shrink-0">
+                          {selectedProfile.details.banner || selectedProfile.user.banner ? (
+                            <img src={selectedProfile.details.banner || selectedProfile.user.banner} alt="Clinic Banner" className="w-full h-full object-cover animate-fade-in" />
+                          ) : (
+                            <div className="absolute inset-x-0 bottom-0 top-0 bg-grid-pattern opacity-10" />
+                          )}
+                          <button
+                            onClick={() => setSelectedProfile(null)}
+                            className="absolute top-5 right-5 p-2 bg-slate-950/40 hover:bg-slate-950/60 backdrop-blur-sm text-white rounded-full transition cursor-pointer"
+                          >
+                            <X size={18} />
+                          </button>
+                          <div className="absolute bottom-4 left-6 flex items-end gap-4">
+                            <div className="w-20 h-20 rounded-2xl bg-white dark:bg-slate-900 border-4 border-white dark:border-slate-900 shadow-md overflow-hidden relative shrink-0">
+                              {selectedProfile.details.logo || selectedProfile.user.logo || selectedProfile.user.profileImage ? (
+                                <img src={selectedProfile.details.logo || selectedProfile.user.logo || selectedProfile.user.profileImage} alt="Clinic Logo" className="w-full h-full object-cover" />
+                              ) : (
+                                <img
+                                  src={`https://api.dicebear.com/7.x/initials/svg?seed=${selectedProfile.user.name || "Clinic"}&backgroundColor=1E88E5`}
+                                  alt="Clinic Logo Default"
+                                  className="w-full h-full object-cover"
+                                />
+                              )}
+                            </div>
+                            <div className="-mb-1 space-y-0.5">
+                              <span className="px-2.5 py-0.5 bg-teal-500/15 text-teal-400 text-[10px] font-black uppercase rounded-lg inline-block mb-1">
+                                Partner Member
+                              </span>
+                              <h3 className="text-lg font-black tracking-tight text-white drop-shadow-md truncate max-w-xs sm:max-w-md">
+                                {selectedProfile.user.name}
+                              </h3>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Clinic Body Content */}
+                        <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+                          {/* Key Metrics grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className={`p-3 rounded-2xl border text-center ${isDarkMode ? "bg-slate-900/50 border-white/5" : "bg-slate-50 border-slate-150"}`}>
+                              <span className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 block mb-0.5">Clinic Rating</span>
+                              <div className="flex items-center justify-center gap-1">
+                                <Star size={14} className="fill-yellow-500 text-yellow-500" />
+                                <span className="font-extrabold text-sm">{selectedProfile.details.rating || "4.8"}</span>
+                              </div>
+                            </div>
+                            <div className={`p-3 rounded-2xl border text-center ${isDarkMode ? "bg-slate-900/50 border-white/5" : "bg-slate-50 border-slate-150"}`}>
+                              <span className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 block mb-0.5">Experience</span>
+                              <span className="font-extrabold text-sm text-teal-450">10+ Years</span>
+                            </div>
+                            <div className={`p-3 rounded-2xl border text-center ${isDarkMode ? "bg-slate-900/50 border-white/5" : "bg-slate-50 border-slate-150"}`}>
+                              <span className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 block mb-0.5">Consultation Fees</span>
+                              <span className="font-black text-sm text-emerald-450">{selectedProfile.details.fees ? `₹ ${selectedProfile.details.fees}` : "Not Specified"}</span>
+                            </div>
+                            <div className={`p-3 rounded-2xl border text-center ${isDarkMode ? "bg-slate-900/50 border-white/5" : "bg-slate-50 border-slate-150"}`}>
+                              <span className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 block mb-0.5">Open Days</span>
+                              <span className="font-bold text-sm text-blue-450">Mon - Sat</span>
+                            </div>
+                          </div>
+
+                          {/* Practitioner & Registration details */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Supervising Doctor */}
+                            <div className={`p-4 rounded-2xl border ${isDarkMode ? "bg-slate-900/20 border-white/5" : "bg-slate-50 border-slate-150"} space-y-2`}>
+                              <div className="flex items-center gap-2">
+                                <div className="p-1 px-2 bg-blue-500/10 text-blue-400 rounded-lg text-xs font-black">MD</div>
+                                <h4 className="font-bold text-xs uppercase text-slate-500 dark:text-slate-400 tracking-wider">Supervising Practitioner</h4>
+                              </div>
+                              <div>
+                                <p className="font-extrabold text-base">{selectedProfile.details.doctor_name || selectedProfile.user.doctor_name || "Dr. Authorized Member"}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5">{selectedProfile.details.qualification || "MBBS Certificate Specialist"}</p>
+                                <p className="text-[10px] text-slate-500 font-mono mt-1">Registration No: {selectedProfile.details.reg_no || selectedProfile.user.id}</p>
+                              </div>
+                            </div>
+
+                            {/* Specialist Department info */}
+                            <div className={`p-4 rounded-2xl border ${isDarkMode ? "bg-slate-900/20 border-white/5" : "bg-slate-50 border-slate-150"} space-y-2`}>
+                              <div className="flex items-center gap-2">
+                                <Stethoscope size={16} className="text-teal-400" />
+                                <h4 className="font-bold text-xs uppercase text-slate-500 dark:text-slate-400 tracking-wider">Clinical Specialization</h4>
+                              </div>
+                              <div>
+                                <p className="font-extrabold text-base">{selectedProfile.details.department || "Consultant Generalist"}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5">{selectedProfile.details.specialization || "Ayurvedic, Homeopathic & General Care"}</p>
+                                <p className="text-[10px] text-teal-400 font-bold mt-1 font-mono">Active Medical Unit</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Operational Timings & Location */}
+                          <div className="space-y-3.5">
+                            <div className="flex items-start gap-3">
+                              <MapPin size={18} className="text-rose-500 shrink-0 mt-0.5" />
+                              <div>
+                                <h4 className="font-black text-xs uppercase text-slate-500 dark:text-slate-400 tracking-wider">Physical Address & Access</h4>
+                                <p className="text-sm font-bold mt-0.5 leading-relaxed">{selectedProfile.details.address || selectedProfile.user.address || selectedProfile.user.city || "Pune Area, Maharashtra"}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-start gap-3">
+                              <Clock size={18} className="text-blue-500 shrink-0 mt-0.5" />
+                              <div>
+                                <h4 className="font-black text-xs uppercase text-slate-500 dark:text-slate-400 tracking-wider">Consultation timings</h4>
+                                <p className="text-sm font-bold mt-0.5">{selectedProfile.details.timing || "09:00 AM - 05:00 PM"}</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">Sundays Closed (Available on Emergency Callout)</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Clinic Gallery */}
+                          {(selectedProfile.details.gallery?.length > 0 || selectedProfile.user.gallery?.length > 0) && (
+                            <div className={`border-t ${isDarkMode ? "border-white/10" : "border-gray-100"} pt-6`}>
+                              <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                                <ImageIcon size={12} className="inline mr-1" /> Clinic Gallery
+                              </label>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {(selectedProfile.details.gallery || selectedProfile.user.gallery).map((img: string, idx: number) => (
+                                  <div key={`gallery-${idx}`} className={`w-full h-24 rounded-xl overflow-hidden border shadow-sm relative group ${isDarkMode ? "border-white/10" : "border-gray-200"}`}>
+                                    <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Hospital Header */}
+                        <div className={`${isDarkMode ? "bg-white/5 border-b border-white/10" : "bg-gray-50 border-b border-gray-100"} p-6 shrink-0`}>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span
+                                className={`px-3 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm mb-2 w-fit ${
+                                  selectedProfile.user.tier === "premium"
+                                    ? "bg-gradient-to-r from-[#005f73] to-[#023e8a] text-white"
+                                    : selectedProfile.user.tier === "priority"
+                                      ? "bg-gradient-to-r from-[#0a9396] to-[#0077b6] text-white"
+                                      : "bg-gradient-to-r from-[#ee9b00] to-[#ca6702] text-white"
+                                }`}
+                              >
+                                {selectedProfile.user.tier === "premium" && (
+                                  <Crown size={10} />
+                                )}
+                                {String(selectedProfile.user.tier || "Standard").toUpperCase()} PARTNER
+                              </span>
+                              <h3 className={`text-xl font-extrabold ${isDarkMode ? "text-white" : "text-gray-900"}`}>
+                                {selectedProfile.user.name}
+                              </h3>
+                            </div>
+                            <button
+                              onClick={() => setSelectedProfile(null)}
+                              className={`${isDarkMode ? "text-gray-500 hover:text-white" : "text-gray-400 hover:text-gray-600"}`}
+                            >
+                              <X size={24} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Hospital Body Content */}
+                        <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+                          <div>
+                            <p className={`${isDarkMode ? "text-gray-400" : "text-gray-500"} text-xs font-bold flex items-center gap-2`}>
+                              <MapPin size={14} className="text-red-500" />
+                              {selectedProfile.user.city || selectedProfile.user.address || "Location unavailable"}
+                            </p>
+                            <div className="mt-4 flex gap-2">
+                              <a
+                                href={`tel:${selectedProfile.user.helpline || selectedProfile.details.helpline}`}
+                                className={`flex-1 border border-green-600 text-green-600 py-3 rounded-xl font-bold text-sm ${isDarkMode ? "hover:bg-green-600/20" : "hover:bg-green-600 hover:text-white"} transition-all flex items-center justify-center gap-2 shadow-sm`}
+                              >
+                                <Phone size={18} /> Join Call / Reception
+                              </a>
+                            </div>
+                          </div>
+
+                          {/* Bed Availability */}
+                          <div className={`border-t ${isDarkMode ? "border-white/10" : "border-gray-100"} pt-6`}>
+                            <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                              <Activity size={12} className="inline mr-1" /> Bed Availability
+                            </label>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className={`${isDarkMode ? "bg-red-500/10 border-red-500/20" : "bg-red-50 border-red-100"} p-2 rounded-xl border text-center`}>
+                                <p className={`text-[8px] font-bold ${isDarkMode ? "text-red-400/80" : "text-red-400"} uppercase`}>ICU</p>
+                                <p className={`text-sm font-black ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{selectedProfile.details.bedsICU || selectedProfile.user.bedsICU || 0}</p>
+                              </div>
+                              <div className={`${isDarkMode ? "bg-blue-500/10 border-blue-500/20" : "bg-blue-50 border-blue-100"} p-2 rounded-xl border text-center`}>
+                                <p className={`text-[8px] font-bold ${isDarkMode ? "text-blue-400/80" : "text-blue-400"} uppercase`}>General</p>
+                                <p className={`text-sm font-black ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>{selectedProfile.details.bedsGeneral || selectedProfile.user.bedsGeneral || 0}</p>
+                              </div>
+                              <div className={`${isDarkMode ? "bg-orange-500/10 border-orange-500/20" : "bg-orange-50 border-orange-100"} p-2 rounded-xl border text-center`}>
+                                <p className={`text-[8px] font-bold ${isDarkMode ? "text-orange-400/80" : "text-orange-400"} uppercase`}>Ventilator</p>
+                                <p className={`text-sm font-black ${isDarkMode ? "text-orange-400" : "text-orange-600"}`}>{selectedProfile.details.bedsVentilator || selectedProfile.user.bedsVentilator || 0}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Emergency & Ambulance */}
+                          <div className={`border-t ${isDarkMode ? "border-white/10" : "border-gray-100"} pt-6`}>
+                            <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                              <ShieldAlert size={12} className="inline mr-1 text-red-500" /> Emergency & Ambulance
+                            </label>
+                            <div className="space-y-3">
+                              {(selectedProfile.details.emergencyContact || selectedProfile.user.emergencyContact) && (
+                                <div className={`flex justify-between items-center ${isDarkMode ? "bg-red-500/10 border-red-500/20" : "bg-red-50 border-red-100"} p-3 rounded-xl border`}>
+                                  <div>
+                                    <p className={`text-[8px] font-bold ${isDarkMode ? "text-red-400/80" : "text-red-400"} uppercase`}>Emergency Line</p>
+                                    <p className={`text-xs font-black ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{selectedProfile.details.emergencyContact || selectedProfile.user.emergencyContact}</p>
+                                  </div>
+                                  <a href={`tel:${selectedProfile.details.emergencyContact || selectedProfile.user.emergencyContact}`} className="bg-red-500 text-white p-2 rounded-lg shadow-sm">
+                                    <Phone size={14} />
+                                  </a>
+                                </div>
+                              )}
+                              <div className={`flex justify-between items-center ${isDarkMode ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-100"} p-3 rounded-xl border`}>
+                                <div>
+                                  <p className={`text-[8px] font-bold ${isDarkMode ? "text-gray-500" : "text-gray-400"} uppercase`}>Ambulance ({selectedProfile.details.ambulanceStatus || selectedProfile.user.ambulanceStatus || "Available"})</p>
+                                  <p className={`text-xs font-black ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>{selectedProfile.details.ambulanceContact || selectedProfile.user.ambulanceContact || "N/A"}</p>
+                                </div>
+                                {(selectedProfile.details.ambulanceContact || selectedProfile.user.ambulanceContact) && (
+                                  <a href={`tel:${selectedProfile.details.ambulanceContact || selectedProfile.user.ambulanceContact}`} className="bg-[#005f73] text-white p-2 rounded-lg shadow-sm">
+                                    <Smartphone size={14} />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Departments */}
+                          <div className={`border-t ${isDarkMode ? "border-white/10" : "border-gray-100"} pt-6`}>
+                            <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                              <Stethoscope size={12} className="inline mr-1" /> Departments
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              {Array.isArray(selectedProfile.details.departments || selectedProfile.user.departments)
+                                ? (selectedProfile.details.departments || selectedProfile.user.departments).map((d, idx) => (
+                                    <span key={`${d}-${idx}`} className={`${isDarkMode ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-50 text-blue-600 border-blue-100"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}>
+                                      {d}
+                                    </span>
+                                  ))
+                                : String(selectedProfile.details.departments || selectedProfile.user.departments || "General")
+                                    .split(",")
+                                    .map((d, idx) => (
+                                      <span key={`${d}-${idx}`} className={`${isDarkMode ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-50 text-blue-600 border-blue-100"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}>
+                                        {d.trim()}
+                                      </span>
+                                    ))}
+                            </div>
+                          </div>
+
+                          {/* Accepted Schemes */}
+                          <div className={`border-t ${isDarkMode ? "border-white/10" : "border-gray-100"} pt-6`}>
+                            <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                              <FileText size={12} className="inline mr-1" /> Accepted Schemes
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              {Array.isArray(selectedProfile.details.schemes || selectedProfile.user.schemes)
+                                ? (selectedProfile.details.schemes || selectedProfile.user.schemes).map((s, idx) => (
+                                    <span key={`${s}-${idx}`} className={`${isDarkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#e0f2f1] text-[#0a9396] border-[#b2dfdb]"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}>
+                                      {s}
+                                    </span>
+                                  ))
+                                : String(selectedProfile.details.schemes || selectedProfile.user.schemes || "")
+                                    .split(",")
+                                    .filter(Boolean)
+                                    .map((s, idx) => (
+                                      <span key={`${s}-${idx}`} className={`${isDarkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#e0f2f1] text-[#0a9396] border-[#b2dfdb]"} text-[10px] font-extrabold px-3 py-1 rounded-full border`}>
+                                        {s.trim()}
+                                      </span>
+                                    ))}
+                            </div>
+                          </div>
+
+                          {/* Hospital Gallery */}
+                          {(selectedProfile.details.gallery?.length > 0 || selectedProfile.user.gallery?.length > 0) && (
+                            <div className={`border-t ${isDarkMode ? "border-white/10" : "border-gray-100"} pt-6`}>
+                              <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-3 block">
+                                <ImageIcon size={12} className="inline mr-1" /> Hospital Gallery
+                              </label>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                {(selectedProfile.details.gallery || selectedProfile.user.gallery).map((img: string, idx: number) => (
+                                  <div key={`gallery-${idx}`} className={`w-full h-24 rounded-xl overflow-hidden border shadow-sm relative group ${isDarkMode ? "border-white/10" : "border-gray-200"}`}>
+                                    <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
           </div>
         </main>
       </div>

@@ -1,14 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+/* Tailwind CSS v4 Directives */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600;1,700&display=swap');
 @import "tailwindcss";
 
-@theme {
+:root {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Outfit", sans-serif;
+  --font-brand: "Playfair Display", serif;
   
-  --color-brand-primary: #005f73;
-  --color-brand-secondary: #0a9396;
-  --color-brand-accent: #ee9b00;
-  --color-brand-highlight: #ca7d00;
+  --color-brand-primary: #0f172a; /* Deep Premium Navy (Slate 900) */
+  --color-brand-secondary: #1e293b; /* Lighter Premium Navy (Slate 800) */
+  --color-brand-accent: #d4af37; /* Classic Premium Gold */
+  --color-brand-highlight: #c5a059; /* Muted Gold */
 
   /* Force HEX colors for all standard Tailwind colors to prevent oklch generation */
   --color-gray-50: #f9fafb;
@@ -58,11 +60,34 @@
 
 @layer base {
   body {
-    @apply font-sans antialiased transition-colors duration-300;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    transition-property: color, background-color, border-color;
+    transition-duration: 300ms;
   }
+
+  /* Global faint CareBridge logo watermark — visible on every page */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url('/carebridge-logo.png');
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 520px auto;
+    opacity: 0.04;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .dark body::after {
+    opacity: 0.03;
+    filter: brightness(4) saturate(0);
+  }
+
   
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display tracking-tight;
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
   }
 }
 
@@ -82,15 +107,30 @@
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-gray-200 dark:bg-white/10 rounded-full;
+    background-color: rgba(209, 213, 219, 0.5);
+    border-radius: 9999px;
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.1);
   }
   
   .glass {
-    @apply backdrop-blur-xl bg-white/70 dark:bg-black/40 border border-white/20 dark:border-white/10;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    background-color: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+  }
+  .dark .glass {
+    background-color: rgba(15, 23, 42, 0.9);
+    border-color: rgba(51, 65, 85, 0.6);
   }
   
   .glass-dark {
-    @apply backdrop-blur-xl bg-black/60 border border-white/5;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    background-color: rgba(15, 23, 42, 0.95);
+    border: 1px solid #334155;
+    color: #f8fafc;
   }
 
   .text-glow {
@@ -106,17 +146,94 @@
     background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.02) 1px, transparent 0);
   }
 
+  /* Faint logo watermark background for all pages */
+  .bg-logo-watermark {
+    position: relative;
+  }
+  .bg-logo-watermark::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url('/carebridge-logo.png');
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 480px auto;
+    opacity: 0.04;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .dark .bg-logo-watermark::before {
+    opacity: 0.035;
+    filter: brightness(4) grayscale(1);
+  }
+
   @keyframes float {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-20px); }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+
+  @keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  @keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(0, 95, 115, 0.3), 0 0 60px rgba(10, 147, 150, 0.1); }
+    50% { box-shadow: 0 0 40px rgba(0, 95, 115, 0.5), 0 0 100px rgba(10, 147, 150, 0.2); }
+  }
+
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slide-in-right {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
   }
 
   .animate-float {
     animation: float 6s ease-in-out infinite;
   }
 
+  .animate-shimmer {
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+    background-size: 200% auto;
+    animation: shimmer 2s linear infinite;
+  }
+
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient-shift 4s ease infinite;
+  }
+
+  .animate-glow {
+    animation: glow-pulse 3s ease-in-out infinite;
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s ease-out both;
+  }
+
+  .animate-fade-in {
+    animation: fade-in-up 0.4s ease-out both;
+  }
+
   .pdf-safe {
-    /* Global root overrides are now active */
+    position: relative;
+  }
+
+  /* Premium input focus glow */
+  .input-premium {
+    transition: all 0.2s ease;
+  }
+  .input-premium:focus {
+    box-shadow: 0 0 0 3px rgba(0, 95, 115, 0.12), 0 2px 12px rgba(0, 95, 115, 0.08);
   }
 }
 

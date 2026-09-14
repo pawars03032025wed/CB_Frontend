@@ -87,7 +87,7 @@ import {
   MessageCircle,
   WifiOff,
   Camera,
-  Image,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   AreaChart,
@@ -139,6 +139,34 @@ const VIBRATION_PATTERNS: Record<string, number[]> = {
   "urgent alarm": [1000, 500, 1000, 500],
 };
 
+// Helper to sanitize any double-encoded UTF-8 strings back to clean Devanagari (Marathi/Hindi) characters.
+const cleanDoubleEncoding = (str: string): string => {
+  if (!str) return str;
+  let current = str;
+  for (let i = 0; i < 2; i++) {
+    if (/[\u0900-\u097F]/.test(current)) {
+      return current;
+    }
+    if (/[^\x00-\x7F]/.test(current)) {
+      try {
+        const bytes = new Uint8Array(
+          Array.from(current).map((c) => c.charCodeAt(0))
+        );
+        const decoded = new TextDecoder("utf-8").decode(bytes);
+        if (decoded === current) {
+          break;
+        }
+        current = decoded;
+      } catch (e) {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+  return current;
+};
+
 const ColorfulImageIcon = ({
   icon: Icon,
   gradient,
@@ -171,6 +199,15 @@ export default function PatientPanel({
   const currentTime = useLiveClock();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const [showSubscriptionPlan, setShowSubscriptionPlan] = useState(false);
+  const [showPhonePeModal, setShowPhonePeModal] = useState(false);
+
+  const subStatus = user?.subscriptionStatus;
+  const trialEndAt = user?.trialEndAt;
+  const endMs = typeof trialEndAt === "number" ? trialEndAt : trialEndAt ? new Date(trialEndAt).getTime() : 0;
+  const remaining = Math.max(0, endMs - Date.now());
+  const totalSeconds = Math.floor(remaining / 1000);
+  const days = Math.floor(totalSeconds / 86400);
 
   // Daily & Personal Reminders Persistent States
   const [dailyReminders, setDailyReminders] = useState<any[]>(() => {
@@ -392,13 +429,25 @@ export default function PatientPanel({
     if (videoRef.current) {
       try {
         const video = videoRef.current;
+        let width = video.videoWidth || 640;
+        let height = video.videoHeight || 480;
+        
+        const MAX_DIM = 1000;
+        if (width > height && width > MAX_DIM) {
+          height *= MAX_DIM / width;
+          width = MAX_DIM;
+        } else if (height > MAX_DIM) {
+          width *= MAX_DIM / height;
+          height = MAX_DIM;
+        }
+
         const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const base64 = canvas.toDataURL("image/jpeg", 0.85);
+          const base64 = canvas.toDataURL("image/jpeg", 0.7);
           setCapturedImageBase64(base64);
           setReportForm(prev => ({ ...prev, fileUrl: base64 }));
           stopCamera();
@@ -415,18 +464,63 @@ export default function PatientPanel({
   const handleGalleryFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file size (limit base64 weight)
-      if (file.size > 2.5 * 1024 * 1024) {
-        showNotification("Selected file is too large (Maximum size 2.5MB).", "error");
-         return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          setReportForm(prev => ({ ...prev, fileUrl: reader.result as string }));
-          setCapturedImageBase64(null); // Clear camera mode
-          showNotification("Report file loaded from gallery!", "success");
+      if (!file.type.startsWith('image/')) {
+        // Limit non-images to 700KB to stay within Firestore 1MB max document limit
+        if (file.size > 700 * 1024) {
+          showNotification("Non-image files must be under 700KB.", "error");
+          return;
         }
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            setReportForm(prev => ({ ...prev, fileUrl: reader.result as string }));
+            setCapturedImageBase64(null); // Clear camera mode
+            showNotification("Report file loaded from gallery!", "success");
+          }
+        };
+        reader.onerror = () => {
+          showNotification("Error converting file.", "error");
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      // For images, dynamically compress them
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          const MAX_DIM = 1000;
+          if (width > height && width > MAX_DIM) {
+            height *= MAX_DIM / width;
+            width = MAX_DIM;
+          } else if (height > MAX_DIM) {
+            width *= MAX_DIM / height;
+            height = MAX_DIM;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+            
+            if (compressedBase64.length > 900000) {
+              showNotification("Image is still too large after compression. Try a smaller one.", "error");
+              return;
+            }
+            
+            setReportForm(prev => ({ ...prev, fileUrl: compressedBase64 }));
+            setCapturedImageBase64(null);
+            showNotification("Image compressed and loaded successfully!", "success");
+          }
+        };
+        img.src = event.target?.result as string;
       };
       reader.onerror = () => {
         showNotification("Error converting file.", "error");
@@ -520,19 +614,33 @@ export default function PatientPanel({
     { role: "user" | "model"; content: string; suggestions?: string[] }[]
   >(() => {
     const saved = localStorage.getItem(`ai_coach_chat_${user?.id}`);
-    return saved
-      ? JSON.parse(saved)
-      : [
-          {
-            role: "model",
-            content: "Namaste! I am your CareBridge AI Health Coach. Ã°Å¸Å’Â¸\n\nI can analyze your vitals, remind you to take active medications, and guide you on diet, sleep, or physical wellness. \n\n*English, Hindi, and Marathi* are fully supported. How are you feeling today?",
-            suggestions: [
-              "Review my water and walking goals",
-              "Suggest exercises to normalize blood pressure",
-              "Describe high-fiber foods for diabetics",
-            ],
-          },
-        ];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map((m: any) => ({
+            role: m.role,
+            content: cleanDoubleEncoding(m.content || ""),
+            suggestions: Array.isArray(m.suggestions)
+              ? m.suggestions.map((s: string) => cleanDoubleEncoding(s))
+              : m.suggestions
+          }));
+        }
+      } catch (e) {
+        console.warn("Failed to parse saved chat history:", e);
+      }
+    }
+    return [
+      {
+        role: "model",
+        content: "Namaste! I am your CareBridge AI Health Coach.\n\nI can analyze your vitals, remind you to take active medications, and guide you on diet, sleep, or physical wellness. \n\n*English, Hindi, and Marathi* are fully supported. How are you feeling today?",
+        suggestions: [
+          "Review my water and walking goals",
+          "Suggest exercises to normalize blood pressure",
+          "Describe high-fiber foods for diabetics",
+        ],
+      },
+    ];
   });
   const [aiLanguage, setAiLanguage] = useState<"English" | "Hindi" | "Marathi">(
     "English",
@@ -551,14 +659,14 @@ export default function PatientPanel({
 
   // Helper utility to deduplicate chat history and prevent duplicate conversation history injection
   const deduplicateMessages = (msgs: { role: "user" | "model"; content: string; suggestions?: string[] }[]) => {
-    const seen = new Set<string>();
     const result: typeof msgs = [];
+    let lastKey = "";
     for (const m of msgs) {
       if (!m || !m.content) continue;
       const key = `${m.role}:${m.content.trim().toLowerCase()}`;
-      if (!seen.has(key)) {
-        seen.add(key);
+      if (key !== lastKey) {
         result.push(m);
+        lastKey = key;
       }
     }
     return result;
@@ -779,86 +887,15 @@ export default function PatientPanel({
       setIsSpeaking(true);
       setSpeechError(null);
 
-      // Clean the text from markdown or special symbols
-      const cleanText = textToSpeak.split("|")[0].trim().replace(/[*#_~]/g, "");
+      // Clean the text from markdown or special symbols and resolve any encoding bugs
+      const cleanText = cleanDoubleEncoding(textToSpeak).split("|")[0].trim().replace(/[*#_~]/g, "");
 
       // Ensure browser queue is clear and initialized
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
-
-      // 1. Client-Side Cache Hit
-      if (ttsCache.current[cleanText]) {
-        console.log("TTS cache hit! Playing base64 voice immediately.");
-        const audioUrl = ttsCache.current[cleanText];
-        const audioObj = new Audio(audioUrl);
-        audioObj.volume = 1.0;
-        setCurrAudioPayload(audioObj);
-        
-        const playPromise = audioObj.play();
-        if (playPromise !== undefined) {
-          playPromise.catch((playErr) => {
-            console.warn("Autoplay block on cached audio, falling back:", playErr);
-            runBrowserSpeechSynthesis(cleanText);
-          });
-        }
-        audioObj.onended = () => {
-          setIsSpeaking(false);
-        };
-        return;
-      }
-
-      // 2. Parallel Fast Timeout Fallback (1500ms trigger limit)
-      let fetchCompleted = false;
-      const fallbackTimeout = setTimeout(() => {
-        if (!fetchCompleted) {
-          console.warn("TTS API fetch exceeded 1.5s, triggering instant low-latency browser synthesis fallback.");
-          runBrowserSpeechSynthesis(cleanText);
-        }
-      }, 1500);
-
-      const ttsResponse = await fetch("/api/ai/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: cleanText }),
-      });
-
-      fetchCompleted = true;
-      clearTimeout(fallbackTimeout);
-
-      if (!ttsResponse.ok) {
-        throw new Error("Failed to synthesize audio output.");
-      }
-
-      const resData = await ttsResponse.json();
-      if (resData.audioContent) {
-        // Cancel browser fallback if we were playing it to avoid overlap
-        if ("speechSynthesis" in window) {
-          window.speechSynthesis.cancel();
-        }
-
-        const audioUrl = `data:audio/mp3;base64,${resData.audioContent}`;
-        // Save to cache
-        ttsCache.current[cleanText] = audioUrl;
-
-        const audioObj = new Audio(audioUrl);
-        audioObj.volume = 1.0; // Ensure maximum volume
-        setCurrAudioPayload(audioObj);
-        
-        const playPromise = audioObj.play();
-        if (playPromise !== undefined) {
-          playPromise.catch((playErr) => {
-            console.warn("Audio autoplay blocked by browser policy, falling back to Web Speech:", playErr);
-            runBrowserSpeechSynthesis(cleanText);
-          });
-        }
-        
-        audioObj.onended = () => {
-          setIsSpeaking(false);
-        };
-      } else {
-        runBrowserSpeechSynthesis(cleanText);
-      }
+      // Use system's own native speech synthesis
+      runBrowserSpeechSynthesis(cleanText);
     } catch (err: any) {
       console.warn("TTS Synthesis failed, trying browser default:", err);
       const cleanText = textToSpeak.split("|")[0].trim().replace(/[*#_~]/g, "");
@@ -880,9 +917,10 @@ export default function PatientPanel({
     const queryStr = customMessage || aiInput;
     if (!queryStr.trim()) return;
 
+    const cleanedQueryStr = cleanDoubleEncoding(queryStr);
     setAiInput("");
     setAiChatMessages((prev) => {
-      const updated = [...prev, { role: "user" as const, content: queryStr }];
+      const updated = [...prev, { role: "user" as const, content: cleanedQueryStr }];
       return deduplicateMessages(updated);
     });
     setIsAiThinking(true);
@@ -903,7 +941,8 @@ export default function PatientPanel({
         - BP: ${lastLog.bp || "N/A"} mmHg, 
         - Blood sugar: ${lastLog.sugar || "N/A"} mg/dL, 
         - Pulse rate: ${lastLog.pulse || "N/A"} bpm.
-      Missed medicines: ${reminders.filter(r => r.status === "missed").length}.
+      Daily Medications: ${reminders.map(r => r.medicineName).filter(Boolean).join(', ') || "None reported"}.
+      Missed medicines today: ${reminders.filter(r => r.status === "missed").length}.
     `;
 
     try {
@@ -951,17 +990,18 @@ export default function PatientPanel({
       }
 
       const rawText = val.text || "I apologize, I'm experiencing some difficulty organizing advice right now.";
+      const cleanedRawText = cleanDoubleEncoding(rawText);
 
       // Extract suggestions divided by the vertical bar '|'
-      let mainText = rawText;
+      let mainText = cleanedRawText;
       let suggestionChips: string[] = [];
 
-      if (rawText.includes("|")) {
-        const parts = rawText.split("|");
+      if (cleanedRawText.includes("|")) {
+        const parts = cleanedRawText.split("|");
         mainText = parts[0].trim();
         suggestionChips = parts[1]
           .split(";")
-          .map((s: string) => s.trim())
+          .map((s: string) => cleanDoubleEncoding(s.trim()))
           .filter(Boolean);
       }
 
@@ -1002,8 +1042,8 @@ export default function PatientPanel({
     showNotification(`Language switched to ${lang}`, "success");
     const localizedGreetings = {
       English: "Hello! I am ready to guide you.",
-      Hindi: "Ã Â¤Â¨Ã Â¤Â®Ã Â¤Â¸Ã Â¥ÂÃ Â¤Â¤Ã Â¥â€¡! Ã Â¤Â®Ã Â¥Ë†Ã Â¤â€š Ã Â¤â€ Ã Â¤ÂªÃ Â¤â€¢Ã Â¥â‚¬ Ã Â¤Â¸Ã Â¤Â¹Ã Â¤Â¾Ã Â¤Â¯Ã Â¤Â¤Ã Â¤Â¾ Ã Â¤â€¢Ã Â¥â€¡ Ã Â¤Â²Ã Â¤Â¿Ã Â¤Â Ã Â¤Â¤Ã Â¥Ë†Ã Â¤Â¯Ã Â¤Â¾Ã Â¤Â° Ã Â¤Â¹Ã Â¥â€šÃ Â¤ÂÃ Â¥Â¤",
-      Marathi: "Ã Â¤Â¨Ã Â¤Â®Ã Â¤Â¸Ã Â¥ÂÃ Â¤â€¢Ã Â¤Â¾Ã Â¤Â°! Ã Â¤Â®Ã Â¥â‚¬ Ã Â¤Â¤Ã Â¥ÂÃ Â¤Â®Ã Â¥ÂÃ Â¤Â¹Ã Â¤Â¾Ã Â¤Â²Ã Â¤Â¾ Ã Â¤Â®Ã Â¤Â¾Ã Â¤Â°Ã Â¥ÂÃ Â¤â€”Ã Â¤Â¦Ã Â¤Â°Ã Â¥ÂÃ Â¤Â¶Ã Â¤Â¨ Ã Â¤â€¢Ã Â¤Â°Ã Â¤Â£Ã Â¥ÂÃ Â¤Â¯Ã Â¤Â¾Ã Â¤Â¸ Ã Â¤Â¤Ã Â¤Â¯Ã Â¤Â¾Ã Â¤Â° Ã Â¤â€ Ã Â¤Â¹Ã Â¥â€¡.",
+      Hindi: "Namaste! Main aapki sahayata ke liye taiyar hoon.",
+      Marathi: "Namaskar! Mi tumhala margadarshan karanyaas tayaar aahe.",
     };
     setAiChatMessages((prev) => {
       const updated = [
@@ -1032,60 +1072,108 @@ export default function PatientPanel({
         };
   });
 
-  const [reminderForm, setReminderForm] = useState({
-    medicineName: "",
-    dosage: "1 Tablet",
-    timing: "08:00", // Default HH:mm time
-    mealTime: "after" as "before" | "after" | "with",
-    repeatSchedule: "Daily",
-    startDate: getISTDateString(),
-    endDate: getISTDateString(),
-    alarmTone: "soft medical tone",
-    notes: "",
-  });
+  const [formName, setFormName] = useState("");
+  const [formGeneric, setFormGeneric] = useState("");
+  const [formType, setFormType] = useState<"Tablet" | "Capsule" | "Syrup" | "Injection" | "Drops" | "Ointment" | "Powder">("Tablet");
+  const [formStrength, setFormStrength] = useState("");
+  const [formQuantityPerDose, setFormQuantityPerDose] = useState("1");
+  const [formSchedule, setFormSchedule] = useState<"Once Daily" | "Twice Daily" | "Thrice Daily" | "Four Times Daily" | "Weekly" | "Custom">("Once Daily");
+  const [formMealTime, setFormMealTime] = useState<"after" | "before" | "with" | "empty">("after");
+  const [formTimings, setFormTimings] = useState<string[]>(["08:00"]);
+  const [formStartDate, setFormStartDate] = useState(getISTDateString());
+  const [formDurationDays, setFormDurationDays] = useState("7");
+  const [formEndDate, setFormEndDate] = useState("");
+  const [formStock, setFormStock] = useState("30");
+  const [formRefillThreshold, setFormRefillThreshold] = useState("5");
+  const [formNotes, setFormNotes] = useState("");
+  const [formAudioLang, setFormAudioLang] = useState<"english" | "hindi" | "marathi">("english");
+
+  useEffect(() => {
+    if (formStartDate && formDurationDays) {
+      const start = new Date(formStartDate);
+      const days = parseInt(formDurationDays, 10);
+      if (!isNaN(days) && days > 0) {
+        const end = new Date(start);
+        end.setDate(start.getDate() + days - 1);
+        setFormEndDate(end.toISOString().split("T")[0]);
+      }
+    }
+  }, [formStartDate, formDurationDays]);
 
   // Save medication reminders to Firebase
+  const resetForm = () => {
+    setFormName("");
+    setFormGeneric("");
+    setFormType("Tablet");
+    setFormStrength("");
+    setFormQuantityPerDose("1");
+    setFormSchedule("Once Daily");
+    setFormTimings(["08:00"]);
+    setFormMealTime("after");
+    setFormStartDate(getISTDateString());
+    setFormDurationDays("7");
+    setFormStock("30");
+    setFormRefillThreshold("5");
+    setFormNotes("");
+    setFormAudioLang("english");
+  };
+
+  const handleScheduleChange = (val: any) => {
+    setFormSchedule(val);
+    if (val === "Once Daily") {
+      setFormTimings(["08:00"]);
+    } else if (val === "Twice Daily") {
+      setFormTimings(["08:00", "20:00"]);
+    } else if (val === "Thrice Daily") {
+      setFormTimings(["08:00", "14:00", "20:00"]);
+    } else if (val === "Four Times Daily") {
+      setFormTimings(["08:00", "12:00", "16:00", "20:00"]);
+    } else if (val === "Weekly") {
+      setFormTimings(["09:00"]);
+    }
+  };
+
   const handleAddReminderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reminderForm.medicineName.trim()) {
-      showNotification("Please enter medicine name", "error");
+    if (!formName.trim()) {
+      showNotification("Please specify the medicine name", "error");
       return;
     }
 
     try {
-      const payload = {
+      const payload: any = {
         userId: user.id,
         userName: user.name || "Patient",
-        medicineName: reminderForm.medicineName,
-        dosage: reminderForm.dosage,
-        timings: [reminderForm.timing],
-        mealTime: reminderForm.mealTime,
-        repeatSchedule: reminderForm.repeatSchedule,
-        startDate: reminderForm.startDate,
-        endDate: reminderForm.endDate,
-        alarmTone: reminderForm.alarmTone,
-        notes: reminderForm.notes,
+        medicineName: formName,
+        genericName: formGeneric,
+        type: formType,
+        form: formType.toLowerCase(),
+        dosage: formStrength ? `${formQuantityPerDose} ${formType} (${formStrength})` : `${formQuantityPerDose} ${formType}`,
+        timings: formTimings,
+        mealTime: formMealTime,
+        repeatSchedule: formSchedule,
+        startDate: formStartDate,
+        endDate: formEndDate,
+        stockQuantity: parseInt(formStock, 10) || 50,
+        refillThreshold: parseInt(formRefillThreshold, 10) || 5,
+        alarmTone: "soft medical tone",
+        notes: formNotes,
+        audioLang: formAudioLang,
+        language: formAudioLang === "marathi" ? "Marathi" : formAudioLang === "hindi" ? "Hindi" : "English",
+        color: "#3B82F6",
+        symbol: "pill",
         status: "active",
-        vibrationEnabled: medAlarmSettings.alarmVibration,
-        createdAt: serverTimestamp(),
+        createdAt: serverTimestamp()
       };
 
       await addDoc(collection(db, "medicine_reminders"), payload);
-      showNotification(`"${reminderForm.medicineName}" added to reminder dashboard!`, "success");
+      showNotification(`"${formName}" scheduled dynamically!`, "success");
+
+      resetForm();
       setShowReminderModal(false);
-      setReminderForm({
-        medicineName: "",
-        dosage: "1 Tablet",
-        timing: "08:00",
-        mealTime: "after",
-        repeatSchedule: "Daily",
-        startDate: getISTDateString(),
-        endDate: getISTDateString(),
-        alarmTone: "soft medical tone",
-        notes: "",
-      });
-    } catch (err) {
-      showNotification("Failed to schedule reminder.", "error");
+    } catch (err: any) {
+      console.error(err);
+      showNotification("Could not schedule medication", "error");
     }
   };
 
@@ -1106,10 +1194,11 @@ export default function PatientPanel({
   } | null>(null);
 
   const [simulatedVibeAct, setSimulatedVibeAct] = useState(false);
-  const runningAlarmSoundRef = useRef<HTMLAudioElement | null>(null);
-  const wakeLockRef = useRef<any>(null);
-  const synthIntervalRef = useRef<any>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const synthIntervalRef = useRef<any>(null);
+  const runningAlarmSoundRef = useRef<HTMLAudioElement | null>(null);
+  const handledAlarmsRef = useRef<Record<string, boolean>>({});
+  const wakeLockRef = useRef<any>(null);
 
   // Support Screen Wake Lock API to prevent screen-off suspension
   useEffect(() => {
@@ -1144,7 +1233,7 @@ export default function PatientPanel({
     };
   }, []);
 
-  // Global user interaction unblocker for browser AudioContext
+  // Global user interaction unblocker for browser AudioContext and SpeechSynthesis
   useEffect(() => {
     const unlockAudio = () => {
       try {
@@ -1154,6 +1243,13 @@ export default function PatientPanel({
         }
         if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
           audioCtxRef.current.resume();
+        }
+        
+        // Globally unlock speech synthesis for automated background alarms
+        if ("speechSynthesis" in window) {
+           const unlockUtterance = new SpeechSynthesisUtterance("");
+           unlockUtterance.volume = 0;
+           window.speechSynthesis.speak(unlockUtterance);
         }
       } catch (err) {
         console.warn("Could not auto-initialize Web Audio Context:", err);
@@ -1353,6 +1449,8 @@ export default function PatientPanel({
     if (runningAlarmSoundRef.current) {
       try {
         runningAlarmSoundRef.current.pause();
+        runningAlarmSoundRef.current.currentTime = 0;
+        runningAlarmSoundRef.current.removeAttribute('src');
       } catch (err) {}
       runningAlarmSoundRef.current = null;
     }
@@ -1376,6 +1474,64 @@ export default function PatientPanel({
     
     // Play sound safely using the secure audio pipeline
     startAlarmSound(rem.alarmTone || "soft medical tone");
+
+    // Trigger the precise voice message based on selected language and time of day
+    setTimeout(() => {
+      const hour = new Date().getHours();
+      let greetingEn = "Good morning";
+      let greetingHi = "शुभ प्रभात";
+      let greetingMr = "शुभ प्रभात";
+      
+      if (hour >= 12 && hour < 17) {
+        greetingEn = "Good afternoon";
+        greetingHi = "शुभ दोपहर";
+        greetingMr = "शुभ दुपार";
+      } else if (hour >= 17) {
+        greetingEn = "Good evening";
+        greetingHi = "शुभ संध्या";
+        greetingMr = "शुभ संध्या";
+      }
+
+      const pName = rem.userName || "Patient";
+      const mName = rem.medicineName || "Medicine";
+
+      let voiceMsg = `${greetingEn} ${pName}, your ${mName} time is up, please take your medicine.`;
+      let langCode = "en-US";
+      
+      const langLower = String(rem.audioLang || rem.language || "english").toLowerCase();
+      if (langLower.includes("marathi") || langLower.includes("mr")) {
+        voiceMsg = `${greetingMr} ${pName} जी, तुमच्या ${mName} ची वेळ झाली आहे, औषध घ्या.`;
+        langCode = "mr-IN";
+      } else if (langLower.includes("hindi") || langLower.includes("hi")) {
+        voiceMsg = `${greetingHi} ${pName} जी, आपके ${mName} का टाइम हो गया है, दवाई लीजिये।`;
+        langCode = "hi-IN";
+      }
+
+      // Direct fallback-free native TTS call for max reliability during alarms
+      if ("speechSynthesis" in window) {
+        try {
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.resume();
+          const utterance = new SpeechSynthesisUtterance(voiceMsg);
+          utterance.lang = langCode;
+          utterance.volume = 1.0;
+          utterance.rate = 0.9;
+          
+          const allVoices = window.speechSynthesis.getVoices();
+          let matchedVoice = allVoices.find(v => v.lang.toLowerCase() === langCode.toLowerCase()) ||
+                             allVoices.find(v => v.lang.toLowerCase().startsWith(langCode.split("-")[0]));
+          if (matchedVoice) {
+            utterance.voice = matchedVoice;
+          }
+          
+          window.speechSynthesis.speak(utterance);
+        } catch (e) {
+          console.error("Direct Speech error:", e);
+        }
+      } else {
+         speakText(voiceMsg);
+      }
+    }, 1000);
 
     // Simulate vibration pattern with visual flashes
     if (medAlarmSettings.alarmVibration && "vibrate" in navigator) {
@@ -1407,6 +1563,10 @@ export default function PatientPanel({
     setSimulatedVibeAct(false);
 
     if (activeAlarm) {
+      const handledKey = `${activeAlarm.reminder.id}_${getISTDateString()}_${activeAlarm.timing}`;
+      if (action !== "snooze") {
+        handledAlarmsRef.current[handledKey] = true;
+      }
       logMedicineConsumption(activeAlarm.reminder, action);
     }
     setActiveAlarm(null);
@@ -1474,6 +1634,9 @@ export default function PatientPanel({
   const closeActiveDailyAlarm = (action: "done" | "dismiss") => {
     stopAlarmSound();
     if (activeDailyAlarm) {
+      const handledKey = `daily_${activeDailyAlarm.reminder.id}_${getISTDateString()}_${activeDailyAlarm.timing}`;
+      handledAlarmsRef.current[handledKey] = true;
+
       if (action === "done") {
         markDailyReminderStatus(activeDailyAlarm.reminder.id, "completed");
       } else {
@@ -1516,7 +1679,8 @@ export default function PatientPanel({
           const alreadyLogged = healthLogs.some(
             (l) => l.medicineName === rem.medicineName && l.timing === checkedTime && l.date === today
           );
-          if (!alreadyLogged && (!activeAlarm || activeAlarm.reminder.id !== rem.id)) {
+          const handledKey = `${rem.id}_${today}_${checkedTime}`;
+          if (!alreadyLogged && !handledAlarmsRef.current[handledKey] && (!activeAlarm || activeAlarm.reminder.id !== rem.id)) {
             startFullscreenAlarm(rem, checkedTime);
           }
         }
@@ -1540,7 +1704,8 @@ export default function PatientPanel({
         }
 
         if (isTodayMatch && rem.time === checkedTime) {
-          if (!activeDailyAlarm || activeDailyAlarm.reminder.id !== rem.id) {
+          const handledKey = `daily_${rem.id}_${today}_${checkedTime}`;
+          if (!handledAlarmsRef.current[handledKey] && (!activeDailyAlarm || activeDailyAlarm.reminder.id !== rem.id)) {
             startFullscreenDailyAlarm(rem, checkedTime);
           }
         }
@@ -1604,9 +1769,15 @@ export default function PatientPanel({
               const currentH = new Date().getHours().toString().padStart(2, "0");
               const currentM = new Date().getMinutes().toString().padStart(2, "0");
               const currentTime = `${currentH}:${currentM}`;
+              const handledKey = `${rem.id}_${getISTDateString()}_${currentTime}`;
+              handledAlarmsRef.current[handledKey] = true;
               logMedicineConsumption(rem, "taken", currentTime);
+              stopAlarmSound();
+              setActiveAlarm(null);
             } else {
               showNotification("Medication alarm dismissed", "info");
+              stopAlarmSound();
+              setActiveAlarm(null);
             }
           }
         }
@@ -2283,7 +2454,11 @@ export default function PatientPanel({
                 CAREBRIDGE CLINICAL ALARM ACTIVATED
               </p>
               <h2 className="text-4xl font-black leading-tight tracking-tight">
-                Time to take your Medicine
+                {activeAlarm.reminder.language === "Marathi" 
+                  ? "औषध घेण्याची वेळ झाली आहे" 
+                  : activeAlarm.reminder.language === "Hindi"
+                  ? "दवा लेने का समय हो गया है"
+                  : "Time to take your Medicine"}
               </h2>
             </div>
 
@@ -2417,7 +2592,7 @@ export default function PatientPanel({
         )}
       </AnimatePresence>
 
-      <div className={`min-h-screen flex flex-col font-sans transition-all ${darkMode ? "bg-[#040814] text-slate-100" : "bg-[#f8f9fc] text-slate-800"}`}>
+      <div className={`min-h-screen flex flex-col font-sans transition-all ${darkMode ? "dark bg-[#040814] text-slate-100" : "bg-[#f8f9fc] text-slate-800"}`}>
         
         {/* ==========================================
             PREMIUM HEADER AND MOBILE APP TOPBAR
@@ -2433,7 +2608,8 @@ export default function PatientPanel({
               <Menu size={22} />
             </button>
             <div>
-              <div className="flex items-center gap-1.5 leading-none">
+              <div className="flex items-center gap-2 leading-none">
+                <img src="/carebridge-logo.png" alt="CareBridge Logo" className="w-12 h-12 object-contain drop-shadow-md hover:scale-105 transition-transform" />
                 <span className="font-black text-lg tracking-tight bg-linear-to-r from-blue-500 to-emerald-400 bg-clip-text text-transparent">
                   CareBridge Plus
                 </span>
@@ -2441,7 +2617,7 @@ export default function PatientPanel({
                   PT
                 </span>
               </div>
-              <p className="text-[10px] uppercase font-black tracking-widest text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className={`text-[10px] uppercase font-black tracking-widest mt-0.5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
                 Active Patient Universe
               </p>
             </div>
@@ -2486,7 +2662,7 @@ export default function PatientPanel({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden"
+                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] lg:hidden"
                 onClick={() => setIsSidebarOpen(false)}
               />
             )}
@@ -2494,45 +2670,50 @@ export default function PatientPanel({
 
           <aside
             style={{ height: "100dvh", display: "flex", flexDirection: "column" }}
-            className={`fixed inset-y-0 left-0 lg:static lg:flex flex-col w-72 border-r transition-transform duration-300 z-50 overflow-hidden ${
+            className={`fixed inset-y-0 left-0 lg:static lg:flex flex-col w-64 lg:w-64 border-r transition-all duration-300 z-[70] overflow-y-auto lg:overflow-hidden backdrop-blur-xl ${
               isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-            } ${darkMode ? "bg-[#060b1e] border-white/5" : "bg-white border-slate-100"}`}
+            } ${darkMode ? "bg-slate-900 border-white/20 shadow-2xl shadow-black/50" : "bg-white/95 border-slate-200/50 shadow-2xl shadow-slate-300/40"}`}
           >
-            
-            <div className="p-6 border-b border-slate-500/10 flex items-center justify-between lg:justify-start gap-4 shrink-0">
-              <div className="flex items-center gap-3">
+            {/* ── PATIENT PROFILE CARD ── */}
+            <div className={`p-3.5 m-3 mb-2 rounded-2xl flex items-center justify-between gap-3 shrink-0 ${darkMode ? "bg-white/5 border border-white/8" : "bg-slate-50 border border-slate-100"}`}>
+              <div className="flex items-center gap-3 min-w-0">
                 <PatientAvatar
                   gender={patientDetails?.gender || user?.gender}
                   name={user?.name}
-                  size={44}
+                  size={38}
                 />
-                <div>
-                  <h4 className="font-extrabold text-sm truncate max-w-[140px]">{user?.name || "Patient"}</h4>
-                  <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Health ID: Care-{user?.id?.slice(-5)}</p>
+                <div className="flex flex-col min-w-0">
+                  <h4 className={`font-black text-xs uppercase tracking-wider truncate ${darkMode ? "text-white" : "text-slate-900"}`}>
+                    {user?.name || "PATIENT"}
+                  </h4>
+                  <p className={`text-[9px] font-extrabold uppercase tracking-widest truncate mt-0.5 ${darkMode ? "text-slate-300" : "text-slate-500"}`}>
+                    HEALTH ID: CARE-{user?.id?.slice(-5)}
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsSidebarOpen(false)}
-                className="p-2 lg:hidden rounded-2xl hover:bg-slate-500/10 text-slate-500 dark:text-slate-400"
+                className="p-1.5 lg:hidden rounded-xl hover:bg-slate-500/10 text-slate-400"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
+            {/* ── NAVIGATION MENU ── */}
             <nav
               style={{ overflowY: "auto", WebkitOverflowScrolling: "touch" }}
-              className="flex-1 p-4 space-y-2.5 custom-scrollbar"
+              className="flex-1 px-3 py-2 space-y-0.5 custom-scrollbar"
             >
               {[
-                { id: "dashboard", icon: LayoutDashboard, label: "Home Base", gradient: "from-[#3B82F6] to-[#1D4ED8]", shadow: "shadow-blue-500/20" },
-                { id: "profile", icon: UserIcon, label: "My Profile", gradient: "from-[#EC4899] to-[#DB2777]", shadow: "shadow-pink-500/20" },
-                { id: "ai_helper", icon: Brain, label: "AI Health Coach", gradient: "from-[#F59E0B] to-[#D97706]", shadow: "shadow-amber-500/20" },
-                { id: "my_medicine", icon: Pill, label: "Medicine Tracker", gradient: "from-[#10B981] to-[#047857]", shadow: "shadow-emerald-500/20" },
-                { id: "daily_reminders", icon: Bell, label: "Reminders Hub", gradient: "from-[#F59E0B] to-[#D97706]", shadow: "shadow-amber-500/20" },
-                { id: "online_apt", icon: Stethoscope, label: "Online Appointment", gradient: "from-[#0D9488] to-[#0F766E]", shadow: "shadow-teal-500/20" },
-                { id: "health_analyst", icon: Activity, label: "Clinical Analyst", gradient: "from-[#EF4444] to-[#B91C1C]", shadow: "shadow-rose-500/20" },
-                { id: "habits", icon: ListTodo, label: "Personal Habits", gradient: "from-[#8B5CF6] to-[#6D28D9]", shadow: "shadow-purple-500/20" },
-                { id: "reports", icon: ClipboardList, label: "My Reports", gradient: "from-[#06B6D4] to-[#0891B2]", shadow: "shadow-cyan-500/20" },
+                { id: "dashboard", icon: LayoutDashboard, label: "HOME BASE", gradient: "from-[#3B82F6] to-[#1D4ED8]", shadow: "shadow-blue-500/20" },
+                { id: "profile", icon: UserIcon, label: "MY PROFILE", gradient: "from-[#EC4899] to-[#DB2777]", shadow: "shadow-pink-500/20" },
+                { id: "ai_helper", icon: Brain, label: "AI HEALTH COACH", gradient: "from-[#F59E0B] to-[#D97706]", shadow: "shadow-amber-500/20" },
+                { id: "my_medicine", icon: Pill, label: "MEDICINE TRACKER", gradient: "from-[#10B981] to-[#047857]", shadow: "shadow-emerald-500/20" },
+                { id: "daily_reminders", icon: Bell, label: "REMINDERS HUB", gradient: "from-[#F59E0B] to-[#D97706]", shadow: "shadow-amber-500/20" },
+                { id: "online_apt", icon: Stethoscope, label: "ONLINE APPOINTMENT", gradient: "from-[#0D9488] to-[#0F766E]", shadow: "shadow-teal-500/20" },
+                { id: "health_analyst", icon: Activity, label: "CLINICAL ANALYST", gradient: "from-[#EF4444] to-[#B91C1C]", shadow: "shadow-rose-500/20" },
+                { id: "habits", icon: ListTodo, label: "PERSONAL HABITS", gradient: "from-[#8B5CF6] to-[#6D28D9]", shadow: "shadow-purple-500/20" },
+                { id: "reports", icon: ClipboardList, label: "MY REPORTS", gradient: "from-[#06B6D4] to-[#0891B2]", shadow: "shadow-cyan-500/20" },
               ].map((item) => {
                 const active = activeTab === item.id;
                 return (
@@ -2542,29 +2723,37 @@ export default function PatientPanel({
                       setActiveTab(item.id);
                       setIsSidebarOpen(false);
                     }}
-                    className={`w-full group flex items-center justify-between px-3.5 py-2.5 rounded-2xl transition-all duration-300 ${
+                    className={`w-full group relative flex items-center justify-between px-3 py-2.5 rounded-xl transition-all duration-200 ${
                       active
                         ? darkMode
-                          ? "bg-[#0b132b] text-white shadow-xl shadow-blue-500/5 border border-white/5"
-                          : "bg-white text-slate-900 shadow-xl shadow-blue-500/5 border border-slate-200/50"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-500 hover:bg-slate-500/5"
+                          ? "bg-slate-800/90 text-white shadow-md border border-white/20"
+                          : "bg-white text-blue-600 shadow-sm border border-slate-100"
+                        : darkMode
+                          ? "text-slate-300 hover:text-white hover:bg-white/10"
+                          : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/80"
                     }`}
                   >
-                    <div className="flex items-center gap-4">
-                      {/* Colour-full glassmorphic-inspired image-like custom icon */}
+                    {active && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-gradient-to-b from-blue-500 to-emerald-400" />
+                    )}
+                    <div className="flex items-center gap-3 min-w-0">
                       <ColorfulImageIcon
                         icon={item.icon}
                         gradient={item.gradient}
                         shadow={item.shadow}
-                        size={15}
+                        size={16}
                       />
-                      <span className={`font-black text-sm tracking-tight ${active ? "text-blue-500 dark:text-blue-400" : "text-slate-600 dark:text-slate-400"}`}>
+                      <span className={`font-black text-[12px] uppercase tracking-wider truncate ${
+                        active 
+                          ? (darkMode ? "text-blue-400" : "text-blue-600") 
+                          : (darkMode ? "text-slate-200 group-hover:text-white" : "text-slate-700 group-hover:text-slate-900")
+                      }`}>
                         {item.label}
                       </span>
                     </div>
                     {item.id === "ai_helper" && (
-                      <span className="bg-emerald-500 text-white text-[9px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded-full animate-bounce">
-                        Live AI
+                      <span className="bg-emerald-500 text-white text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full shadow-xs shrink-0 animate-pulse">
+                        LIVE AI
                       </span>
                     )}
                   </button>
@@ -2572,64 +2761,50 @@ export default function PatientPanel({
               })}
             </nav>
 
-            {/* SECTION 3 (Always Visible at Bottom) */}
-            <div className={`p-4 border-t shrink-0 space-y-1.5 ${darkMode ? "border-slate-500/10 bg-[#060b1e]/60" : "border-slate-200/50 bg-white"}`}>
-              {/* Log Out button above settings */}
+            {/* ── BOTTOM ACTIONS ── */}
+            <div className={`p-3.5 pb-8 lg:pb-3.5 border-t shrink-0 ${darkMode ? "border-white/8" : "border-slate-100"}`}>
+              <div className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setShowSettingsModal(true)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold text-[11px] uppercase tracking-widest transition-all ${
+                    darkMode ? "text-slate-300 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                  }`}
+                >
+                  <Settings size={14} className="opacity-70 shrink-0" />
+                  <span>SETTINGS</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDarkMode(!darkMode)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold text-[11px] uppercase tracking-widest transition-all ${
+                    darkMode ? "text-slate-300 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                  }`}
+                >
+                  {darkMode ? <Sun size={14} className="opacity-70 shrink-0" /> : <Moon size={14} className="opacity-70 shrink-0" />}
+                  <span>{darkMode ? "LIGHT THEME" : "DEEP DARK"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowHelpModal(true)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold text-[11px] uppercase tracking-widest transition-all ${
+                    darkMode ? "text-slate-300 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                  }`}
+                >
+                  <Info size={14} className="opacity-70 shrink-0" />
+                  <span>HELP &amp; SUPPORT</span>
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={onLogout}
-                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black text-xs uppercase tracking-widest transition-all shadow-md shadow-red-600/20"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 mt-2 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:opacity-90 active:scale-[0.98] text-white font-black text-[11px] uppercase tracking-widest transition-all shadow-md shadow-rose-500/20"
               >
-                <LogOut size={16} />
-                <span>Log Out</span>
-              </button>
-
-              {/* Settings button */}
-              <button
-                type="button"
-                onClick={() => setShowSettingsModal(true)}
-                className={`w-full flex items-center gap-3 px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all duration-300 ${
-                  darkMode ? "text-slate-300 hover:bg-slate-500/10 hover:text-white" : "text-slate-600 hover:bg-slate-500/5 hover:text-slate-900"
-                }`}
-              >
-                <Settings size={15} />
-                <span>Settings</span>
-              </button>
-
-              {/* Theme Toggle button */}
-              <button
-                type="button"
-                onClick={() => setDarkMode(!darkMode)}
-                className={`w-full flex items-center justify-between px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all duration-300 ${
-                  darkMode ? "text-slate-300 hover:bg-slate-500/10 hover:text-white" : "text-slate-600 hover:bg-slate-500/5 hover:text-slate-900"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  {darkMode ? <Sun size={15} /> : <Moon size={15} />}
-                  <span>{darkMode ? "Light Theme" : "Deep Dark"}</span>
-                </div>
-              </button>
-
-              {/* Help & Support button */}
-              <button
-                type="button"
-                onClick={() => setShowHelpModal(true)}
-                className={`w-full flex items-center gap-3 px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all duration-300 ${
-                  darkMode ? "text-slate-300 hover:bg-slate-500/10 hover:text-white" : "text-slate-600 hover:bg-slate-500/5 hover:text-slate-900"
-                }`}
-              >
-                <Info size={15} />
-                <span>Help & Support</span>
-              </button>
-
-              {/* Logout button */}
-              <button
-                type="button"
-                onClick={onLogout}
-                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 mt-1 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black text-xs uppercase tracking-widest transition-all shadow-md shadow-red-600/20"
-              >
-                <LogOut size={16} />
-                <span>Log Out</span>
+                <LogOut size={14} />
+                <span>LOG OUT</span>
               </button>
             </div>
           </aside>
@@ -2654,6 +2829,45 @@ export default function PatientPanel({
                     className="space-y-8"
                   >
                     
+                    {/* ==========================================
+                        SUBSCRIPTION NAVIGATION BANNER (PATIENT)
+                        ========================================== */}
+                    <div className={`p-4 sm:p-5 rounded-3xl border flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm ${darkMode ? "bg-slate-900/50 border-blue-900/30" : "bg-blue-50/50 border-blue-100"}`}>
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 shrink-0">
+                          <Crown size={24} className="animate-pulse" />
+                        </div>
+                        <div>
+                          <h3 className={`text-sm font-black uppercase tracking-wide ${darkMode ? "text-slate-100" : "text-slate-800"}`}>
+                            {subStatus === "active" ? "CareBridge+ Patient (Active)" : "CareBridge+ Patient Subscription"}
+                          </h3>
+                          {subStatus === "trial" && remaining > 0 ? (
+                            <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                              Free Trial: {days >= 3 ? 3 : days + 1}/3 Days Remaining
+                            </p>
+                          ) : subStatus === "expired" || (subStatus === "trial" && remaining <= 0) ? (
+                            <p className="text-xs font-bold text-red-500 mt-0.5">
+                              Trial Expired. Please subscribe to continue.
+                            </p>
+                          ) : subStatus === "active" ? (
+                            <p className="text-xs font-bold text-emerald-500 mt-0.5">
+                              All premium health tracking features unlocked.
+                            </p>
+                          ) : (
+                            <p className={`text-xs font-bold mt-0.5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              Upgrade to unlock AI Coach & Premium Tracking at just ₹49/mo
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => setShowSubscriptionPlan(true)}
+                        className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-lg shadow-blue-500/25 transition-all transform hover:scale-[1.02] active:scale-95"
+                      >
+                        View Plan Details
+                      </button>
+                    </div>
+
                     {/* Hello Board Welcoming Card */}
                     <div className={`p-8 sm:p-10 rounded-[2.5rem] relative overflow-hidden border bg-linear-to-tr ${
                       darkMode 
@@ -2668,18 +2882,17 @@ export default function PatientPanel({
                           <span className="px-3.5 py-1.5 rounded-full text-xs font-black bg-blue-500/15 text-blue-500 dark:text-blue-400 uppercase tracking-widest leading-none">
                             Patient Hub Console
                           </span>
-                          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight">
-                            Namaste & Welcome, <span className="text-[#3b82f6] dark:text-[#10B981]">{user?.name || "Patient"}</span> Ã¢Å“Â¨
+                          <h1 className={`text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-tight ${darkMode ? "text-white" : "text-slate-800"}`}>
+                            Namaste & Welcome, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-indigo-600 drop-shadow-sm">{user?.name || "Patient"}</span>
                           </h1>
-                          <p className="text-sm sm:text-base text-slate-500 dark:text-slate-300 font-medium max-w-xl leading-relaxed">
+                          <p className={`text-sm sm:text-base font-semibold max-w-xl leading-relaxed mt-2 ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
                             Continuous Care Network Active. Your bio-metric data trends and today's active medical schedule are fully synchronized under clinical security standards.
-                          </p>
- 
+                          </p> 
                           {/* Instant Advice Bullet */}
-                          <div className="flex items-center gap-2.5 text-xs sm:text-sm font-black text-emerald-500 pt-1.5">
+                          <div className="flex items-center gap-2.5 text-xs sm:text-sm font-extrabold text-teal-700 dark:text-teal-400 pt-1.5">
                             <Sparkles size={16} className="animate-spin-slow text-amber-500" />
                             <span>AI HEALTH SCORE:</span>
-                            <span className="font-mono bg-emerald-500/10 px-2.5 py-1 rounded-xl text-base text-[#10B981] border border-emerald-500/10">
+                            <span className="font-mono bg-emerald-100/80 dark:bg-emerald-900/40 px-3 py-1 rounded-xl text-base text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shadow-sm">
                               {medicineAdherenceRate}% Consistent
                             </span>
                           </div>
@@ -2689,16 +2902,16 @@ export default function PatientPanel({
                         <div className="flex flex-wrap items-center gap-4 shrink-0">
                           <button
                             onClick={handleLogVitalsToggle}
-                            className="px-6 py-4 bg-emerald-600 hover:bg-emerald-500 dark:bg-[#10B981] dark:hover:bg-emerald-400 active:scale-95 text-white font-black text-sm uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 transform hover:translate-y-[-2px] cursor-pointer"
+                            className="px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-extrabold text-sm uppercase tracking-[0.15em] rounded-[1rem] shadow-lg shadow-teal-500/30 hover:shadow-teal-500/40 transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-white/10"
                           >
                             Update My Vitals
                           </button>
                           <button
                             onClick={() => setActiveTab("ai_helper")}
-                            className="p-4 rounded-2xl bg-slate-500/5 dark:bg-slate-800/40 border border-slate-500/10 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 dark:hover:bg-blue-500/20 transition-all duration-300 cursor-pointer shadow-sm hover:shadow-md"
+                            className="p-3.5 rounded-[1rem] bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all duration-300 cursor-pointer shadow-sm hover:shadow-md transform hover:-translate-y-1"
                             title="Open AI Health Coach Chat"
                           >
-                            <Brain size={24} className="text-[#3b82f6] animate-pulse" />
+                            <Brain size={26} className="text-[#3b82f6]" strokeWidth={1.5} />
                           </button>
                         </div>
                       </div>
@@ -2707,32 +2920,32 @@ export default function PatientPanel({
                     {/* ==========================================
                         MODULE 6: LIVE AI SUPERVISOR CRITICAL ADVISORY BANDS
                         ========================================== */}
-                    <div className={`p-5 rounded-[2.5rem] border relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
+                    <div className={`p-6 rounded-[2.5rem] border relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm backdrop-blur-sm transition-all duration-300 hover:shadow-md ${
                       supervisorIntegrityAdvisory.severity === "high"
-                        ? "bg-rose-500/5 border-rose-500/20 text-rose-300"
+                        ? "bg-rose-50/80 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-900/50 dark:text-rose-300"
                         : supervisorIntegrityAdvisory.severity === "medium"
-                        ? "bg-amber-500/5 border-amber-500/20 text-amber-300"
-                        : "bg-emerald-500/5 border-emerald-500/20 text-emerald-300"
+                        ? "bg-amber-50/80 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900/50 dark:text-amber-300"
+                        : "bg-emerald-50/80 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900/50 dark:text-emerald-300"
                     }`}>
-                      <div className="flex items-start gap-4">
-                        <div className={`p-3 rounded-2xl mt-0.5 ${
+                      <div className="flex items-start gap-4 z-10">
+                        <div className={`p-3 rounded-2xl mt-0.5 shadow-sm ${
                           supervisorIntegrityAdvisory.severity === "high"
-                            ? "bg-rose-500/10 text-rose-500"
+                            ? "bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-400"
                             : supervisorIntegrityAdvisory.severity === "medium"
-                            ? "bg-amber-500/10 text-amber-500"
-                            : "bg-emerald-500/10 text-emerald-500"
+                            ? "bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400"
+                            : "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400"
                         }`}>
-                          <ShieldCheck size={24} className="animate-pulse" />
+                          <ShieldCheck size={26} className="animate-pulse" strokeWidth={1.5} />
                         </div>
                         <div className="space-y-1">
-                          <h4 className="text-xs uppercase font-black tracking-widest">{supervisorIntegrityAdvisory.header}</h4>
-                          <p className={`text-xs leading-relaxed max-w-2xl ${darkMode ? "text-slate-500 dark:text-slate-400" : "text-slate-600"}`}>
+                          <h4 className="text-xs uppercase font-extrabold tracking-[0.15em]">{supervisorIntegrityAdvisory.header}</h4>
+                          <p className={`text-sm font-medium leading-relaxed max-w-2xl opacity-90`}>
                             {supervisorIntegrityAdvisory.message}
                           </p>
                         </div>
                       </div>
-                      <div className="w-full md:w-auto flex justify-end">
-                        <div className="text-[10px] font-black uppercase tracking-widest bg-slate-500/10 text-slate-500 dark:text-slate-400 px-3 py-1.5 rounded-xl border border-slate-500/10">
+                      <div className="w-full md:w-auto flex justify-end z-10">
+                        <div className="text-[10px] font-extrabold uppercase tracking-[0.2em] bg-black/5 dark:bg-white/10 px-4 py-2 rounded-xl border border-black/5 dark:border-white/5 shadow-sm">
                           Supervisor Active
                         </div>
                       </div>
@@ -2743,10 +2956,10 @@ export default function PatientPanel({
                         ========================================== */}
                     <div className="space-y-4">
                       <div className="flex items-center gap-2 px-2">
-                        <Sparkles className="text-amber-505 text-amber-500 animate-pulse-slow font-bold" size={20} />
+                        <Sparkles className="text-amber-500 animate-pulse-slow font-bold" size={20} />
                         <div>
-                          <h3 className="font-black text-lg tracking-tight">Clinical Service Suites</h3>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">Instantly launch your desired digital healthcare system</p>
+                          <h3 className="font-extrabold text-xl tracking-tight text-slate-900 dark:text-white">Clinical Service Suites</h3>
+                          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Instantly launch your desired digital healthcare system</p>
                         </div>
                       </div>
 
@@ -2832,12 +3045,12 @@ export default function PatientPanel({
                                 setActiveTab(feat.id);
                                 window.scrollTo({ top: 0, behavior: "smooth" });
                               }}
-                              className={`group p-6 rounded-[2.5rem] border text-left space-y-4 hover:shadow-2xl hover:translate-y-[-4px] transition-all duration-300 cursor-pointer ${
+                              className={`group p-6 rounded-[2.5rem] border text-left space-y-4 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] hover:translate-y-[-4px] transition-all duration-300 cursor-pointer ${
                                 active 
-                                  ? "border-blue-500 ring-2 ring-blue-500 bg-blue-500/10" 
+                                  ? "border-blue-500 ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-900/20" 
                                   : darkMode 
-                                    ? "bg-slate-900/40 border-white/5 hover:border-slate-800" 
-                                    : "bg-white border-slate-200/60 hover:border-slate-300 hover:shadow-xl"
+                                    ? "bg-slate-900/60 border-white/10 hover:border-slate-700 backdrop-blur-sm" 
+                                    : "bg-white/80 border-slate-200/80 hover:border-slate-300 backdrop-blur-sm shadow-sm"
                               }`}
                             >
                               {/* Colour full image like icons */}
@@ -2878,7 +3091,6 @@ export default function PatientPanel({
                           </div>
                           <button
                             onClick={() => {
-                              setActiveTab("my_medicine");
                               setShowReminderModal(true);
                             }}
                             className="text-sm font-extrabold uppercase tracking-wider text-emerald-500 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition-colors"
@@ -2928,7 +3140,7 @@ export default function PatientPanel({
                                         onClick={() => startFullscreenAlarm(med, med.timings?.[0] || "08:00")}
                                         className="p-2 px-3.5 hover:bg-rose-500/10 text-rose-500 dark:text-rose-400 text-xs font-black rounded-xl uppercase transition-colors shrink-0"
                                       >
-                                        Ã°Å¸â€â€ Test Ring
+                                        Test Ring
                                       </button>
                                       <button
                                         onClick={() => deleteMedReminder(med.id, med.medicineName)}
@@ -2970,50 +3182,50 @@ export default function PatientPanel({
                         }`}>
                           <div className="grid grid-cols-2 gap-4">
                             {/* Blood Pressure Card */}
-                            <div className="p-4 bg-red-500/5 dark:bg-slate-800/20 rounded-[1.8rem] border border-red-500/10">
+                            <div className={`p-4 rounded-[1.8rem] border ${darkMode ? "bg-slate-800/60 border-red-500/20" : "bg-red-500/5 border-red-500/10"}`}>
                               <p className="text-xs font-extrabold uppercase text-rose-500 flex items-center gap-1">
                                 <HeartPulse size={12} className="animate-pulse" />
                                 BP
                               </p>
-                              <p className="font-mono text-2xl font-black mt-1.5 text-slate-900 dark:text-white">{healthLogs?.[0]?.bp || "120/80"}</p>
-                              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block mt-0.5">mmHg</span>
+                              <p className={`font-mono text-2xl font-black mt-1.5 ${darkMode ? "text-white" : "text-slate-900"}`}>{healthLogs?.[0]?.bp || "120/80"}</p>
+                              <span className={`text-[10px] uppercase font-bold block mt-0.5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>mmHg</span>
                             </div>
 
                             {/* Sugar Card */}
-                            <div className="p-4 bg-amber-500/5 dark:bg-slate-800/20 rounded-[1.8rem] border border-amber-500/10">
+                            <div className={`p-4 rounded-[1.8rem] border ${darkMode ? "bg-slate-800/60 border-amber-500/20" : "bg-amber-500/5 border-amber-500/10"}`}>
                               <p className="text-xs font-extrabold uppercase text-amber-500 flex items-center gap-1">
                                 <Activity size={12} />
                                 Sugar
                               </p>
-                              <p className="font-mono text-2xl font-black mt-1.5 text-slate-900 dark:text-white">{healthLogs?.[0]?.sugar || "110"}</p>
-                              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block mt-0.5">mg/dL</span>
+                              <p className={`font-mono text-2xl font-black mt-1.5 ${darkMode ? "text-white" : "text-slate-900"}`}>{healthLogs?.[0]?.sugar || "110"}</p>
+                              <span className={`text-[10px] uppercase font-bold block mt-0.5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>mg/dL</span>
                             </div>
 
                             {/* SpO2 Card */}
-                            <div className="p-4 bg-cyan-500/5 dark:bg-slate-800/20 rounded-[1.8rem] border border-cyan-500/10">
-                              <p className="text-xs font-extrabold uppercase text-cyan-550 text-cyan-500 flex items-center gap-1">
+                            <div className={`p-4 rounded-[1.8rem] border ${darkMode ? "bg-slate-800/60 border-cyan-500/20" : "bg-cyan-500/5 border-cyan-500/10"}`}>
+                              <p className="text-xs font-extrabold uppercase text-cyan-500 flex items-center gap-1">
                                 <Wind size={12} />
                                 SpO2
                               </p>
-                              <p className="font-mono text-2xl font-black mt-1.5 text-slate-900 dark:text-white">{healthLogs?.[0]?.oxygen || "98"}%</p>
-                              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block mt-0.5">Oxygenation</span>
+                              <p className={`font-mono text-2xl font-black mt-1.5 ${darkMode ? "text-white" : "text-slate-900"}`}>{healthLogs?.[0]?.oxygen || "98"}%</p>
+                              <span className={`text-[10px] uppercase font-bold block mt-0.5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Oxygenation</span>
                             </div>
 
                             {/* Pulse Card */}
-                            <div className="p-4 bg-emerald-500/5 dark:bg-slate-800/20 rounded-[1.8rem] border border-emerald-500/10">
+                            <div className={`p-4 rounded-[1.8rem] border ${darkMode ? "bg-slate-800/60 border-emerald-500/20" : "bg-emerald-500/5 border-emerald-500/10"}`}>
                               <p className="text-xs font-extrabold uppercase text-emerald-500 flex items-center gap-1">
                                 <Heart size={12} className="animate-pulse" />
                                 Pulse
                               </p>
-                              <p className="font-mono text-2xl font-black mt-1.5 text-slate-900 dark:text-white">{healthLogs?.[0]?.pulse || "72"}</p>
-                              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block mt-0.5">bpm</span>
+                              <p className={`font-mono text-2xl font-black mt-1.5 ${darkMode ? "text-white" : "text-slate-900"}`}>{healthLogs?.[0]?.pulse || "72"}</p>
+                              <span className={`text-[10px] uppercase font-bold block mt-0.5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>bpm</span>
                             </div>
                           </div>
 
                           {vitalsWarnings.length > 0 && (
                             <div className="p-4 bg-rose-500/10 rounded-2.2xl border border-rose-500/20 space-y-1.5">
                               <p className="text-xs font-black text-rose-500 uppercase tracking-widest flex items-center gap-1">
-                                Ã°Å¸Å¡Â¨ Clinical Advisory Alert
+                                Clinical Advisory Alert
                               </p>
                               <p className="text-xs text-rose-900 dark:text-rose-300 font-bold leading-relaxed">{vitalsWarnings[0]}</p>
                             </div>
@@ -3112,7 +3324,7 @@ export default function PatientPanel({
                             <Flame size={32} className="text-amber-500" />
                           </div>
                           <div>
-                            <h4 className="font-black text-xl">{activeHabitStreak} Day Streak Ã°Å¸â€Â¥</h4>
+                            <h4 className="font-black text-xl">{activeHabitStreak} Day Streak</h4>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed max-w-xs mx-auto">
                               Consistent wellness check-ins are earning you premium diagnostic credits. Run yoga and water trackers everyday!
                             </p>
@@ -3179,8 +3391,8 @@ export default function PatientPanel({
                           onClick={() => {
                             const testPhrases = {
                               English: "Hello! This is an test of your A.I. health coach voice. Can you hear me clearly?",
-                              Hindi: "Ã Â¤Â¨Ã Â¤Â®Ã Â¤Â¸Ã Â¥ÂÃ Â¤Â¤Ã Â¥â€¡! Ã Â¤Â¯Ã Â¤Â¹ Ã Â¤â€ Ã Â¤ÂªÃ Â¤â€¢Ã Â¥â€¡ Ã Â¤Â.Ã Â¤â€ Ã Â¤Ë†. Ã Â¤Â¸Ã Â¥ÂÃ Â¤ÂµÃ Â¤Â¾Ã Â¤Â¸Ã Â¥ÂÃ Â¤Â¥Ã Â¥ÂÃ Â¤Â¯ Ã Â¤â€¢Ã Â¥â€¹Ã Â¤Å¡ Ã Â¤â€¢Ã Â¥â‚¬ Ã Â¤â€ Ã Â¤ÂµÃ Â¤Â¾Ã Â¤Å“Ã Â¤Â¼ Ã Â¤â€¢Ã Â¤Â¾ Ã Â¤ÂªÃ Â¤Â°Ã Â¥â‚¬Ã Â¤â€¢Ã Â¥ÂÃ Â¤Â·Ã Â¤Â£ Ã Â¤Â¹Ã Â¥Ë†Ã Â¥Â¤ Ã Â¤â€¢Ã Â¥ÂÃ Â¤Â¯Ã Â¤Â¾ Ã Â¤â€ Ã Â¤Âª Ã Â¤Â®Ã Â¥ÂÃ Â¤ÂÃ Â¥â€¡ Ã Â¤Â¸Ã Â¥ÂÃ Â¤ÂªÃ Â¤Â·Ã Â¥ÂÃ Â¤Å¸ Ã Â¤Â°Ã Â¥â€šÃ Â¤Âª Ã Â¤Â¸Ã Â¥â€¡ Ã Â¤Â¸Ã Â¥ÂÃ Â¤Â¨ Ã Â¤Â¸Ã Â¤â€¢Ã Â¤Â¤Ã Â¥â€¡ Ã Â¤Â¹Ã Â¥Ë†Ã Â¤â€š?",
-                              Marathi: "Ã Â¤Â¨Ã Â¤Â®Ã Â¤Â¸Ã Â¥ÂÃ Â¤â€¢Ã Â¤Â¾Ã Â¤Â°! Ã Â¤Â¹Ã Â¥â‚¬ Ã Â¤Â¤Ã Â¥ÂÃ Â¤Â®Ã Â¤Å¡Ã Â¥ÂÃ Â¤Â¯Ã Â¤Â¾ Ã Â¤Â.Ã Â¤â€ Ã Â¤Ë†. Ã Â¤â€ Ã Â¤Â°Ã Â¥â€¹Ã Â¤â€”Ã Â¥ÂÃ Â¤Â¯ Ã Â¤â€¢Ã Â¥â€¹Ã Â¤Å¡Ã Â¤Å¡Ã Â¥ÂÃ Â¤Â¯Ã Â¤Â¾ Ã Â¤â€ Ã Â¤ÂµÃ Â¤Â¾Ã Â¤Å“Ã Â¤Â¾Ã Â¤Å¡Ã Â¥â‚¬ Ã Â¤Å¡Ã Â¤Â¾Ã Â¤Å¡Ã Â¤Â£Ã Â¥â‚¬ Ã Â¤â€ Ã Â¤Â¹Ã Â¥â€¡. Ã Â¤Â¤Ã Â¥ÂÃ Â¤Â®Ã Â¥ÂÃ Â¤Â¹Ã Â¤Â¾Ã Â¤Â²Ã Â¤Â¾ Ã Â¤Â®Ã Â¤Â¾Ã Â¤ÂÃ Â¤Â¾ Ã Â¤â€ Ã Â¤ÂµÃ Â¤Â¾Ã Â¤Å“ Ã Â¤Â¸Ã Â¥ÂÃ Â¤ÂªÃ Â¤Â·Ã Â¥ÂÃ Â¤Å¸ Ã Â¤ÂÃ Â¤â€¢Ã Â¥â€š Ã Â¤Â¯Ã Â¥â€¡Ã Â¤Â¤Ã Â¥â€¹ Ã Â¤â€¢Ã Â¤Â¾?"
+                              Hindi: "नमस्ते! यह आपके ए.आई. स्वास्थ्य कोच की आवाज़ का परीक्षण है। क्या आप मुझे स्पष्ट रूप से सुन सकते हैं?",
+                              Marathi: "नमस्कार! ही तुमच्या ए.आय. आरोग्य कोचच्या आवाजाची चाचणी आहे. तुम्हाला माझा आवाज स्पष्ट ऐकू येतो का?"
                             };
                             speakText(testPhrases[aiLanguage] || testPhrases.English);
                           }}
@@ -3193,7 +3405,7 @@ export default function PatientPanel({
                           title="Test Speech Synthesizer Audibility"
                         >
                           <Volume2 size={14} className={isSpeaking ? "animate-bounce" : ""} />
-                          {isSpeaking ? "Speaking..." : "Test Voice Ã°Å¸â€Å "}
+                          {isSpeaking ? "Speaking..." : "Test Voice"}
                         </button>
                       </div>
                     </div>
@@ -3487,7 +3699,7 @@ export default function PatientPanel({
                             : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-200"
                         }`}
                       >
-                        <Image size={14} />
+                        <ImageIcon size={14} />
                         My Uploaded Files ({medicalReports.length})
                       </button>
                       <button
@@ -4365,12 +4577,12 @@ export default function PatientPanel({
                                       </div>
                                       <div className="space-y-1">
                                         <div className="flex flex-wrap items-center gap-2">
-                                          <h4 className="font-black text-sm sm:text-base text-slate-800 dark:text-white">{cl.name || "CareBridge Partner Clinic"}</h4>
+                                          <h4 className={`font-black text-sm sm:text-base ${darkMode ? "text-white" : "text-slate-900"}`}>{cl.name || "CareBridge Partner Clinic"}</h4>
                                           <span className="flex items-center gap-1 px-2.5 py-0.5 bg-yellow-500/10 text-yellow-500 text-[10px] font-black uppercase rounded-lg">
                                             <Star size={10} className="fill-yellow-500 text-yellow-500" /> {detail.rating || "4.8"}
                                           </span>
                                         </div>
-                                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                                        <p className={`text-[11px] font-bold flex items-center gap-1 mt-0.5 ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
                                           <MapPin size={11} className="text-rose-500 shrink-0" /> {detail.address || cl.city || "Pune Area"}
                                         </p>
                                       </div>
@@ -4379,30 +4591,30 @@ export default function PatientPanel({
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-semibold pt-3 border-t border-slate-500/5">
                                       {/* Doctor Detail */}
                                       <div className="space-y-0.5">
-                                        <span className="text-[9px] uppercase font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 tracking-wider block">Supervising Practitioner</span>
-                                        <p className="text-slate-800 dark:text-slate-200 font-bold truncate">{detail.doctor_name || "Dr. Authorized Member"}</p>
-                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">{detail.qualification || "MBBS Certificate Specialist"}</span>
+                                        <span className={`text-[9px] uppercase font-black tracking-wider block ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Supervising Practitioner</span>
+                                        <p className={`font-bold truncate ${darkMode ? "text-white" : "text-slate-900"}`}>{detail.doctor_name || "Dr. Authorized Member"}</p>
+                                        <span className={`text-[10px] block truncate ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{detail.qualification || "MBBS Certificate Specialist"}</span>
                                       </div>
 
                                       {/* Specialty/Department */}
                                       <div className="space-y-0.5">
-                                        <span className="text-[9px] uppercase font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 tracking-wider block">Clinical Specialization</span>
-                                        <p className="text-slate-800 dark:text-slate-200 font-bold truncate">{detail.department || "Consultant Generalist"}</p>
-                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">Reg No: {detail.reg_no || "REG-9921D"}</span>
+                                        <span className={`text-[9px] uppercase font-black tracking-wider block ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Clinical Specialization</span>
+                                        <p className={`font-bold truncate ${darkMode ? "text-white" : "text-slate-900"}`}>{detail.department || "Consultant Generalist"}</p>
+                                        <span className={`text-[10px] block truncate ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Reg No: {detail.reg_no || "REG-9921D"}</span>
                                       </div>
 
                                       {/* Timing / Schedules */}
                                       <div className="space-y-0.5">
-                                        <span className="text-[9px] uppercase font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 tracking-wider block">Consultation timings</span>
-                                        <p className="text-slate-800 dark:text-slate-200 font-bold truncate">{detail.timing || "09:00 AM - 05:00 PM"}</p>
-                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">Mon - Sat Active</span>
+                                        <span className={`text-[9px] uppercase font-black tracking-wider block ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Consultation timings</span>
+                                        <p className={`font-bold truncate ${darkMode ? "text-white" : "text-slate-900"}`}>{detail.timing || "09:00 AM - 05:00 PM"}</p>
+                                        <span className={`text-[10px] block truncate ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Mon - Sat Active</span>
                                       </div>
 
                                       {/* Consultation Fees */}
                                       <div className="space-y-0.5">
-                                        <span className="text-[9px] uppercase font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 tracking-wider block">Consultation Fees</span>
-                                        <p className="text-emerald-600 dark:text-emerald-400 font-black text-sm">{detail.fees ? `Ã¢â€šÂ¹ ${detail.fees}` : "Ã¢â€šÂ¹ 300"}</p>
-                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Includes Digital Record</span>
+                                        <span className={`text-[9px] uppercase font-black tracking-wider block ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Consultation Fees</span>
+                                        <p className={`font-black text-sm ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>{detail.fees ? `₹ ${detail.fees}` : "Not Specified"}</p>
+                                        <span className={`text-[10px] block ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Includes Digital Record</span>
                                       </div>
                                     </div>
                                   </div>
@@ -5019,7 +5231,7 @@ export default function PatientPanel({
                     type="submit"
                     className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold uppercase tracking-wide rounded-2xl"
                   >
-                    Commit Vitals Logs
+                    Schedule Medication reminders
                   </button>
                 </form>
               </motion.div>
@@ -5027,135 +5239,320 @@ export default function PatientPanel({
           )}
         </AnimatePresence>
 
-        {/* ==========================================
-            POPUP REMINDER SCHEDULER MODAL
-            ========================================== */}
         <AnimatePresence>
           {showReminderModal && (
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[1000] flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+              {/* Overlay */}
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 30 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => { setShowReminderModal(false); resetForm(); }}
+                className="absolute inset-0 bg-black/70 backdrop-blur-md"
+              />
+
+              {/* Modal Box */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className={`w-full max-w-lg rounded-[2.5rem] overflow-hidden border p-6 space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar ${
-                  darkMode ? "bg-[#0c1226] border-white/5 text-white" : "bg-white border-slate-100 text-slate-800"
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className={`relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl ${
+                  darkMode
+                    ? "bg-[#0b1120] text-white border-white/8 shadow-black/60"
+                    : "bg-white text-slate-900 border-slate-200/80 shadow-slate-300/40"
                 }`}
               >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="text-xl font-black">Schedule Medication Alarms</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Configure triggers, timings, and notification tones</p>
+                {/* ── HEADER BAR ── */}
+                <div className={`sticky top-0 z-10 flex items-center justify-between px-7 py-5 border-b ${darkMode ? "bg-[#0b1120] border-white/8" : "bg-white border-slate-100"}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-500/30">
+                      <Bell size={18} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-base tracking-tight uppercase">SCHEDULE NEW REMEDY ALARM</h3>
+                      <p className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${darkMode ? "text-slate-500" : "text-slate-400"}`}>CONFIGURE MEDICATION TIMELINE</p>
+                    </div>
                   </div>
                   <button
-                    onClick={() => setShowReminderModal(false)}
-                    className="p-1 px-2.5 bg-slate-500/10 hover:bg-slate-500/20 text-xs rounded-xl"
+                    onClick={() => { setShowReminderModal(false); resetForm(); }}
+                    className={`p-2 rounded-xl transition-all cursor-pointer ${darkMode ? "hover:bg-white/10 text-slate-400 hover:text-white" : "hover:bg-slate-100 text-slate-400 hover:text-slate-700"}`}
                   >
-                    Cancel
+                    <X size={18} />
                   </button>
                 </div>
 
-                <form onSubmit={handleAddReminderSubmit} className="space-y-4 text-xs font-semibold">
-                  <div className="space-y-1">
-                    <label className="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">Medicine Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Paracetamol, Insulin injection"
-                      value={reminderForm.medicineName}
-                      onChange={(e) => setReminderForm({ ...reminderForm, medicineName: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-slate-500/10 dark:bg-slate-900/50"
+                <form onSubmit={handleAddReminderSubmit} className="p-7 space-y-5">
+
+                  {/* ── SECTION 1: MEDICINE IDENTITY ── */}
+                  <div className={`rounded-2xl border p-4 space-y-4 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                    <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>
+                      <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-[9px]">1</span>
+                      MEDICINE IDENTITY
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>MEDICINE NAME *</label>
+                        <input
+                          required
+                          type="text"
+                          value={formName}
+                          onChange={(e) => setFormName(e.target.value.toUpperCase())}
+                          placeholder="E.G. PARACETAMOL"
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:bg-white/8" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-emerald-400 shadow-sm"}`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>GENERIC ALTERNATIVE (OPTIONAL)</label>
+                        <input
+                          type="text"
+                          value={formGeneric}
+                          onChange={(e) => setFormGeneric(e.target.value.toUpperCase())}
+                          placeholder="E.G. ACETAMINOPHEN"
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:bg-white/8" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-emerald-400 shadow-sm"}`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── SECTION 2: DOSAGE PARAMETERS ── */}
+                  <div className={`rounded-2xl border p-4 space-y-4 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                    <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-blue-400" : "text-blue-600"}`}>
+                      <span className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center text-[9px]">2</span>
+                      DOSAGE PARAMETERS
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>DOSAGE TYPE</label>
+                        <select
+                          value={formType}
+                          onChange={(e) => setFormType(e.target.value as any)}
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-[#0b1120] border-white/10 text-white focus:border-blue-500/50" : "bg-white border-slate-200 text-slate-800 focus:border-blue-400 shadow-sm"}`}
+                        >
+                          {["Tablet", "Capsule", "Syrup", "Injection", "Drops", "Ointment", "Powder"].map(t => (
+                            <option key={t} value={t}>{t.toUpperCase()}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>STRENGTH (E.G. 500MG, 10ML)</label>
+                        <input
+                          type="text"
+                          value={formStrength}
+                          onChange={(e) => setFormStrength(e.target.value.toUpperCase())}
+                          placeholder="E.G. 500 MG"
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-blue-400 shadow-sm"}`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>QUANTITY PER DOSE</label>
+                        <input
+                          type="text"
+                          value={formQuantityPerDose}
+                          onChange={(e) => setFormQuantityPerDose(e.target.value)}
+                          placeholder="E.G. 1 TABLET"
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-blue-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-blue-400 shadow-sm"}`}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>DOSAGE SCHEDULE LOOP</label>
+                        <select
+                          value={formSchedule}
+                          onChange={(e) => handleScheduleChange(e.target.value as any)}
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-[#0b1120] border-white/10 text-white focus:border-blue-500/50" : "bg-white border-slate-200 text-slate-800 focus:border-blue-400 shadow-sm"}`}
+                        >
+                          {["Once Daily", "Twice Daily", "Thrice Daily", "Four Times Daily", "Weekly", "Custom"].map(s => (
+                            <option key={s} value={s}>{s.toUpperCase()}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>MEAL ASSOCIATION</label>
+                        <select
+                          value={formMealTime}
+                          onChange={(e) => setFormMealTime(e.target.value as any)}
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all ${darkMode ? "bg-[#0b1120] border-white/10 text-white focus:border-blue-500/50" : "bg-white border-slate-200 text-slate-800 focus:border-blue-400 shadow-sm"}`}
+                        >
+                          <option value="after">TAKE AFTER FOOD</option>
+                          <option value="before">TAKE BEFORE FOOD</option>
+                          <option value="with">TAKE WITH FOOD</option>
+                          <option value="empty">TAKE ON EMPTY STOMACH</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── SECTION 3: ALARM TIMES ── */}
+                  <div className={`rounded-2xl border p-4 space-y-3 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                    <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-amber-400" : "text-amber-600"}`}>
+                      <span className="w-4 h-4 rounded-full bg-amber-500/20 flex items-center justify-center text-[9px]">3</span>
+                      REMINDER ALARM TIMES (HH:MM)
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {formTimings.map((time, idx) => (
+                        <div key={idx} className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${darkMode ? "bg-white/8 border-white/10" : "bg-white border-slate-200 shadow-sm"}`}>
+                          <Clock size={13} className="text-amber-500 shrink-0" />
+                          <input
+                            type="time"
+                            value={time}
+                            onChange={(e) => {
+                              const copy = [...formTimings];
+                              copy[idx] = e.target.value;
+                              setFormTimings(copy);
+                            }}
+                            className={`bg-transparent text-sm font-black outline-none font-mono w-[72px] ${darkMode ? "text-white" : "text-slate-800"}`}
+                          />
+                          {formTimings.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setFormTimings(formTimings.filter((_, i) => i !== idx))}
+                              className="p-0.5 text-rose-400 hover:text-rose-500 transition-all cursor-pointer"
+                            >
+                              <X size={11} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setFormTimings([...formTimings, "12:00"])}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 text-[11px] font-black uppercase tracking-wider cursor-pointer border border-amber-500/20 transition-all"
+                      >
+                        <Plus size={12} /> ADD TIME
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ── SECTION 4: TREATMENT DURATION ── */}
+                  <div className={`rounded-2xl border p-4 space-y-4 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                    <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-purple-400" : "text-purple-600"}`}>
+                      <span className="w-4 h-4 rounded-full bg-purple-500/20 flex items-center justify-center text-[9px]">4</span>
+                      TREATMENT DURATION & STOCK
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>START DATE</label>
+                        <input
+                          required
+                          type="date"
+                          value={formStartDate}
+                          onChange={(e) => setFormStartDate(e.target.value)}
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold outline-none border transition-all font-mono ${darkMode ? "bg-white/5 border-white/10 text-white focus:border-purple-500/50" : "bg-white border-slate-200 text-slate-800 focus:border-purple-400 shadow-sm"}`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>TREATMENT DURATION (DAYS)</label>
+                        <input
+                          required
+                          type="number"
+                          min="1"
+                          value={formDurationDays}
+                          onChange={(e) => setFormDurationDays(e.target.value)}
+                          placeholder="E.G. 7"
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold outline-none border transition-all font-mono ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-purple-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-purple-400 shadow-sm"}`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>DERIVED END DATE</label>
+                        <input
+                          readOnly
+                          disabled
+                          type="date"
+                          value={formEndDate}
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold outline-none border font-mono cursor-not-allowed ${darkMode ? "bg-white/3 border-white/5 text-slate-500" : "bg-slate-100 border-slate-200 text-slate-400"}`}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>INITIAL PILL STOCK AVAILABLE</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={formStock}
+                          onChange={(e) => setFormStock(e.target.value)}
+                          placeholder="E.G. 30"
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold outline-none border transition-all font-mono ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-purple-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-purple-400 shadow-sm"}`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? "text-slate-400" : "text-slate-500"}`}>LOW STOCK ALERT THRESHOLD</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={formRefillThreshold}
+                          onChange={(e) => setFormRefillThreshold(e.target.value)}
+                          placeholder="E.G. 5"
+                          className={`w-full px-4 py-3 rounded-xl text-sm font-bold outline-none border transition-all font-mono ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-purple-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-purple-400 shadow-sm"}`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── SECTION 5: AUDIO ALARM LANGUAGE ── */}
+                  <div className={`rounded-2xl border p-4 space-y-3 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                    <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-rose-400" : "text-rose-600"}`}>
+                      <span className="w-4 h-4 rounded-full bg-rose-500/20 flex items-center justify-center text-[9px]">5</span>
+                      AUDIO ALARM LANGUAGE
+                    </p>
+                    <p className={`text-[10px] font-semibold ${darkMode ? "text-slate-500" : "text-slate-400"}`}>SELECT THE LANGUAGE FOR VOICE REMINDER ANNOUNCEMENTS</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { id: "english", label: "ENGLISH", sub: "IN ENGLISH", emoji: "🇬🇧" },
+                        { id: "hindi",   label: "हिंदी",   sub: "IN HINDI",   emoji: "🇮🇳" },
+                        { id: "marathi", label: "मराठी",  sub: "IN MARATHI",  emoji: "🫶" },
+                      ] as const).map((lang) => (
+                        <button
+                          key={lang.id}
+                          type="button"
+                          onClick={() => setFormAudioLang(lang.id)}
+                          className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 font-black text-[11px] uppercase tracking-wider transition-all cursor-pointer ${
+                            formAudioLang === lang.id
+                              ? "border-rose-500 bg-rose-500/10 text-rose-500 shadow-md shadow-rose-500/15"
+                              : darkMode
+                                ? "border-white/8 bg-white/3 text-slate-400 hover:border-white/20 hover:text-white"
+                                : "border-slate-200 bg-white text-slate-500 hover:border-rose-300 hover:text-rose-500 shadow-sm"
+                          }`}
+                        >
+                          <span className="text-xl">{lang.emoji}</span>
+                          <span>{lang.label}</span>
+                          <span className={`text-[8px] font-bold tracking-widest ${formAudioLang === lang.id ? "text-rose-400" : darkMode ? "text-slate-600" : "text-slate-400"}`}>{lang.sub}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {/* Preview the alarm announcement text */}
+                    <div className={`mt-1 p-3 rounded-xl border text-[11px] font-semibold leading-relaxed ${darkMode ? "bg-black/20 border-white/5 text-slate-400" : "bg-slate-100/80 border-slate-200 text-slate-500"}`}>
+                      🔔{" "}
+                      {formAudioLang === "marathi"
+                        ? `"${formName || "औषध"} घेण्याची वेळ झाली आहे. ${formMealTime === "after" ? "जेवणानंतर" : formMealTime === "before" ? "जेवणापूर्वी" : formMealTime === "with" ? "जेवणासोबत" : "रिकाम्या पोटी"} ${formQuantityPerDose || "1"} ${formType === "Tablet" ? "गोळी" : formType === "Syrup" ? "चमचा" : formType} घ्या."`
+                        : formAudioLang === "hindi"
+                        ? `"${formName || "दवाई"} लेने का समय हो गया है। ${formMealTime === "after" ? "खाने के बाद" : formMealTime === "before" ? "खाने से पहले" : formMealTime === "with" ? "खाने के साथ" : "खाली पेट"} ${formQuantityPerDose || "1"} ${formType === "Tablet" ? "गोली" : formType === "Syrup" ? "चम्मच" : formType} लें।"`
+                        : `"IT IS TIME TO TAKE YOUR ${formName || "MEDICINE"}. PLEASE TAKE ${formQuantityPerDose || "1"} ${formType.toUpperCase()} ${formMealTime === "after" ? "AFTER FOOD" : formMealTime === "before" ? "BEFORE FOOD" : formMealTime === "with" ? "WITH FOOD" : "ON EMPTY STOMACH"}."`}
+                    </div>
+                  </div>
+
+                  {/* ── SECTION 6: DOCTOR NOTES ── */}
+                  <div className={`rounded-2xl border p-4 space-y-3 ${darkMode ? "bg-white/3 border-white/8" : "bg-slate-50/80 border-slate-200/60"}`}>
+                    <p className={`text-[9px] font-black uppercase tracking-[0.22em] flex items-center gap-2 ${darkMode ? "text-cyan-400" : "text-cyan-600"}`}>
+                      <span className="w-4 h-4 rounded-full bg-cyan-500/20 flex items-center justify-center text-[9px]">6</span>
+                      DOCTOR INSTRUCTIONS / PATIENT NOTES
+                    </p>
+                    <textarea
+                      rows={2}
+                      value={formNotes}
+                      onChange={(e) => setFormNotes(e.target.value.toUpperCase())}
+                      placeholder="E.G. DO NOT CONSUME ALCOHOL WITHIN 6 HOURS. CHEW TABLET COMPLETELY."
+                      className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-wide outline-none border transition-all leading-relaxed resize-none ${darkMode ? "bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-cyan-500/50" : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-300 focus:border-cyan-400 shadow-sm"}`}
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">Dosage amount</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 1 Tablet, 5ml liquid"
-                        value={reminderForm.dosage}
-                        onChange={(e) => setReminderForm({ ...reminderForm, dosage: e.target.value })}
-                        className="w-full p-3 rounded-xl border border-slate-500/10 dark:bg-slate-900/50"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">Alarm Clock Time</label>
-                      <input
-                        type="time"
-                        value={reminderForm.timing}
-                        onChange={(e) => setReminderForm({ ...reminderForm, timing: e.target.value })}
-                        className="w-full p-3 rounded-xl border border-slate-500/10 dark:bg-slate-900/50 font-mono text-sm font-bold text-center pl-8"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">Meal association</label>
-                      <select
-                        value={reminderForm.mealTime}
-                        onChange={(e) => setReminderForm({ ...reminderForm, mealTime: e.target.value as any })}
-                        className="w-full p-3 rounded-xl border border-slate-500/10 dark:bg-slate-900/50"
-                      >
-                        <option value="after">After Meal</option>
-                        <option value="before">Before Meal</option>
-                        <option value="with">With Meal</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center bg-transparent">
-                        <label className="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">Alarm Alert Sound</label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            startAlarmSound(reminderForm.alarmTone);
-                            setTimeout(() => {
-                              stopAlarmSound();
-                            }, 2200);
-                          }}
-                          className="text-[10px] uppercase font-black tracking-wider text-rose-500 dark:text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 transition-colors flex items-center gap-1 cursor-pointer"
-                        >
-                          Ã°Å¸â€œÂ¢ Play Preview
-                        </button>
-                      </div>
-                      <select
-                        value={reminderForm.alarmTone}
-                        onChange={(e) => setReminderForm({ ...reminderForm, alarmTone: e.target.value })}
-                        className="w-full p-3 rounded-xl border border-slate-500/10 dark:bg-slate-900/50"
-                      >
-                        <option value="soft medical tone">Soft Clinical Tone</option>
-                        <option value="emergency tone">Emergency Alert</option>
-                        <option value="bell tone">Digital Ringing</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">Start Date</label>
-                      <input
-                        type="date"
-                        value={reminderForm.startDate}
-                        onChange={(e) => setReminderForm({ ...reminderForm, startDate: e.target.value })}
-                        className="w-full p-3 rounded-xl border border-slate-500/10 dark:bg-slate-900/50 font-bold"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">End Date</label>
-                      <input
-                        type="date"
-                        value={reminderForm.endDate}
-                        onChange={(e) => setReminderForm({ ...reminderForm, endDate: e.target.value })}
-                        className="w-full p-3 rounded-xl border border-slate-500/10 dark:bg-slate-900/50 font-bold"
-                      />
-                    </div>
-                  </div>
-
+                  {/* ── SUBMIT ── */}
                   <button
                     type="submit"
-                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold uppercase tracking-wide rounded-2xl"
+                    className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/25 cursor-pointer active:scale-[0.98]"
                   >
-                    Schedule Medication reminders
+                    ✓ APPLY MEDICATION ALARM TIMELINE
                   </button>
                 </form>
               </motion.div>
@@ -5339,12 +5736,12 @@ export default function PatientPanel({
                                     </div>
                                     <div className="space-y-1">
                                       <div className="flex flex-wrap items-center gap-2">
-                                        <h4 className="font-black text-sm sm:text-base text-slate-800 dark:text-white">{cl.name || "CareBridge Partner Clinic"}</h4>
+                                        <h4 className={`font-black text-sm sm:text-base ${darkMode ? "text-white" : "text-slate-900"}`}>{cl.name || "CareBridge Partner Clinic"}</h4>
                                         <span className="flex items-center gap-1 px-2 py-0.5 bg-yellow-500/10 text-yellow-500 text-[10px] font-black uppercase rounded-lg">
                                           <Star size={10} className="fill-yellow-500 text-yellow-500 animate-pulse-slow" /> {detail.rating || "4.8"}
                                         </span>
                                       </div>
-                                      <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                      <p className={`text-[11px] font-bold flex items-center gap-1 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
                                         <MapPin size={11} className="text-rose-500 shrink-0" /> {detail.address || cl.city || "Pune Area"}
                                       </p>
                                     </div>
@@ -5353,30 +5750,30 @@ export default function PatientPanel({
                                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-semibold pt-2 border-t border-slate-500/5">
                                     {/* Doctor Detail */}
                                     <div className="space-y-0.5">
-                                      <span className="text-[9px] uppercase font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 tracking-wider">Supervising Practitioner</span>
-                                      <p className="text-slate-800 dark:text-slate-200 font-bold truncate">{detail.doctor_name || "Dr. Authorized Member"}</p>
-                                      <span className="text-[10px] text-slate-500 dark:text-slate-400">{detail.qualification || "MBBS Certificate Specialist"}</span>
+                                      <span className={`text-[9px] uppercase font-black tracking-wider ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Supervising Practitioner</span>
+                                      <p className={`font-bold truncate ${darkMode ? "text-white" : "text-slate-900"}`}>{detail.doctor_name || "Dr. Authorized Member"}</p>
+                                      <span className={`text-[10px] ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{detail.qualification || "MBBS Certificate Specialist"}</span>
                                     </div>
 
                                     {/* Specialty/Department */}
                                     <div className="space-y-0.5">
-                                      <span className="text-[9px] uppercase font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 tracking-wider">Clinical Specialization</span>
-                                      <p className="text-slate-800 dark:text-slate-200 font-bold truncate">{detail.department || "Consultant Generalist"}</p>
-                                      <span className="text-[10px] text-slate-500 dark:text-slate-400">Reg No: {detail.reg_no || "REG-9921D"}</span>
+                                      <span className={`text-[9px] uppercase font-black tracking-wider ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Clinical Specialization</span>
+                                      <p className={`font-bold truncate ${darkMode ? "text-white" : "text-slate-900"}`}>{detail.department || "Consultant Generalist"}</p>
+                                      <span className={`text-[10px] ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Reg No: {detail.reg_no || "REG-9921D"}</span>
                                     </div>
 
                                     {/* Timing / Schedules */}
                                     <div className="space-y-0.5">
-                                      <span className="text-[9px] uppercase font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 tracking-wider">Consultation timings</span>
-                                      <p className="text-slate-800 dark:text-slate-200 font-bold truncate">{detail.timing || "09:00 AM - 05:00 PM"}</p>
-                                      <span className="text-[10px] text-slate-500 dark:text-slate-400">Mon - Sat Active</span>
+                                      <span className={`text-[9px] uppercase font-black tracking-wider ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Consultation timings</span>
+                                      <p className={`font-bold truncate ${darkMode ? "text-white" : "text-slate-900"}`}>{detail.timing || "09:00 AM - 05:00 PM"}</p>
+                                      <span className={`text-[10px] ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Mon - Sat Active</span>
                                     </div>
 
                                     {/* Consultation Fees */}
                                     <div className="space-y-0.5">
-                                      <span className="text-[9px] uppercase font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 tracking-wider">Consultation Fees</span>
-                                      <p className="text-emerald-600 dark:text-emerald-400 font-black text-sm">{detail.fees ? `Ã¢â€šÂ¹ ${detail.fees}` : "Ã¢â€šÂ¹ 300"}</p>
-                                      <span className="text-[10px] text-slate-500 dark:text-slate-400">Includes Digital Record</span>
+                                      <span className={`text-[9px] uppercase font-black tracking-wider ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Consultation Fees</span>
+                                      <p className={`font-black text-sm ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>{detail.fees ? `₹ ${detail.fees}` : "Not Specified"}</p>
+                                      <span className={`text-[10px] ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Includes Digital Record</span>
                                     </div>
                                   </div>
 
@@ -5384,7 +5781,20 @@ export default function PatientPanel({
                                   {detail.visiting_doctors && (
                                     <div className="p-3 bg-slate-500/5 rounded-2xl border border-slate-500/5 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
                                       <span className="font-black text-slate-600 dark:text-slate-300 mr-2 uppercase tracking-wide animate-pulse-slow">Visiting Consultants:</span>
-                                      {detail.visiting_doctors}
+                                      {typeof detail.visiting_doctors === "string"
+                                        ? detail.visiting_doctors
+                                        : Array.isArray(detail.visiting_doctors)
+                                        ? detail.visiting_doctors
+                                            .map((vd: any) =>
+                                              typeof vd === "string"
+                                                ? vd
+                                                : [vd.name, vd.department, vd.qualification, vd.time]
+                                                    .filter(Boolean)
+                                                    .join(" · ")
+                                            )
+                                            .filter(Boolean)
+                                            .join("  |  ")
+                                        : String(detail.visiting_doctors)}
                                     </div>
                                   )}
                                 </div>
@@ -5652,7 +6062,7 @@ export default function PatientPanel({
                       </div>
                       <div className={`p-3 rounded-2xl border text-center ${darkMode ? "bg-slate-900/50 border-white/5" : "bg-slate-50 border-slate-150"}`}>
                         <span className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 block mb-0.5">Consultation Fees</span>
-                        <span className="font-black text-sm text-emerald-450">{detail.fees ? `Ã¢â€šÂ¹ ${detail.fees}` : "Ã¢â€šÂ¹ 300"}</span>
+                        <span className="font-black text-sm text-emerald-450">{detail.fees ? `₹ ${detail.fees}` : "Not Specified"}</span>
                       </div>
                       <div className={`p-3 rounded-2xl border text-center ${darkMode ? "bg-slate-900/50 border-white/5" : "bg-slate-50 border-slate-150"}`}>
                         <span className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 block mb-0.5">Open Days</span>
@@ -5749,7 +6159,7 @@ export default function PatientPanel({
                                 key={`${fac}-${idx}`}
                                 className="px-3 py-1.5 bg-blue-500/10 border border-blue-500/15 text-blue-400 rounded-xl text-[10px] font-bold uppercase tracking-wide"
                               >
-                                Ã°Å¸â€Â¹ {fac}
+                                🏥 {fac}
                               </span>
                             ))}
                           </div>
@@ -5765,17 +6175,49 @@ export default function PatientPanel({
                           {typeof detail.visiting_doctors === "string" ? (
                             <span>{detail.visiting_doctors}</span>
                           ) : Array.isArray(detail.visiting_doctors) ? (
-                            <div className="space-y-1">
-                              {detail.visiting_doctors.map((vDoc: any, dIdx: number) => (
-                                <div key={dIdx} className="flex justify-between items-center border-b border-white/5 pb-1">
-                                  <span className="font-bold text-slate-200">{vDoc.name || vDoc}</span>
-                                  <span className="text-[10px] text-teal-400 font-mono">{vDoc.specialization || vDoc.department || "Consultant"}</span>
-                                </div>
-                              ))}
+                            <div className="space-y-2">
+                              {detail.visiting_doctors.map((vDoc: any, dIdx: number) => {
+                                const name = typeof vDoc === "string" ? vDoc : (vDoc.name || "");
+                                const dept = typeof vDoc === "string" ? "" : (vDoc.department || vDoc.specialization || "");
+                                const qual = typeof vDoc === "string" ? "" : (vDoc.qualification || "");
+                                const timing = typeof vDoc === "string" ? "" : (vDoc.time || "");
+                                if (!name && !dept) return null;
+                                return (
+                                  <div key={dIdx} className={`flex justify-between items-start gap-2 pb-2 border-b last:border-0 ${darkMode ? "border-white/5" : "border-slate-100"}`}>
+                                    <div>
+                                      <p className={`font-bold text-xs ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{name || "Visiting Consultant"}</p>
+                                      {qual && <p className="text-[10px] text-slate-500 dark:text-slate-400">{qual}</p>}
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      {dept && <p className="text-[10px] text-teal-400 font-semibold">{dept}</p>}
+                                      {timing && <p className="text-[10px] text-slate-500 font-mono">{timing}</p>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           ) : (
                             String(detail.visiting_doctors)
                           )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Clinic Gallery */}
+                    {detail.gallery && detail.gallery.length > 0 && (
+                      <div className="space-y-2.5 border-t border-slate-500/10 pt-4">
+                        <h4 className="font-black text-xs uppercase text-slate-500 dark:text-slate-400 tracking-wider">
+                          <ImageIcon size={12} className="inline mr-1" /> Clinic Gallery
+                        </h4>
+                        <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
+                          {detail.gallery.map((imgSrc: string, idx: number) => (
+                            <img
+                              key={idx}
+                              src={imgSrc}
+                              alt={`Gallery ${idx + 1}`}
+                              className="h-24 w-32 object-cover rounded-xl border border-slate-500/10 shadow-sm shrink-0"
+                            />
+                          ))}
                         </div>
                       </div>
                     )}
@@ -6407,6 +6849,119 @@ export default function PatientPanel({
                       </div>
                     </div>
                   </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* PATIENT SUBSCRIPTION PLAN DETAILS MODAL */}
+        <AnimatePresence>
+          {showSubscriptionPlan && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 bg-slate-950/85 backdrop-blur-md">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className={`w-full max-w-lg rounded-[32px] border shadow-2xl overflow-hidden relative ${darkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"}`}
+              >
+                <div className="absolute top-4 right-4 z-10">
+                  <button onClick={() => setShowSubscriptionPlan(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                    <X size={18} className="text-slate-500" />
+                  </button>
+                </div>
+                
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-400 to-indigo-600" />
+                
+                <div className="p-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+                      <Crown size={24} />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">CareBridge+ Patient</h2>
+                      <p className="text-xs font-bold text-slate-400">Unlock your personal health AI</p>
+                    </div>
+                  </div>
+
+                  <div className="mb-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 text-center">
+                    <div className="flex items-baseline justify-center gap-1 mb-1">
+                      <span className="text-5xl font-black text-blue-600 dark:text-blue-400">₹49</span>
+                      <span className="text-sm font-bold text-slate-500">/month</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-400">No hidden fees • Cancel anytime</p>
+                  </div>
+
+                  <ul className="space-y-3 mb-8">
+                    {["Unlimited AI Health Coach Access", "Daily Vitals Tracking & Analysis", "Automated Medicine Reminders", "Secure Clinic Report Syncing", "Priority 24/7 Medical Hotline"].map(f => (
+                      <li key={f} className="flex items-center gap-2.5 text-sm font-bold text-slate-600 dark:text-slate-300">
+                        <CheckCircle2 size={18} className="text-blue-500 shrink-0" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <button 
+                    onClick={() => {
+                      setShowSubscriptionPlan(false);
+                      setShowPhonePeModal(true);
+                    }} 
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-black text-sm uppercase tracking-widest text-center shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    Start Subscription
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* PHONEPE PAYMENT MODAL (PATIENT) */}
+        <AnimatePresence>
+          {showPhonePeModal && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 bg-slate-950/85 backdrop-blur-md">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className={`w-full max-w-md rounded-[32px] border shadow-2xl overflow-hidden relative ${darkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"}`}
+              >
+                <div className="absolute top-4 right-4 z-10">
+                  <button onClick={() => setShowPhonePeModal(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                    <X size={18} className="text-slate-500" />
+                  </button>
+                </div>
+                
+                <div className="p-8 text-center relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl -z-10" />
+                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl -z-10" />
+                  
+                  <div className="w-16 h-16 mx-auto bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-blue-500/30">
+                    <Crown size={32} />
+                  </div>
+                  
+                  <h2 className="text-2xl font-black mb-2 uppercase tracking-tight text-slate-800 dark:text-slate-100">CareBridge+ Patient</h2>
+                  <p className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-8">Scan to pay securely via PhonePe / UPI</p>
+
+                  <div className="bg-white p-4 rounded-3xl inline-block border-2 border-slate-100 dark:border-slate-700 mb-6 shadow-inner">
+                    {/* Placeholder QR Code for Patient */}
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=upi://pay?pa=carebridge@ybl%26pn=CareBridgePlus%26am=49%26cu=INR" alt="UPI QR Code" className="w-48 h-48 rounded-xl object-contain" />
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/80 mb-6 text-left">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-500">Amount to Pay</span>
+                      <span className="text-lg font-black text-blue-600 dark:text-blue-400">₹49.00</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-500">UPI ID</span>
+                      <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">carebridge@ybl</span>
+                    </div>
+                  </div>
+
+                  <button onClick={() => setShowPhonePeModal(false)} className="w-full py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:opacity-90 transition-opacity">
+                    Close & Continue
+                  </button>
                 </div>
               </motion.div>
             </div>
